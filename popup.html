@@ -192,7 +192,7 @@
 
             <div id="main-scroll-area" class="flex-1 overflow-y-auto">
                 <!-- VIEW: ID Lists -->
-                <div id="view-ids" class="p-6 space-y-6 hidden">
+                <div id="view-ids" class="p-6 space-y-6 mb-10 hidden">
                     <div
                         class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto"
                     >
@@ -262,16 +262,22 @@
                                 Fetch Patients
                             </h2>
                             <p class="text-xs text-slate-400 font-medium">
-                                Connect to RSUD Soediran API
+                                Connect to
+                                <a
+                                    href="https://api.rsudsoediranms.com/apps/SIMpel/"
+                                    class="font-medium text-fg-brand underline hover:no-underline"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >RSUD Soediran API</a
+                                >.
                             </p>
                         </div>
-
                         <form id="fetch-form" class="space-y-5">
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label
                                         class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1"
-                                        >DPJP ID (Doctor)</label
+                                        >Doctor ID (DPJP)</label
                                     >
                                     <input
                                         type="text"
@@ -283,7 +289,7 @@
                                 <div>
                                     <label
                                         class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1"
-                                        >RUANGAN ID (Room)</label
+                                        >Room ID (RUANGAN)</label
                                     >
                                     <input
                                         type="text"
@@ -293,7 +299,36 @@
                                     />
                                 </div>
                             </div>
-
+                            <div
+                                class="flex items-start gap-3 p-3 bg-slate-100 rounded-lg border border-slate-200"
+                            >
+                                <div class="text-blue-500 mt-0.5">
+                                    <svg
+                                        class="w-4 h-4"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                    >
+                                        <path
+                                            fill-rule="evenodd"
+                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                            clip-rule="evenodd"
+                                        ></path>
+                                    </svg>
+                                </div>
+                                <p
+                                    class="text-[10px] text-slate-500 font-medium leading-relaxed"
+                                >
+                                    Use commas (,) to fetch multiple IDs in a
+                                    single batch. Use semicolons (;) to start a
+                                    new batch.<br />
+                                    <span
+                                        class="font-bold text-slate-600 italic"
+                                        >Example: Doctor ID = "25, 28, 32;" and
+                                        Room ID = ";101030109,101020501" (this
+                                        will execute 5 requests).
+                                    </span>
+                                </p>
+                            </div>
                             <div
                                 class="bg-slate-50 p-4 rounded-xl border border-slate-100"
                             >
@@ -364,7 +399,7 @@
                                     id="main-fetch-btn"
                                     class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-[0.98]"
                                 >
-                                    Fetch & Decrypt
+                                    Fetch
                                 </button>
                             </div>
                         </form>
