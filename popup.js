@@ -8,10 +8,165 @@ let tabCounter = 0;
 let activeTabId = 'home';
 let sidebarCollapsed = false;
 
+// Data
+const doctorDatabase = [
+    { name: "dr. Firman, Sp.B", id: "37" },
+    { name: "dr. Satria, Sp.B", id: "71" },
+    { name: "dr. Andri, Sp.U", id: "36" },
+    // { name: "dr. Aris, Sp.BS", id: "98" },
+    // { name: "dr. Robin, Sp.BA", id: "104" },
+    { name: "dr. Amir, Sp.OT", id: "24" },
+    { name: "dr. Twody, Sp.OT", id: "10" },
+    { name: "dr. Eka, Sp.OG", id: "11" },
+    { name: "dr. Cakra, Sp.OG", id: "27" },
+    { name: "dr. Guntur, Sp.OG", id: "57" },
+    { name: "dr. Khome, Sp.OG", id: "62" },
+    { name: "dr. Endra, Sp.PD", id: "12" },
+    { name: "dr. Dar, Sp.PD", id: "30" },
+    { name: "dr. Diksi, Sp.PD", id: "63" },
+    { name: "dr. Afandi, Sp.JP", id: "89" },
+    { name: "dr. Shigma, Sp.JP", id: "103" },
+    { name: "dr. Enny, Sp.P", id: "19" },
+    { name: "dr. Bimo, Sp.P", id: "67" },
+    { name: "dr. Ain, Sp.A", id: "28" },
+    { name: "dr. Nisa, Sp.A", id: "25" },
+    { name: "dr. Sari, Sp.A", id: "32" },
+    { name: "dr. Yani, Sp.S", id: "14" },
+    { name: "dr. Agung, Sp.S", id: "15" },
+    { name: "dr. Palma, Sp.N", id: "109" },
+    { name: "dr. Romy, Sp.KJ", id: "29" },
+    { name: "dr. Har, Sp.KJ", id: "59" },
+    { name: "dr. Tavip, Sp.THT-KL", id: "16" },
+    { name: "dr. Yoice, Sp.THT-KL", id: "17" },
+    { name: "dr. Retna, Sp.M", id: "80" },
+    { name: "dr. Anin, Sp.DVE", id: "101" },
+];
+
+const roomDatabase = [
+    { name: "Poli Anak", id: "101010107" },
+    { name: "Instalasi ICU", id: "101150101" },
+    { name: "RD Bedah Umum", id: "101020101" },
+    { name: "RD Kandungan", id: "101020301" },
+    { name: "RD Psikiatri", id: "101020401" },
+    { name: "RD Anak", id: "101020501" },
+    { name: "RD Bedah Orthopedi", id: "101020601" },
+    { name: "Bangsal Amarilis", id: "101030101" },
+    { name: "Bangsal Aster 1", id: "101030102" },
+    { name: "Bangsal Aster 2", id: "101030103" },
+    { name: "Bangsal Teratai", id: "101030104" },
+    { name: "Bangsal Bougenvile", id: "101030105" },
+    { name: "Bangsal Anyelir 1", id: "101030106" },
+    { name: "Bangsal Anggrek 1", id: "101030107" },
+    { name: "Bangsal Anggrek 2", id: "101030108" },
+    { name: "Bangsal Anggrek 3", id: "101030109" },
+    { name: "Bangsal Melati", id: "101030110" },
+    { name: "Bangsal Asoka", id: "101030111" },
+    { name: "Bangsal Cempaka", id: "101030112" },
+    { name: "Bangsal Dahlia", id: "101030113" },
+    { name: "RD Non Bedah", id: "101020201" },
+    // { name: "Bangsal Mawar", id: "101030114" },
+    { name: "Ruang Medik Operatif (IBS)", id: "101080201" },
+    { name: "Bangsal Anyelir 2 (Unit stroke)", id: "101030115" },
+    // { name: "RD Bedah Saraf", id: "101020701" },
+];
+
+const templates = [
+    {
+        id: "igd",
+        name: "IGD",
+        docs: [],
+        rooms: ["101020101", "101020301", "101020401", "101020501", "101020601", "101020201"],
+    },
+    {
+        id: "anak",
+        name: "Anak",
+        docs: ["28", "25", "32"],
+        rooms: [],
+    },
+    {
+        id: "anak-bangsal",
+        name: "Anak + Bangsal Anak",
+        docs: ["28", "25", "32"],
+        rooms: [";", "101030109", "101030111", "101030112", "101030110", "101020501", "101020301"],
+    },
+    {
+        id: "bedah",
+        name: "Bedah Umum",
+        docs: ["37", "71"],
+        rooms: [],
+    },
+    {
+        id: "uro",
+        name: "Uro",
+        docs: ["36"],
+        rooms: [],
+    },
+    {
+        id: "ortho",
+        name: "Ortho",
+        docs: ["24", "10"],
+        rooms: [],
+    },
+    {
+        id: "obgyn",
+        name: "Obgyn",
+        docs: ["11", "27", "57", "62"],
+        rooms: [],
+    },
+    {
+        id: "interna",
+        name: "Interna",
+        docs: ["12", "30", "63"],
+        rooms: [],
+    },
+    {
+        id: "jantung",
+        name: "Jantung",
+        docs: ["89", "103"],
+        rooms: [],
+    },
+    {
+        id: "paru",
+        name: "Paru",
+        docs: ["19", "67"],
+        rooms: [],
+    },
+    {
+        id: "saraf",
+        name: "Saraf",
+        docs: ["14", "15", "109"],
+        rooms: [],
+    },
+    {
+        id: "jiwa",
+        name: "Jiwa",
+        docs: ["29", "59"],
+        rooms: [],
+    },
+    {
+        id: "tht",
+        name: "THT",
+        docs: ["16", "17"],
+        rooms: [],
+    },
+    {
+        id: "mata",
+        name: "Mata",
+        docs: ["80"],
+        rooms: [],
+    },
+    {
+        id: "kulit",
+        name: "Kulit",
+        docs: ["101"],
+        rooms: [],
+    },
+];
+
 // --- Initialize App ---
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
-    setDefaultDate();
+    setupForm();
     setIDLists();
 });
 
@@ -27,14 +182,428 @@ function setupEventListeners() {
         }
         activateTab('home');
     });
+}
 
-    document.getElementById('enable-date').addEventListener('change', toggleDateInput);
+function setupForm() {
+    // State
+    let selectedDocs = [];
+    let selectedRooms = [];
 
-    const myForm = document.querySelector('#fetch-form');
-    myForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        handleFetch();
+    // DOM Elements
+    const form = document.getElementById("fetch-form");
+    const docTagContainer = document.getElementById("doc-tag-container");
+    const docInput = document.getElementById("doc-input-field");
+    const docAutocomplete = document.getElementById("doc-autocomplete");
+    const roomTagContainer = document.getElementById("room-tag-container");
+    const roomInput = document.getElementById("room-input-field");
+    const roomAutocomplete = document.getElementById("room-autocomplete");
+
+    function getSerializedData(itemArray) {
+        if (itemArray.length === 0) return "";
+
+        let result = "";
+        let isFirstInBatch = true;
+
+        itemArray.forEach((item) => {
+            if (item.type === 'batch') {
+                result += "; ";
+                isFirstInBatch = true;
+            } else {
+                if (!isFirstInBatch) {
+                    result += ", ";
+                }
+                result += item.id;
+                isFirstInBatch = false;
+            }
+        });
+        return result;
+    }
+
+    // --- Multi-Select Logic ---
+    function updateUI(targetInput = null) {
+        renderTags(
+            docTagContainer,
+            selectedDocs,
+            doctorDatabase,
+            "doc",
+        );
+        renderTags(
+            roomTagContainer,
+            selectedRooms,
+            roomDatabase,
+            "room",
+        );
+
+        if (targetInput) {
+            targetInput.focus();
+        }
+    }
+
+    function renderTags(container, selectedItems, database, type) {
+        const input = container.querySelector("input");
+        container.innerHTML = "";
+
+        let currentBatchNumber = 1;
+
+        // Color schemes for 5 batches
+        const colorSchemes = [
+            {
+                bg: "bg-blue-50",
+                text: "text-blue-700",
+                border: "border-blue-200",
+                hover: "hover:text-blue-900",
+            }, // Batch 1
+            {
+                bg: "bg-emerald-50",
+                text: "text-emerald-700",
+                border: "border-emerald-200",
+                hover: "hover:text-emerald-900",
+            }, // Batch 2
+            {
+                bg: "bg-amber-50",
+                text: "text-amber-700",
+                border: "border-amber-200",
+                hover: "hover:text-amber-900",
+            }, // Batch 3
+            {
+                bg: "bg-rose-50",
+                text: "text-rose-700",
+                border: "border-rose-200",
+                hover: "hover:text-rose-900",
+            }, // Batch 4
+            {
+                bg: "bg-indigo-50",
+                text: "text-indigo-700",
+                border: "border-indigo-200",
+                hover: "hover:text-indigo-900",
+            }, // Batch 5
+        ];
+
+        selectedItems.forEach((itemObj, index) => {
+            const tag = document.createElement("div");
+
+            if (itemObj.type === "batch") {
+                tag.className =
+                    "flex items-center gap-1 px-2 py-1 bg-slate-800 text-white rounded-md text-[10px] font-black uppercase tracking-tighter shadow-sm";
+                tag.innerHTML = `
+                            <span>BATCH</span>
+                            <button type="button" class="hover:text-red-300 ml-1" data-index="${index}">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"></path></svg>
+                            </button>
+                        `;
+                currentBatchNumber++;
+            } else {
+                const data = database.find(
+                    (d) => d.id === itemObj.id,
+                ) || { id: itemObj.id, name: itemObj.id };
+
+                // Pick color scheme based on current batch (cycle through if more than 5)
+                const scheme =
+                    colorSchemes[
+                    (currentBatchNumber - 1) %
+                    colorSchemes.length
+                    ];
+
+                tag.className = `flex items-center gap-1.5 px-2 py-1 border rounded-md text-[11px] font-bold shadow-sm transition-colors ${scheme.bg} ${scheme.text} ${scheme.border}`;
+                tag.innerHTML = `
+                            <span>${data.name}</span>
+                            <button type="button" class="${scheme.hover} transition-colors" data-index="${index}">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"></path></svg>
+                            </button>
+                        `;
+            }
+
+            tag.querySelector("button").addEventListener(
+                "click",
+                (e) => {
+                    e.stopPropagation();
+                    removeItem(index, type);
+                },
+            );
+            container.appendChild(tag);
+        });
+        container.appendChild(input);
+    }
+
+    function removeItem(index, type) {
+        if (type === "doc") {
+            selectedDocs.splice(index, 1);
+            updateUI(docInput);
+        } else {
+            selectedRooms.splice(index, 1);
+            updateUI(roomInput);
+        }
+    }
+
+    function pickItem(item, type, input, list) {
+        const listObj =
+            type === "doc" ? selectedDocs : selectedRooms;
+        if (item.type === "batch") {
+            listObj.push({ type: "batch" });
+        } else {
+            listObj.push({ id: item.id, type: "item" });
+        }
+        if (input) input.value = "";
+        if (list) list.classList.add("hidden");
+        updateUI(input);
+    }
+
+    function handleAutocomplete(input, list, database, type) {
+        let currentSelectedIndex = 0;
+        let currentMatches = [];
+
+        const getMatches = () => {
+            const val = input.value.trim().toLowerCase();
+            if (!val) return [];
+
+            let filtered = [];
+            if (val.includes(";")) {
+                filtered.push({
+                    id: ";",
+                    name: "NEW BATCH",
+                    type: "batch",
+                });
+            }
+
+            const currentList =
+                type === "doc" ? selectedDocs : selectedRooms;
+            const lastBatchIndex = currentList
+                .map((i) => i.type)
+                .lastIndexOf("batch");
+            const itemsInCurrentBatch = currentList
+                .slice(lastBatchIndex + 1)
+                .map((i) => i.id);
+
+            const dbMatches = database
+                .filter(
+                    (item) =>
+                        (item.name.toLowerCase().includes(val) ||
+                            item.id.includes(val)) &&
+                        !itemsInCurrentBatch.includes(item.id),
+                )
+                .map((item) => ({ ...item, type: "item" }));
+
+            return [...filtered, ...dbMatches];
+        };
+
+        const renderList = () => {
+            list.innerHTML = "";
+            currentMatches.forEach((item, idx) => {
+                const div = document.createElement("div");
+                const isSelected = idx === currentSelectedIndex;
+                const highlightClass = isSelected
+                    ? "autocomplete-item-highlight"
+                    : "";
+
+                div.className = `px-4 py-2 hover:bg-slate-50 cursor-pointer text-xs border-b border-slate-50 last:border-0 flex items-center justify-between transition-colors ${highlightClass}`;
+
+                if (item.type === "batch") {
+                    div.innerHTML = `
+                                <span><span class="font-black text-slate-800 tracking-widest">NEXT BATCH (;)</span></span>
+                                ${isSelected ? '<span class="text-[9px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter">Enter to Pick</span>' : ""}
+                            `;
+                } else {
+                    div.innerHTML = `
+                                <span><span class="font-bold text-blue-600">${item.id}</span> - <span class="text-slate-600">${item.name}</span></span>
+                                ${isSelected ? '<span class="text-[9px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter">Enter to Pick</span>' : ""}
+                            `;
+                }
+
+                div.addEventListener("click", () =>
+                    pickItem(item, type, input, list),
+                );
+                list.appendChild(div);
+            });
+        };
+
+        input.addEventListener("input", () => {
+            currentMatches = getMatches();
+            currentSelectedIndex = 0;
+            if (currentMatches.length === 0) {
+                list.classList.add("hidden");
+                return;
+            }
+            renderList();
+            list.classList.remove("hidden");
+        });
+
+        input.addEventListener("keydown", (e) => {
+            const listObj =
+                type === "doc" ? selectedDocs : selectedRooms;
+
+            if (
+                currentMatches.length > 0 &&
+                !list.classList.contains("hidden")
+            ) {
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    currentSelectedIndex =
+                        (currentSelectedIndex + 1) %
+                        currentMatches.length;
+                    renderList();
+                } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    currentSelectedIndex =
+                        (currentSelectedIndex -
+                            1 +
+                            currentMatches.length) %
+                        currentMatches.length;
+                    renderList();
+                }
+            }
+
+            if (
+                e.key === "Enter" ||
+                e.key === "," ||
+                e.key === ";"
+            ) {
+                e.preventDefault();
+                const val = input.value.trim();
+
+                if (e.key === ";" || val.includes(";")) {
+                    pickItem({ type: "batch" }, type, input, list);
+                } else {
+                    if (
+                        currentMatches.length > 0 &&
+                        !list.classList.contains("hidden")
+                    ) {
+                        pickItem(
+                            currentMatches[currentSelectedIndex],
+                            type,
+                            input,
+                            list,
+                        );
+                    } else if (val) {
+                        const cleanVal = val.replace(",", "");
+                        pickItem(
+                            { id: cleanVal, type: "item" },
+                            type,
+                            input,
+                            list,
+                        );
+                    }
+                }
+            }
+
+            if (e.key === "Backspace" && !input.value) {
+                e.preventDefault();
+                listObj.pop();
+                updateUI(input);
+            }
+        });
+    }
+
+    // --- Template & General Logic ---
+    const templateDropdownBtn = document.getElementById(
+        "template-dropdown-btn",
+    );
+    const templateMenu = document.getElementById("template-menu");
+    const templateList = document.getElementById("template-list");
+    const selectedLabel = document.getElementById(
+        "selected-template-label",
+    );
+
+    function renderTemplates() {
+        templateList.innerHTML = "";
+        templates.forEach((t) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className =
+                "w-full text-left px-4 py-2 text-[11px] font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors";
+            btn.textContent = t.name;
+            btn.addEventListener("click", () => {
+                // Logic to handle strings or batch markers in templates
+                selectedDocs = t.docs.map((id) =>
+                    id === ";"
+                        ? { type: "batch" }
+                        : { id, type: "item" },
+                );
+                selectedRooms = t.rooms.map((id) =>
+                    id === ";"
+                        ? { type: "batch" }
+                        : { id, type: "item" },
+                );
+
+                selectedLabel.textContent = t.name;
+                templateMenu.classList.add("hidden");
+                updateUI();
+            });
+            templateList.appendChild(btn);
+        });
+    }
+
+    handleAutocomplete(
+        docInput,
+        docAutocomplete,
+        doctorDatabase,
+        "doc",
+    );
+    handleAutocomplete(
+        roomInput,
+        roomAutocomplete,
+        roomDatabase,
+        "room",
+    );
+
+    window.addEventListener("click", () => {
+        docAutocomplete.classList.add("hidden");
+        roomAutocomplete.classList.add("hidden");
+        templateMenu.classList.add("hidden");
     });
+
+    templateDropdownBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        templateMenu.classList.toggle("hidden");
+    });
+
+    document
+        .getElementById("toggle-advanced-btn")
+        .addEventListener("click", function () {
+            const adv = document.getElementById("advanced-options");
+            adv.classList.toggle("open");
+            document
+                .getElementById("chevron-icon")
+                .classList.toggle("rotate-180");
+        });
+
+    document
+        .getElementById("enable-date")
+        .addEventListener("change", (e) => {
+            document.getElementById("form-date").disabled =
+                !e.target.checked;
+        });
+
+    form.addEventListener("reset", (e) => {
+        setTimeout(() => {
+            selectedDocs = [];
+            selectedRooms = [];
+            selectedLabel.textContent = "Select a template...";
+            document.getElementById("form-date").disabled = true;
+            document
+                .getElementById("advanced-options")
+                .classList.remove("open");
+            document
+                .getElementById("chevron-icon")
+                .classList.remove("rotate-180");
+            updateUI();
+        }, 0);
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const serializedDocs = getSerializedData(selectedDocs);
+        const serializedRooms = getSerializedData(selectedRooms);
+        handleFetch(serializedDocs, serializedRooms);
+    });
+
+
+    [docTagContainer, roomTagContainer].forEach((c) => {
+        c.addEventListener("click", () =>
+            c.querySelector("input").focus(),
+        );
+    });
+
+    renderTemplates();
 }
 
 // --- Authentication Flow ---
@@ -155,7 +724,6 @@ async function decryptData(encryptedBase64, tokenBase64) {
 }
 
 // --- Core Actions ---
-
 function parseInputToGroups(input) {
     if (!input || input.trim() === '') return [[null]];
     return input.split(';').map(group => {
@@ -164,7 +732,7 @@ function parseInputToGroups(input) {
     });
 }
 
-async function handleFetch() {
+async function handleFetch(serializedDocs, serializedRooms) {
     const fetchBtn = document.getElementById('main-fetch-btn');
     const authBar = document.getElementById('auth-status');
     const authText = document.getElementById('auth-status-text');
@@ -186,8 +754,8 @@ async function handleFetch() {
     tabCounter++;
     const tabId = `pat-${tabCounter}`;
 
-    const rawDocInput = document.getElementById('form-doc-id').value;
-    const rawRoomInput = document.getElementById('form-room-id').value;
+    const rawDocInput = serializedDocs;
+    const rawRoomInput = serializedRooms;
     const dateCheckbox = document.getElementById('enable-date');
     const admDate = dateCheckbox.checked ? document.getElementById('form-date').value : null;
     const status = document.getElementById('form-status').value;
@@ -278,76 +846,7 @@ async function handleFetch() {
     }
 }
 
-// --- UI Utilities ---
-function setDefaultDate() {
-    const today = new Date();
-    const offset = today.getTimezoneOffset() * 60000;
-    const localISOTime = (new Date(today - offset)).toISOString().slice(0, 10);
-    document.getElementById('form-date').value = localISOTime;
-}
-
 function setIDLists() {
-    const doctors = [
-        { name: "dr. Firman", id: 37 },
-        { name: "dr. Satria", id: 71 },
-        { name: "dr. Andri", id: 36 },
-        // { name: "dr. Aris", id: 98 },
-        // { name: "dr. Robin", id: 104 },
-        { name: "dr. Amir", id: 24 },
-        { name: "dr. Twody", id: 10 },
-        { name: "dr. Eka", id: 11 },
-        { name: "dr. Cakra", id: 27 },
-        { name: "dr. Guntur", id: 57 },
-        { name: "dr. Khome", id: 62 },
-        { name: "dr. Endra", id: 12 },
-        { name: "dr. Dar", id: 30 },
-        { name: "dr. Diksi", id: 63 },
-        { name: "dr. Afandi", id: 89 },
-        { name: "dr. Shigma", id: 103 },
-        { name: "dr. Enny", id: 19 },
-        { name: "dr. Bimo", id: 67 },
-        { name: "dr. Ain", id: 28 },
-        { name: "dr. Nisa", id: 25 },
-        { name: "dr. Sari", id: 32 },
-        { name: "dr. Yani", id: 14 },
-        { name: "dr. Agung", id: 15 },
-        { name: "dr. Palma", id: 109 },
-        { name: "dr. Romy", id: 29 },
-        { name: "dr. Har", id: 59 },
-        { name: "dr. Tavip", id: 16 },
-        { name: "dr. Yoice", id: 17 },
-        { name: "dr. Retna", id: 80 },
-        { name: "dr. Anin", id: 101 },
-    ];
-
-    const rooms = [
-        { name: "Poli Anak", id: 101010107 },
-        { name: "Instalasi ICU", id: 101150101 },
-        { name: "RD Bedah Umum", id: 101020101 },
-        { name: "RD Kandungan", id: 101020301 },
-        { name: "RD Psikiatri", id: 101020401 },
-        { name: "RD Anak", id: 101020501 },
-        { name: "RD Bedah Orthopedi", id: 101020601 },
-        { name: "Bangsal Cempaka", id: 101030112 },
-        { name: "Bangsal Amarilis", id: 101030101 },
-        { name: "Bangsal Aster 1", id: 101030102 },
-        { name: "Bangsal Aster 2", id: 101030103 },
-        { name: "Bangsal Teratai", id: 101030104 },
-        { name: "Bangsal Bougenvile", id: 101030105 },
-        { name: "Bangsal Anyelir 1", id: 101030106 },
-        { name: "Bangsal Anggrek 1", id: 101030107 },
-        { name: "Bangsal Anggrek 2", id: 101030108 },
-        { name: "Bangsal Anggrek 3", id: 101030109 },
-        { name: "Bangsal Melati", id: 101030110 },
-        { name: "Bangsal Asoka", id: 101030111 },
-        { name: "Bangsal Dahlia", id: 101030113 },
-        { name: "RD Non Bedah", id: 101020201 },
-        { name: "Bangsal Mawar", id: 101030114 },
-        { name: "Ruang Medik Operatif (IBS)", id: 101080201 },
-        { name: "Bangsal Anyelir 2 (Unit stroke)", id: 101030115 },
-        { name: "RD Bedah Saraf", id: 101020701 },
-    ];
-
     function renderTable(data, containerId) {
         const tableBody = document.getElementById(containerId);
         if (!tableBody) return;
@@ -366,8 +865,8 @@ function setIDLists() {
         tableBody.innerHTML = rowsHtml;
     }
 
-    renderTable(doctors, 'doctor-table-body');
-    renderTable(rooms, 'room-table-body');
+    renderTable(doctorDatabase, 'doctor-table-body');
+    renderTable(roomDatabase, 'room-table-body');
 }
 
 function toggleSidebar() {
@@ -376,10 +875,6 @@ function toggleSidebar() {
     const icon = document.getElementById('toggle-icon');
     sidebar.classList.toggle('sidebar-collapsed', sidebarCollapsed);
     icon.style.transform = sidebarCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
-}
-
-function toggleDateInput(e) {
-    document.getElementById('form-date').disabled = !e.target.checked;
 }
 
 function switchView(view) {
@@ -563,10 +1058,9 @@ function processPatient(item) {
         fullName: toTitleCase(cleanField(pasien?.NAMA)),
         age: calculateAge(cleanField(pasien?.TANGGAL_LAHIR)),
         diagnosis: diagObj ? `${diagObj.CODE} - ${diagObj.STR}` : "??",
-        weight: cleanField(item.BERAT_BADAN),
         bedName: cleanField(ref?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR),
         roomName: rawRoomName.replace(/^Bangsal\s+/i, ''),
-        doctorName: cleanField(ref?.DPJP?.NAMA) // Preserving original title and case
+        doctorName: cleanField(ref?.DPJP?.NAMA)
     };
 }
 
@@ -606,7 +1100,7 @@ function renderByRoom(hierarchy, sortedRoomKeys, sortMode) {
                 <span class="text-[11px] font-black text-white uppercase tracking-widest">${room}</span>
                 <div class="flex items-center gap-2">
                     <button class="btn-copy-group text-[9px] bg-blue-500 hover:bg-blue-400 text-white font-bold px-2 py-0.5 rounded transition-colors" data-group="${room}">COPY ROOM</button>
-                    <span class="bg-blue-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} PATIENTS</span>
+                    <span class="bg-blue-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
                 </div>
             </div>
             <div class="divide-y divide-slate-100">
@@ -643,7 +1137,7 @@ function renderByDoctor(hierarchy, sortedDocKeys, sortMode) {
                 <span class="text-[11px] font-black text-white uppercase tracking-widest">${doc}</span>
                 <div class="flex items-center gap-2">
                     <button class="btn-copy-group text-[9px] bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-2 py-0.5 rounded transition-colors" data-group="${doc}">COPY DOCTOR</button>
-                    <span class="bg-emerald-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} TOTAL</span>
+                    <span class="bg-emerald-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
                 </div>
             </div>
             <div class="divide-y divide-slate-100">
@@ -671,7 +1165,7 @@ function patientRowTemplate(p) {
     return `
     <div class="compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors">
         <div class="text-xs font-medium text-slate-700 leading-relaxed patient-data">
-            <span class="font-bold text-slate-400">${p.bedName}</span>/<span class="font-bold text-slate-900">${p.fullName}</span>/<span class="text-slate-500">${p.age}</span>/<span class="text-blue-600 font-semibold">${p.diagnosis}</span>/<span class="font-bold">${p.weight === '??' ? '??' : p.weight + ' kg'}</span>
+            <span class="font-bold text-slate-400">${p.bedName}</span>/<span class="font-bold text-slate-900">${p.fullName}</span>/<span class="text-slate-500">${p.age}</span>/<span class="text-blue-600 font-semibold">${p.diagnosis}</span>
         </div>
         <div class="actions opacity-0 group-hover:opacity-100 transition-opacity">
             <button class="btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200">Copy</button>
@@ -700,8 +1194,7 @@ function formatGroupText(groupName, info, viewMode, sortMode, summaryOnly) {
             const sorted = sortPatients(patients, sortMode);
             sorted.forEach(p => {
                 const diag = p.diagnosis;
-                const weight = p.weight === '??' ? '??' : `${p.weight} kg`;
-                lines.push(`- ${p.bedName}/${p.fullName}/${p.age}/${diag}/${weight}`);
+                lines.push(`- ${p.bedName}/${p.fullName}/${p.age}/${diag}`);
             });
         }
     }
