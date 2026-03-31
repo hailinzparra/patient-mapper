@@ -622,15 +622,24 @@ async function getSessionToken() {
 
         const injectionResults = await chrome.scripting.executeScript({
             target: { tabId: targetTab.id },
-            func: () => localStorage.getItem('_lapp-access_token')
+            func: () => {
+                return {
+                    token: localStorage.getItem('_lapp-access_token'),
+                    isEncrypted: localStorage.getItem('_lapp-https_encrypt') === 'true'
+                };
+            }
         });
 
-        const rawToken = injectionResults[0]?.result;
-        if (!rawToken) {
+        const result = injectionResults[0]?.result;
+
+        if (!result || !result.token) {
             throw new Error("Token not found. Please log in to the RSUD website first.");
         }
 
-        return rawToken;
+        return {
+            rawToken: result.token,
+            isEncryptionEnabled: result.isEncrypted
+        };
     } catch (err) {
         throw err;
     }
@@ -742,8 +751,11 @@ async function handleFetch(serializedDocs, serializedRooms) {
     authText.innerText = "Finding active session...";
 
     let rawToken;
+    let isEncryptionEnabled;
     try {
-        rawToken = await getSessionToken();
+        const sessionData = await getSessionToken();
+        rawToken = sessionData.rawToken;
+        isEncryptionEnabled = sessionData.isEncryptionEnabled;
     } catch (authErr) {
         authText.innerText = authErr.message;
         authText.className = "text-rose-500 font-bold";
@@ -810,8 +822,10 @@ async function handleFetch(serializedDocs, serializedRooms) {
                 const result = await response.json();
 
                 if (result.success && result.data) {
-                    const decrypted = await decryptData(result.data, rawToken);
-                    const items = Array.isArray(decrypted) ? decrypted : [];
+                    const finalItems = isEncryptionEnabled
+                        ? await decryptData(result.data, rawToken)
+                        : result.data;
+                    const items = Array.isArray(finalItems) ? finalItems : [];
 
                     items.forEach(item => {
                         const pRef = item.REFERENSI?.PENDAFTARAN?.REFERENSI?.PASIEN;
