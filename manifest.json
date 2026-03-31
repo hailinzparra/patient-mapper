@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Patient Mapper",
-    "version": "2.0",
+    "version": "2.1",
     "description": "Maps hospital patients.",
     "permissions": ["tabs", "scripting", "activeTab"],
     "host_permissions": ["https://api.rsudsoediranms.com/*"],
