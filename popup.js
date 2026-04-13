@@ -233,6 +233,7 @@ function setupForm() {
             roomDatabase,
             "room",
         );
+        renderTemplates();
 
         if (targetInput) {
             targetInput.focus();
@@ -494,22 +495,83 @@ function setupForm() {
     }
 
     // --- Template & General Logic ---
-    const templateDropdownBtn = document.getElementById(
-        "template-dropdown-btn",
-    );
+    const templateDropdownBtn = document.getElementById("template-dropdown-btn");
     const templateMenu = document.getElementById("template-menu");
+    const templateSearch = document.getElementById("template-search");
     const templateList = document.getElementById("template-list");
-    const selectedLabel = document.getElementById(
-        "selected-template-label",
-    );
+    const selectedLabel = document.getElementById("selected-template-label");
 
-    function renderTemplates() {
+    let selectedIndex = 0;
+
+    templateSearch.addEventListener("click", e => e.stopPropagation());
+    templateSearch.addEventListener("input", (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        renderTemplates(searchTerm);
+
+        const items = templateList.querySelectorAll("button");
+        selectedIndex = 0;
+        updateVisualFocus(items);
+    });
+    templateSearch.addEventListener("keydown", (e) => {
+        const items = templateList.querySelectorAll("button");
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+            updateVisualFocus(items);
+        }
+        else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            selectedIndex = Math.max(selectedIndex - 1, 0);
+            updateVisualFocus(items);
+        }
+        else if (e.key === "Enter") {
+            e.preventDefault();
+            if (selectedIndex >= 0 && items[selectedIndex]) {
+                items[selectedIndex].click(); // Trigger the selection logic
+            }
+        }
+    });
+
+    function updateVisualFocus(items) {
+        items.forEach((item, index) => {
+            if (index === selectedIndex) {
+                // Apply highlight styles
+                item.classList.add("bg-blue-50", "text-blue-600");
+                // Auto-scroll if the list is long
+                item.scrollIntoView({ block: "nearest" });
+            } else {
+                item.classList.remove("bg-blue-50", "text-blue-600");
+            }
+        });
+    }
+
+    function renderTemplates(filter = "") {
         templateList.innerHTML = "";
-        templates.forEach((t) => {
+
+        // Filter the templates based on the search term
+        const filteredTemplates = templates.filter(t =>
+            t.name.toLowerCase().includes(filter)
+        );
+
+        if (filteredTemplates.length === 0) {
+            const noResult = document.createElement("div");
+            noResult.className = "px-4 py-2 text-[11px] text-slate-400 italic";
+            noResult.textContent = "No templates found.";
+            templateList.appendChild(noResult);
+            return;
+        }
+
+        let itemIndex = 0;
+        filteredTemplates.forEach((t) => {
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className =
                 "w-full text-left px-4 py-2 text-[11px] font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors";
+            if (itemIndex === selectedIndex) {
+                btn.className += " bg-blue-50 text-blue-600";
+            }
+            itemIndex++;
             btn.textContent = t.name;
             btn.addEventListener("click", () => {
                 // Logic to handle strings or batch markers in templates
@@ -527,6 +589,11 @@ function setupForm() {
                 selectedLabel.textContent = t.name;
                 templateMenu.classList.add("hidden");
                 updateUI();
+            });
+            btn.addEventListener("mouseenter", () => {
+                const currentItems = Array.from(templateList.querySelectorAll("button"));
+                selectedIndex = currentItems.indexOf(btn);
+                updateVisualFocus(currentItems);
             });
             templateList.appendChild(btn);
         });
@@ -554,6 +621,9 @@ function setupForm() {
     templateDropdownBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         templateMenu.classList.toggle("hidden");
+        if (!templateMenu.classList.contains("hidden")) {
+            templateSearch.focus();
+        }
     });
 
     document
