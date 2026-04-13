@@ -1163,7 +1163,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
 
         // Delete Patient
         wrapper.querySelector('.delete-p-btn').addEventListener('click', () => {
-            if (confirm(`Remove ${patientData.fullName} from your list?`)) {
+            if (confirm(`Remove ${patientData.fullName}?`)) {
                 // 1. Remove from Storage
                 deletePatientFromStorage(pId);
 
@@ -1187,8 +1187,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                     toggleIcon.style.transform = 'rotate(-90deg)';
                 }
 
-                // Update persistent order for the room
-                savePatientOrderInRoom(roomId);
+                saveCurrentOrder('patient', roomId, list);
             }
         });
 
@@ -1201,21 +1200,25 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
             wrapper.querySelector('.cppt-container').classList.add('hidden');
         });
 
-        // Reordering
+        // Reordering patients
         wrapper.querySelector('.move-p-up').addEventListener('click', () => {
-            const sibling = wrapper.previousElementSibling;
-            if (sibling && sibling.classList.contains('patient-wrapper')) {
-                wrapper.parentNode.insertBefore(wrapper, sibling);
-                savePatientOrderInRoom(roomId);
-            }
+            moveElement(wrapper, 'up', 'patient', roomId);
         });
+
         wrapper.querySelector('.move-p-down').addEventListener('click', () => {
-            const sibling = wrapper.nextElementSibling;
-            if (sibling && sibling.classList.contains('patient-wrapper')) {
-                wrapper.parentNode.insertBefore(sibling, wrapper);
-                savePatientOrderInRoom(roomId);
-            }
+            moveElement(wrapper, 'down', 'patient', roomId);
         });
+    });
+
+    // Reordering rooms
+    div.querySelector('.move-room-up').addEventListener('click', (e) => {
+        e.stopPropagation();
+        moveElement(div, 'up', 'room', jenisId);
+    });
+
+    div.querySelector('.move-room-down').addEventListener('click', (e) => {
+        e.stopPropagation();
+        moveElement(div, 'down', 'room', jenisId);
     });
 
     return div;
@@ -1238,8 +1241,8 @@ async function toggleCPPTInline(wrapper, p) {
 
     // 1. Reset Logic State to 'ALL' every time it opens
     let currentFilter = 'ALL';
-    const todayStr = new Date().toISOString().split('T')[0];
-    let selectedDate = todayStr;
+    const today = getLocalToday();
+    let selectedDate = today;
 
     // 2. Select Buttons
     const filterAll = container.querySelector('.filter-cppt-all');
@@ -1301,7 +1304,7 @@ async function toggleCPPTInline(wrapper, p) {
             dateBar.innerHTML = availableDates.map(date => {
                 const isActive = date === selectedDate;
                 let styles = "date-tab shrink-0 px-2 py-1 rounded text-[8px] font-bold transition-all ";
-                const isToday = date === todayStr;
+                const isToday = date === today;
 
                 if (isActive) {
                     styles += "bg-blue-600 text-white";
@@ -1341,26 +1344,17 @@ async function toggleCPPTInline(wrapper, p) {
 /**
  * Saves current room order to storage
  */
-function savePatientOrderInRoom(roomId) {
-    const roomElement = document.querySelector(`.room-group[data-room-id="${roomId}"]`);
-    if (!roomElement) return;
-
-    const patientIds = Array.from(roomElement.querySelectorAll('.patient-wrapper'))
-        .map(w => w.dataset.id);
-
-    chrome.storage.local.get(['customOrders'], (res) => {
-        let co = res.customOrders || { rooms: {}, patients: {} };
-        if (!co.patients) co.patients = {};
-        co.patients[roomId] = patientIds;
-        chrome.storage.local.set({ customOrders: co });
-    });
-}
-
 function moveElement(el, direction, type, parentId) {
     const sibling = direction === 'up' ? el.previousElementSibling : el.nextElementSibling;
 
-    // Safety check: Don't move past the edge or into non-item elements (like the "Empty Room" <p>)
-    if (!sibling || sibling.tagName === 'P') return;
+    // Safety check
+    if (!sibling) return;
+
+    // For patients, don't swap with the "Empty Room" placeholder
+    if (type === 'patient' && sibling.tagName === 'P') return;
+
+    // Ensure we only swap with other rooms if moving a room
+    if (type === 'room' && !sibling.classList.contains('room-group')) return;
 
     if (direction === 'up') {
         el.parentNode.insertBefore(el, sibling);
@@ -1368,20 +1362,27 @@ function moveElement(el, direction, type, parentId) {
         el.parentNode.insertBefore(sibling, el);
     }
 
-    // Capture the new DOM order and persist to storage
     saveCurrentOrder(type, parentId, el.parentNode);
 }
 
 function saveCurrentOrder(type, parentId, container) {
-    if (type === 'room') {
-        const ids = Array.from(container.querySelectorAll('.room-group')).map(r => r.dataset.roomId);
-        customOrders.rooms[parentId] = ids;
-    } else {
-        const ids = Array.from(container.querySelectorAll('.patient-card')).map(p => p.dataset.id);
-        customOrders.patients[parentId] = ids;
-    }
+    chrome.storage.local.get(['customOrders'], (res) => {
+        let co = res.customOrders || { rooms: {}, patients: {} };
+        if (!co.rooms) co.rooms = {};
+        if (!co.patients) co.patients = {};
 
-    chrome.storage.local.set({ customOrders });
+        if (type === 'room') {
+            const ids = Array.from(container.querySelectorAll('.room-group'))
+                .map(r => r.dataset.roomId);
+            co.rooms[parentId] = ids;
+        } else {
+            const ids = Array.from(container.querySelectorAll('.patient-wrapper'))
+                .map(p => p.dataset.id);
+            co.patients[parentId] = ids;
+        }
+
+        chrome.storage.local.set({ customOrders: co });
+    });
 }
 
 function clearAllStorage() {
@@ -2138,7 +2139,7 @@ async function openCPPTModal(p) {
 function renderPagination(fullData, activeDate, onDateSelect) {
     const nav = document.getElementById("date-pagination");
     const uniqueDates = [...new Set(fullData.map(r => r.TANGGAL.split(' ')[0]))].sort().reverse();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalToday();
 
     nav.innerHTML = uniqueDates.map(date => {
         const isActive = date === activeDate;
@@ -2256,4 +2257,11 @@ function calculateAge(dobString) {
         if (months < 0) { years--; months += 12; }
         return `${years}y, ${months}m, ${days}d`;
     } catch (e) { return "??"; }
+}
+
+function getLocalToday() {
+    const today = new Date();
+    const offsetInMs = today.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(today.getTime() - offsetInMs).toISOString();
+    return localISOTime.split('T')[0];
 }
