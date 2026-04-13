@@ -7,6 +7,7 @@
 let tabCounter = 0;
 let activeTabId = 'home';
 let sidebarCollapsed = false;
+let cachedSession = null;
 
 // Data
 const doctorDatabase = [
@@ -173,13 +174,13 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
     document.getElementById('btn-toggle-sidebar').addEventListener('click', toggleSidebar);
     document.getElementById('sidebar-workspace').addEventListener('click', () => switchView('workspace'));
+    document.getElementById('sidebar-patients').addEventListener('click', () => switchView('patients'));
     document.getElementById('sidebar-ids').addEventListener('click', () => switchView('ids'));
+    document.getElementById('btn-reset-data').addEventListener('click', clearAllStorage);
 
     document.getElementById('tab-home').addEventListener('click', () => {
-        const idsView = document.getElementById('view-ids');
-        if (!idsView.classList.contains('hidden')) {
-            switchView('workspace');
-        }
+        // If we are currently in a different view, go back to workspace
+        switchView('workspace');
         activateTab('home');
     });
 }
@@ -676,43 +677,73 @@ function setupForm() {
     renderTemplates();
 }
 
-// --- Authentication Flow ---
-async function getSessionToken() {
+// --- Authentication & Fetch Flow ---
+async function getSession(forceRefresh = false) {
+    if (cachedSession && !forceRefresh) return cachedSession;
+
     if (typeof chrome === 'undefined' || !chrome.tabs) {
         throw new Error("Chrome Extension context not found.");
     }
 
-    try {
-        const allTabs = await chrome.tabs.query({ url: "*://*.rsudsoediranms.com/*" });
-        const targetTab = allTabs[0];
+    const allTabs = await chrome.tabs.query({ url: "*://*.rsudsoediranms.com/*" });
+    const targetTab = allTabs[0];
 
-        if (!targetTab) {
-            throw new Error("RSUD Portal not found. Please open the website in another tab.");
-        }
-
-        const injectionResults = await chrome.scripting.executeScript({
-            target: { tabId: targetTab.id },
-            func: () => {
-                return {
-                    token: localStorage.getItem('_lapp-access_token'),
-                    isEncrypted: localStorage.getItem('_lapp-https_encrypt') === 'true'
-                };
-            }
-        });
-
-        const result = injectionResults[0]?.result;
-
-        if (!result || !result.token) {
-            throw new Error("Token not found. Please log in to the RSUD website first.");
-        }
-
-        return {
-            rawToken: result.token,
-            isEncryptionEnabled: result.isEncrypted
-        };
-    } catch (err) {
-        throw err;
+    if (!targetTab) {
+        throw new Error("RSUD Portal not found. Please open the website in another tab.");
     }
+
+    const injectionResults = await chrome.scripting.executeScript({
+        target: { tabId: targetTab.id },
+        func: () => ({
+            token: localStorage.getItem('_lapp-access_token'),
+            isEncrypted: localStorage.getItem('_lapp-https_encrypt') === 'true'
+        })
+    });
+
+    const result = injectionResults[0]?.result;
+    if (!result?.token) {
+        throw new Error("Token not found. Please log in first.");
+    }
+
+    cachedSession = {
+        rawToken: result.token, // Original Base64 token used for decryption key
+        decodedToken: atob(result.token), // Decoded token used for Bearer Header
+        isEncryptionEnabled: result.isEncrypted
+    };
+
+    return cachedSession;
+}
+
+/**
+ * Handles Bearer token injection and automatic decryption if enabled
+ */
+/**
+ * Universal wrapper that handles Auth and Decryption.
+ * Returns the full API response object for better control.
+ */
+async function apiRequest(url, options = {}) {
+    const session = await getSession();
+
+    const headers = {
+        'Authorization': `Bearer ${session.decodedToken}`,
+        'Accept': 'application/json',
+        ...options.headers
+    };
+
+    const response = await fetch(url, { ...options, headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const result = await response.json();
+
+    if (!result.success) {
+        throw new Error(result.detail || "API Error");
+    }
+
+    if (session.isEncryptionEnabled && typeof result.data === 'string' && result.data.length > 0) {
+        result.data = await decryptData(result.data, session.rawToken);
+    }
+
+    return result;
 }
 
 // --- Decryption Utilities ---
@@ -802,22 +833,12 @@ async function decryptData(encryptedBase64, tokenBase64) {
     });
 }
 
-// --- Core Actions ---
 function parseInputToGroups(input) {
     if (!input || input.trim() === '') return [[null]];
     return input.split(';').map(group => {
         const items = group.split(',').map(item => item.trim()).filter(i => i !== '');
         return items.length > 0 ? items : [null];
     });
-}
-
-async function getAuthenticatedToken() {
-    try {
-        const sessionData = await getSessionToken();
-        return atob(sessionData.rawToken);
-    } catch (err) {
-        throw new Error("Active session not found. Please re-login.");
-    }
 }
 
 async function handleFetch(serializedDocs, serializedRooms) {
@@ -829,12 +850,9 @@ async function handleFetch(serializedDocs, serializedRooms) {
     authBar.classList.remove('hidden');
     authText.innerText = "Finding active session...";
 
-    let rawToken;
-    let isEncryptionEnabled;
     try {
-        const sessionData = await getSessionToken();
-        rawToken = sessionData.rawToken;
-        isEncryptionEnabled = sessionData.isEncryptionEnabled;
+        // Refresh session at start of handleFetch
+        await getSession(true);
     } catch (authErr) {
         authText.innerText = authErr.message;
         authText.className = "text-rose-500 font-bold";
@@ -845,22 +863,19 @@ async function handleFetch(serializedDocs, serializedRooms) {
     tabCounter++;
     const tabId = `pat-${tabCounter}`;
 
-    const rawDocInput = serializedDocs;
-    const rawRoomInput = serializedRooms;
     const dateCheckbox = document.getElementById('enable-date');
     const admDate = dateCheckbox.checked ? document.getElementById('form-date').value : null;
     const status = document.getElementById('form-status').value;
     const limit = document.getElementById('form-limit').value;
 
-    const docGroups = parseInputToGroups(rawDocInput);
-    const roomGroups = parseInputToGroups(rawRoomInput);
+    const docGroups = parseInputToGroups(serializedDocs);
+    const roomGroups = parseInputToGroups(serializedRooms);
     const maxGroups = Math.max(docGroups.length, roomGroups.length);
 
     const queryList = [];
     for (let i = 0; i < maxGroups; i++) {
         const currentDocGroup = docGroups[i] || [null];
         const currentRoomGroup = roomGroups[i] || [null];
-
         currentDocGroup.forEach(d => {
             currentRoomGroup.forEach(r => {
                 queryList.push({ doc: d, room: r });
@@ -872,7 +887,6 @@ async function handleFetch(serializedDocs, serializedRooms) {
     activateTab(tabId);
 
     try {
-        const decodedToken = atob(rawToken);
         const globalPatientMap = new Map();
         let errorMessages = [];
 
@@ -893,31 +907,18 @@ async function handleFetch(serializedDocs, serializedRooms) {
             url += `&page=1&start=0&limit=${limit}`;
 
             try {
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${decodedToken}`, 'Accept': 'application/json' }
+                const result = await apiRequest(url);
+                const items = result.data || [];
+
+                items.forEach(item => {
+                    const pRef = item.REFERENSI?.PENDAFTARAN?.REFERENSI?.PASIEN;
+                    const dedupId = item.ID || `${pRef?.NAMA}_${item.REFERENSI?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR}`;
+                    if (!globalPatientMap.has(dedupId)) {
+                        globalPatientMap.set(dedupId, item);
+                    }
                 });
-
-                const result = await response.json();
-
-                if (result.success && result.data) {
-                    const finalItems = isEncryptionEnabled
-                        ? await decryptData(result.data, rawToken)
-                        : result.data;
-                    const items = Array.isArray(finalItems) ? finalItems : [];
-
-                    items.forEach(item => {
-                        const pRef = item.REFERENSI?.PENDAFTARAN?.REFERENSI?.PASIEN;
-                        const dedupId = item.ID || `${pRef?.NAMA}_${item.REFERENSI?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR}`;
-                        if (!globalPatientMap.has(dedupId)) {
-                            globalPatientMap.set(dedupId, item);
-                        }
-                    });
-                } else if (result.detail) {
-                    errorMessages.push(`Req ${i + 1}: ${result.detail}`);
-                }
             } catch (fetchErr) {
-                errorMessages.push(`Req ${i + 1}: Network Error`);
+                errorMessages.push(`Req ${i + 1}: ${fetchErr.message}`);
             }
         }
 
@@ -937,6 +938,497 @@ async function handleFetch(serializedDocs, serializedRooms) {
         fetchBtn.disabled = false;
         authBar.classList.add('hidden');
     }
+}
+
+async function fetchCPPTData(visitId, signal) {
+    const dc = Date.now();
+    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt?_dc=${dc}&KUNJUNGAN=${visitId}&STATUS=1&page=1&start=0&limit=25`;
+    const result = await apiRequest(url, { signal });
+    return result.data || []; // Ensure the UI gets an array to map over
+}
+
+async function checkAuthStatus(signal) {
+    const dc = Date.now();
+    const url = `https://api.rsudsoediranms.com/webservice/authentication/isAuthenticate?_dc=${dc}`;
+    return await apiRequest(url, { signal });
+}
+
+// --- My Patients ---
+let customOrders = {
+    rooms: {},    // { jenisId: [roomIds...] }
+    patients: {}  // { roomId: [patientIds...] }
+};
+
+async function loadPatientsView() {
+    const statusEl = document.getElementById('patient-loading-status');
+    statusEl.classList.remove('hidden');
+
+    try {
+        const [authResponse, storage] = await Promise.all([
+            checkAuthStatus(),
+            new Promise(resolve => chrome.storage.local.get(['fetchedPatients', 'customOrders'], resolve))
+        ]);
+
+        if (!authResponse || !authResponse.data) throw new Error("Not Authenticated");
+
+        // 1. Store globally for filters & other functions
+        window.userData = authResponse.data;
+        const userData = window.userData;
+        const patients = storage.fetchedPatients || [];
+        const customOrders = storage.customOrders || { rooms: {}, patients: {} };
+
+        // 2. Update Header UI including ID
+        document.getElementById('logged-in-doctor').textContent = userData.NAME;
+
+        // Target username and append ID badge
+        const usernameEl = document.getElementById('logged-in-username');
+        usernameEl.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span>@${userData.LGN}</span>
+                <span id="logged-doctor-id" data-id="${userData.ID}" class="px-1.5 py-0 bg-slate-100 text-slate-400 text-[8px] font-black rounded uppercase tracking-tighter border border-slate-200">
+                    ID: ${userData.ID}
+                </span>
+            </div>
+        `;
+
+        document.getElementById('user-initials').textContent = userData.NAME.charAt(0);
+
+        // 3. Define the Order of Columns (3: Inpatient, 2: ER, 1: Outpatient)
+        const columnOrder = ['3', '2', '1'];
+        const containerMap = {
+            '3': document.getElementById('container-jenis-3'),
+            '2': document.getElementById('container-jenis-2'),
+            '1': document.getElementById('container-jenis-1')
+        };
+
+        // 4. Map Patients to Room IDs
+        const patientMap = patients.reduce((acc, p) => {
+            const roomId = p.roomId;
+            if (!acc[roomId]) acc[roomId] = [];
+            acc[roomId].push(p);
+            return acc;
+        }, {});
+
+        // 5. Render Columns
+        columnOrder.forEach(jenisId => {
+            const container = containerMap[jenisId];
+            if (!container) return;
+            container.innerHTML = '';
+
+            // Filter rooms belonging to this Jenis
+            let roomsInJenis = userData.RUANGANS.filter(r => String(r.JENIS_KUNJUNGAN) === jenisId);
+
+            if (roomsInJenis.length === 0) {
+                container.innerHTML = `<div class="p-8 border-2 border-dashed border-slate-200 rounded-2xl text-center text-slate-400 text-xs italic">No rooms assigned in this category</div>`;
+                return;
+            }
+
+            // Apply custom room sorting if exists
+            const savedRoomOrder = customOrders.rooms[jenisId];
+            if (savedRoomOrder) {
+                roomsInJenis.sort((a, b) => {
+                    const idxA = savedRoomOrder.indexOf(a.ID);
+                    const idxB = savedRoomOrder.indexOf(b.ID);
+                    return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+                });
+            }
+
+            roomsInJenis.forEach(ruangan => {
+                let roomPatients = patientMap[ruangan.ID] || [];
+
+                // Apply custom patient sorting if exists
+                const savedPatientOrder = customOrders.patients[ruangan.ID];
+                if (savedPatientOrder) {
+                    roomPatients.sort((a, b) => {
+                        const idxA = savedPatientOrder.indexOf(a.no);
+                        const idxB = savedPatientOrder.indexOf(b.no);
+                        return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+                    });
+                }
+
+                const roomEl = createRoomGroup(ruangan.DESKRIPSI, roomPatients, ruangan.ID, jenisId);
+                container.appendChild(roomEl);
+            });
+        });
+
+    } catch (err) {
+        console.error("Failed to load patients view:", err);
+    } finally {
+        statusEl.classList.add('hidden');
+    }
+}
+
+/**
+ * Renders the Room and Patient cards.
+ */
+function createRoomGroup(roomName, patients, roomId, jenisId) {
+    const div = document.createElement('div');
+    const displayName = roomName.replace(/^Bangsal\s+/i, '');
+    const hasPatients = patients.length > 0;
+
+    div.className = "room-group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-2 self-start";
+    div.dataset.roomId = roomId;
+
+    div.innerHTML = `
+        <div class="room-header flex items-center justify-between p-3 bg-slate-50/50 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+                <div class="flex flex-col gap-0.5">
+                    <button class="move-room-up p-0.5 hover:bg-slate-200 rounded text-slate-400">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"/></svg>
+                    </button>
+                    <button class="move-room-down p-0.5 hover:bg-slate-200 rounded text-slate-400">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                    </button>
+                </div>
+                <div>
+                    <h4 class="text-[11px] font-black text-slate-700 uppercase leading-none mb-1">${displayName}</h4>
+                    <span class="room-count text-[9px] font-bold ${hasPatients ? 'text-blue-500' : 'text-slate-400'} uppercase tracking-tight">
+                        ${patients.length} Patient(s)
+                    </span>
+                </div>
+            </div>
+            <button class="toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all">
+                <svg class="w-4 h-4 text-slate-400 transition-transform" style="transform: ${hasPatients ? 'rotate(0deg)' : 'rotate(-90deg)'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+        <div class="patient-list p-2 space-y-2 ${hasPatients ? '' : 'hidden'}">
+            ${patients.length === 0 ?
+            `<p class="empty-placeholder text-[10px] text-slate-300 italic text-center py-4 bg-slate-50/30 rounded-lg border border-dashed border-slate-100">Empty Room</p>` :
+            patients.map(p => `
+                <div class="patient-wrapper flex flex-col gap-2" data-id="${p.no}">
+                    <div class="patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all flex items-center gap-3">
+                        <!-- Bed Info (Left) -->
+                        <div class="flex flex-col items-center justify-center min-w-[45px] py-1 bg-slate-50 rounded-lg border border-slate-100">
+                            <span class="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Bed</span>
+                            <span class="text-[11px] font-black text-blue-600 leading-none">${p.bedName}</span>
+                        </div>
+
+                        <!-- Main Content -->
+                        <div class="flex-1 min-w-0">
+                            <h5 class="text-[11px] font-black text-slate-800 truncate uppercase leading-tight">${p.fullName}</h5>
+                            <p class="text-[9px] text-slate-500 font-mono mb-1">${p.mrn} • ${p.age || '--'} • ${p.no}</p>
+                            <p class="text-[9px] font-medium text-slate-500 truncate italic">${p.diagnosis || 'No Diagnosis'}</p>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center gap-1">
+                            <button class="cppt-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all" title="View CPPT Records">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            </button>
+                            <button class="delete-p-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all" title="Remove Patient">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                            <div class="flex flex-col gap-0.5 ml-1">
+                                <button class="move-p-up p-1 text-slate-300 hover:text-blue-500 transition-colors"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"/></svg></button>
+                                <button class="move-p-down p-1 text-slate-300 hover:text-blue-500 transition-colors"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Collapsible CPPT Area -->
+                    <div class="cppt-container hidden bg-slate-50 border border-slate-200 border-t-0 -mt-2 rounded-b-xl overflow-hidden transition-all duration-300">
+                        <div class="cppt-header px-3 py-1.5 border-b border-slate-200 flex justify-between items-center bg-white/50">
+                             <div class="flex items-center gap-2">
+                                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">CPPT Records</span>
+                                <!-- New Filter UI -->
+                                <div class="flex bg-slate-200 p-0.5 rounded-md text-[8px] font-bold">
+                                    <button class="filter-cppt-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all">ALL</button>
+                                    <button class="filter-cppt-mine px-2 py-0.5 rounded text-slate-500 transition-all">MY RECORDS</button>
+                                </div>
+                             </div>
+                             <button class="cppt-close-inner text-slate-400 hover:text-slate-600 text-[10px] font-bold">CLOSE</button>
+                        </div>
+                        <div class="cppt-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto">
+                            <!-- Records load here -->
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    // Toggle Room Collapse
+    const toggleBtn = div.querySelector('.toggle-room');
+    const toggleIcon = toggleBtn.querySelector('svg');
+    const list = div.querySelector('.patient-list');
+    toggleBtn.addEventListener('click', () => {
+        list.classList.toggle('hidden');
+        toggleIcon.style.transform = list.classList.contains('hidden') ? 'rotate(-90deg)' : 'rotate(0deg)';
+    });
+
+    // Patient Actions
+    div.querySelectorAll('.patient-wrapper').forEach(wrapper => {
+        const pId = wrapper.dataset.id;
+        const patientData = patients.find(p => p.no === pId);
+
+        // Delete Patient
+        wrapper.querySelector('.delete-p-btn').addEventListener('click', () => {
+            if (confirm(`Remove ${patientData.fullName} from your list?`)) {
+                // 1. Remove from Storage
+                deletePatientFromStorage(pId);
+
+                // 2. Remove from DOM
+                wrapper.remove();
+
+                // 3. Update the Count UI in the header
+                const remainingWrappers = list.querySelectorAll('.patient-wrapper');
+                const countBadge = div.querySelector('.room-count');
+                const count = remainingWrappers.length;
+
+                countBadge.innerText = `${count} Patient(s)`;
+
+                // 4. Update style if 0
+                if (count === 0) {
+                    countBadge.classList.replace('text-blue-500', 'text-slate-400');
+                    // Add empty placeholder back
+                    list.innerHTML = `<p class="empty-placeholder text-[10px] text-slate-300 italic text-center py-4 bg-slate-50/30 rounded-lg border border-dashed border-slate-100">Empty Room</p>`;
+                    // Auto-collapse room
+                    list.classList.add('hidden');
+                    toggleIcon.style.transform = 'rotate(-90deg)';
+                }
+
+                // Update persistent order for the room
+                savePatientOrderInRoom(roomId);
+            }
+        });
+
+        // Toggle CPPT
+        wrapper.querySelector('.cppt-btn').addEventListener('click', () => {
+            toggleCPPTInline(wrapper, patientData);
+        });
+
+        wrapper.querySelector('.cppt-close-inner').addEventListener('click', () => {
+            wrapper.querySelector('.cppt-container').classList.add('hidden');
+        });
+
+        // Reordering
+        wrapper.querySelector('.move-p-up').addEventListener('click', () => {
+            const sibling = wrapper.previousElementSibling;
+            if (sibling && sibling.classList.contains('patient-wrapper')) {
+                wrapper.parentNode.insertBefore(wrapper, sibling);
+                savePatientOrderInRoom(roomId);
+            }
+        });
+        wrapper.querySelector('.move-p-down').addEventListener('click', () => {
+            const sibling = wrapper.nextElementSibling;
+            if (sibling && sibling.classList.contains('patient-wrapper')) {
+                wrapper.parentNode.insertBefore(sibling, wrapper);
+                savePatientOrderInRoom(roomId);
+            }
+        });
+    });
+
+    return div;
+}
+
+/**
+ * Toggles a collapsible CPPT area inside the patient card instead of a full modal.
+ */
+async function toggleCPPTInline(wrapper, p) {
+    const container = wrapper.querySelector('.cppt-container');
+    const body = container.querySelector('.cppt-body');
+    const filterAll = container.querySelector('.filter-cppt-all');
+    const filterMine = container.querySelector('.filter-cppt-mine');
+
+    // If opening
+    if (container.classList.contains('hidden')) {
+        container.classList.remove('hidden');
+
+        // Initial Loading State
+        body.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-10 text-slate-400">
+                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mb-2"></div>
+                <p class="text-[9px] font-black uppercase tracking-widest">Fetching Records...</p>
+            </div>
+        `;
+
+        try {
+            const fullData = await fetchCPPTData(p.no);
+
+            if (!fullData || fullData.length === 0) {
+                body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No records found.</p>`;
+                return;
+            }
+
+            // Function to handle conditional rendering based on filter
+            const applyFilter = (showOnlyMine) => {
+                // Get current doctor ID from global or local scope where userData was stored
+                // Assuming userData is available globally after loadPatientsView
+                const doctorId = window.userData?.ID || "";
+
+                const filteredData = showOnlyMine
+                    ? fullData.filter(r => String(r.OLEH) === String(doctorId))
+                    : fullData;
+
+                if (filteredData.length === 0) {
+                    body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No matching records found.</p>`;
+                } else {
+                    renderCPPTData(filteredData, body, false);
+                }
+
+                // Update UI state of buttons
+                if (showOnlyMine) {
+                    filterMine.className = "filter-cppt-mine px-2 py-0.5 rounded bg-white text-blue-600 shadow-sm transition-all";
+                    filterAll.className = "filter-cppt-all px-2 py-0.5 rounded text-slate-500 transition-all";
+                } else {
+                    filterAll.className = "filter-cppt-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all";
+                    filterMine.className = "filter-cppt-mine px-2 py-0.5 rounded text-slate-500 transition-all";
+                }
+            };
+
+            // Event Listeners for filters
+            filterAll.onclick = () => applyFilter(false);
+            filterMine.onclick = () => applyFilter(true);
+
+            // Default render: All
+            applyFilter(false);
+
+        } catch (err) {
+            body.innerHTML = `<p class="text-center text-red-400 text-[10px] font-bold py-10">${err.message}</p>`;
+        }
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+/**
+ * Saves current room order to storage
+ */
+function savePatientOrderInRoom(roomId) {
+    const roomElement = document.querySelector(`.room-group[data-room-id="${roomId}"]`);
+    if (!roomElement) return;
+
+    const patientIds = Array.from(roomElement.querySelectorAll('.patient-wrapper'))
+        .map(w => w.dataset.id);
+
+    chrome.storage.local.get(['customOrders'], (res) => {
+        let co = res.customOrders || { rooms: {}, patients: {} };
+        if (!co.patients) co.patients = {};
+        co.patients[roomId] = patientIds;
+        chrome.storage.local.set({ customOrders: co });
+    });
+}
+
+function moveElement(el, direction, type, parentId) {
+    const sibling = direction === 'up' ? el.previousElementSibling : el.nextElementSibling;
+
+    // Safety check: Don't move past the edge or into non-item elements (like the "Empty Room" <p>)
+    if (!sibling || sibling.tagName === 'P') return;
+
+    if (direction === 'up') {
+        el.parentNode.insertBefore(el, sibling);
+    } else {
+        el.parentNode.insertBefore(sibling, el);
+    }
+
+    // Capture the new DOM order and persist to storage
+    saveCurrentOrder(type, parentId, el.parentNode);
+}
+
+function saveCurrentOrder(type, parentId, container) {
+    if (type === 'room') {
+        const ids = Array.from(container.querySelectorAll('.room-group')).map(r => r.dataset.roomId);
+        customOrders.rooms[parentId] = ids;
+    } else {
+        const ids = Array.from(container.querySelectorAll('.patient-card')).map(p => p.dataset.id);
+        customOrders.patients[parentId] = ids;
+    }
+
+    chrome.storage.local.set({ customOrders });
+}
+
+function clearAllStorage() {
+    if (confirm("Are you sure you want to reset all data? This will clear your custom sorting and cached patients.")) {
+        chrome.storage.local.clear(() => {
+            window.location.reload();
+        });
+    }
+}
+
+function deletePatientFromStorage(patientId) {
+    chrome.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
+        let patients = result.fetchedPatients || [];
+        let customOrders = result.customOrders || { rooms: {}, patients: {} };
+
+        // Remove from patients array
+        const filteredPatients = patients.filter(p => p.no !== patientId);
+
+        // Remove from custom orders
+        if (customOrders.patients) {
+            Object.keys(customOrders.patients).forEach(roomId => {
+                customOrders.patients[roomId] = customOrders.patients[roomId].filter(id => id !== patientId);
+            });
+        }
+
+        chrome.storage.local.set({
+            fetchedPatients: filteredPatients,
+            customOrders: customOrders
+        }, () => {
+            showToast("Patient removed from list", "success");
+        });
+    });
+}
+
+function addPatientToStorage(patientData, roomId) {
+    chrome.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
+        let patients = result.fetchedPatients || [];
+        let customOrders = result.customOrders || { rooms: {}, patients: {} };
+
+        const exists = patients.find(p => p.no === patientData.no);
+
+        if (!exists) {
+            if (!patientData.REFERENSI) patientData.REFERENSI = {};
+            if (!patientData.REFERENSI.RUANGAN) patientData.REFERENSI.RUANGAN = {};
+            patientData.REFERENSI.RUANGAN.ID = roomId;
+            patients.push(patientData);
+        }
+
+        if (!customOrders.patients) customOrders.patients = {};
+        if (!customOrders.patients[roomId]) customOrders.patients[roomId] = [];
+
+        customOrders.patients[roomId] = customOrders.patients[roomId].filter(id => id !== patientData.no);
+        customOrders.patients[roomId].push(patientData.no);
+
+        chrome.storage.local.set({
+            fetchedPatients: patients,
+            customOrders: customOrders
+        }, () => {
+            showToast(`Patient ${patientData.fullName} added!`, 'success');
+        });
+    });
+}
+
+function showToast(message, type = 'success') {
+    // Remove existing toast if present
+    const existingToast = document.getElementById('extension-toast');
+    if (existingToast) existingToast.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'extension-toast';
+
+    // Styling classes
+    const baseClasses = "fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold flex items-center gap-3 animate-bounce-in transition-all duration-300";
+    const typeClasses = type === 'success'
+        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+        : "bg-red-50 border-red-200 text-red-700";
+
+    toast.className = `${baseClasses} ${typeClasses}`;
+
+    // Icon based on type
+    const icon = type === 'success'
+        ? '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>'
+        : '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>';
+
+    toast.innerHTML = `${icon} <span>${message}</span>`;
+    document.body.appendChild(toast);
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(20px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 function setIDLists() {
@@ -971,26 +1463,46 @@ function toggleSidebar() {
 }
 
 function switchView(view) {
-    const idsView = document.getElementById('view-ids');
-    const homeContent = document.getElementById('content-home');
-    const dynamicArea = document.getElementById('dynamic-content-area');
+    // 1. Define all possible views
+    const views = {
+        ids: document.getElementById('view-ids'),
+        patients: document.getElementById('view-patients'),
+        workspace: document.getElementById('dynamic-content-area') // This contains the tabs/home
+    };
 
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('bg-blue-50', 'text-blue-600', 'font-bold'));
+    const sidebarBtns = {
+        ids: document.getElementById('sidebar-ids'),
+        patients: document.getElementById('sidebar-patients'),
+        workspace: document.getElementById('sidebar-workspace')
+    };
 
-    if (view === 'ids') {
-        idsView.classList.remove('hidden');
-        homeContent.classList.add('hidden');
-        dynamicArea.classList.add('hidden');
-        document.getElementById('sidebar-ids').classList.add('bg-blue-50', 'text-blue-600', 'font-bold');
+    // 2. Hide all views and reset sidebar highlights
+    Object.values(views).forEach(el => el?.classList.add('hidden'));
+    document.getElementById('content-home').classList.add('hidden'); // Special case for Home
 
+    document.querySelectorAll('.nav-item').forEach(el =>
+        el.classList.remove('bg-blue-50', 'text-blue-600', 'font-bold')
+    );
+
+    // 3. Logic for switching
+    if (view === 'workspace') {
+        // Show the workspace (tabs)
+        views.workspace.classList.remove('hidden');
+        sidebarBtns.workspace.classList.add('bg-blue-50', 'text-blue-600', 'font-bold');
+        activateTab(activeTabId); // Restore the active tab (Home or a dynamic one)
+    } else {
+        // Show a "Full Page" view (IDs or Patients)
+        if (views[view]) views[view].classList.remove('hidden');
+        if (sidebarBtns[view]) sidebarBtns[view].classList.add('bg-blue-50', 'text-blue-600', 'font-bold');
+
+        // Unhighlight all tabs in the tab bar (keep Workspace tab visible but grey)
         document.querySelectorAll('#tab-container button').forEach(btn => {
             btn.className = "px-4 h-full text-[11px] font-bold uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-slate-600 flex items-center gap-2 transition-all";
         });
+    }
 
-    } else {
-        idsView.classList.add('hidden');
-        document.getElementById('sidebar-workspace').classList.add('bg-blue-50', 'text-blue-600', 'font-bold');
-        activateTab(activeTabId);
+    if (view === 'patients') {
+        loadPatientsView(); // Trigger the storage load and drag-and-drop setup
     }
 }
 
@@ -1005,6 +1517,7 @@ function activateTab(tabId) {
     const activeTabBtn = document.getElementById('tab-' + tabId);
     if (activeTabBtn) activeTabBtn.className = "px-4 h-full text-[11px] font-bold uppercase tracking-wider border-b-2 border-blue-600 text-blue-600 flex items-center gap-2 transition-all";
 
+    document.getElementById('view-patients').classList.add('hidden');
     document.getElementById('view-ids').classList.add('hidden');
     document.getElementById('content-home').classList.add('hidden');
     document.getElementById('dynamic-content-area').classList.remove('hidden');
@@ -1147,6 +1660,7 @@ function renderResults(tabId, items) {
 function processPatient(item) {
     const no = item.NOMOR;
     const ref = item.REFERENSI;
+    const roomId = cleanField(item.RUANGAN);
     const pendaftaran = ref?.PENDAFTARAN;
     const pasien = pendaftaran?.REFERENSI?.PASIEN;
     const diagObj = pendaftaran?.DIAGNOSAMASUK?.REFERENSI?.DIAGNOSA;
@@ -1154,6 +1668,7 @@ function processPatient(item) {
 
     return {
         no: String(cleanField(no, "")),
+        roomId,
         fullName: toTitleCase(cleanField(pasien?.NAMA)),
         mrn: cleanField(pasien?.NORM),
         age: calculateAge(cleanField(pasien?.TANGGAL_LAHIR)),
@@ -1272,10 +1787,10 @@ function patientRowTemplate(p) {
                 Copy
             </button>
             <button 
-                class="btn-more text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
+                class="btn-more text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 border border-emerald-200 transition-colors"
                 data-patient='${JSON.stringify(p)}'
             >
-                More
+                Add
             </button>
         </div>
     </div>`;
@@ -1375,9 +1890,12 @@ function openPatientModal(p) {
                 ${renderField("Diagnosis", p.diagnosis, "text-blue-600 font-semibold")}
                 ${renderField("Physician in Charge (DPJP)", p.doctorName || 'Not Assigned')}
             </div>
-            <div class="px-5 py-3 bg-slate-50 border-t border-slate-100 flex gap-2">
-                <button id="modal-close-btn" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">Close</button>
-                <button id="modal-cppt-btn" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2">CPPT</button>
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-col gap-2">
+                <button id="modal-add-btn" class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 shadow-sm transition-colors flex items-center justify-center gap-2">ADD TO MY PATIENTS</button>
+                <div class="flex gap-2">
+                    <button id="modal-close-btn" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">Close</button>
+                    <button id="modal-cppt-btn" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2">CPPT</button>
+                </div>
             </div>
         </div>`;
 
@@ -1386,6 +1904,10 @@ function openPatientModal(p) {
     // Event Listeners
     modal.querySelector("#modal-close-x").onclick = () => modal.remove();
     modal.querySelector("#modal-close-btn").onclick = () => modal.remove();
+    modal.querySelector("#modal-add-btn").onclick = () => {
+        modal.remove();
+        addPatientToStorage(p, p.roomId);
+    };
     modal.querySelector("#modal-cppt-btn").onclick = () => {
         modal.remove();
         openCPPTModal(p);
@@ -1402,28 +1924,6 @@ function renderField(label, value, valueClass = "font-semibold text-slate-800") 
 }
 
 // --- CPPT Modal ---
-async function fetchCPPTData(visitId, signal) {
-    const decodedToken = await getAuthenticatedToken();
-    const dc = Date.now();
-    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt?_dc=${dc}&KUNJUNGAN=${visitId}&STATUS=1&page=1&start=0&limit=25`;
-
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${decodedToken}`,
-            'Accept': 'application/json'
-        },
-        signal: signal
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const result = await response.json();
-    if (!result.success) throw new Error(result.detail || "API Error");
-
-    return result.data || [];
-}
-
 async function openCPPTModal(p) {
     const controller = new AbortController();
     const visitId = p.no;
