@@ -1100,7 +1100,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                 <div class="patient-wrapper flex flex-col gap-2" data-id="${p.no}">
                     <div class="patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all flex items-center gap-3">
                         <!-- Bed Info (Left) -->
-                        <div class="flex flex-col items-center justify-center min-w-[45px] py-1 bg-slate-50 rounded-lg border border-slate-100">
+                        <div class="flex flex-col items-center justify-center min-w-[45px] py-3 bg-slate-50 rounded-lg border border-slate-100">
                             <span class="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Bed</span>
                             <span class="text-[11px] font-black text-blue-600 leading-none">${p.bedName}</span>
                         </div>
@@ -1110,6 +1110,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                             <h5 class="text-[11px] font-black text-slate-800 truncate uppercase leading-tight">${p.fullName}</h5>
                             <p class="text-[9px] text-slate-500 font-mono mb-1">${p.mrn} • ${p.age || '--'} • ${p.no}</p>
                             <p class="text-[9px] font-medium text-slate-500 truncate italic">${p.diagnosis || 'No Diagnosis'}</p>
+                            <p class="text-[9px] font-bold text-blue-500 truncate">${p.doctorName || 'No DPJP'}</p>
                         </div>
 
                         <!-- Action Buttons -->
@@ -1127,21 +1128,19 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                         </div>
                     </div>
                     <!-- Collapsible CPPT Area -->
-                    <div class="cppt-container hidden bg-slate-50 border border-slate-200 border-t-0 -mt-2 rounded-b-xl overflow-hidden transition-all duration-300">
+                    <div class="cppt-container hidden bg-slate-50 border border-slate-200 border-t-0 -mt-2 rounded-b-xl shadow-sm overflow-hidden transition-all duration-300">
                         <div class="cppt-header px-3 py-1.5 border-b border-slate-200 flex justify-between items-center bg-white/50">
-                             <div class="flex items-center gap-2">
-                                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">CPPT Records</span>
-                                <!-- New Filter UI -->
+                                <div class="flex items-center gap-2">
                                 <div class="flex bg-slate-200 p-0.5 rounded-md text-[8px] font-bold">
                                     <button class="filter-cppt-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all">ALL</button>
-                                    <button class="filter-cppt-mine px-2 py-0.5 rounded text-slate-500 transition-all">MY RECORDS</button>
+                                    <button class="filter-cppt-mine px-2 py-0.5 rounded text-slate-500 transition-all">MINE</button>
+                                    <button class="filter-cppt-docs px-2 py-0.5 rounded text-slate-500 transition-all">DOCTORS</button>
                                 </div>
-                             </div>
-                             <button class="cppt-close-inner text-slate-400 hover:text-slate-600 text-[10px] font-bold">CLOSE</button>
+                                </div>
+                                <button class="cppt-close-inner text-slate-400 hover:text-red-500 text-[12px] font-black px-1">✕</button>
                         </div>
-                        <div class="cppt-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto">
-                            <!-- Records load here -->
-                        </div>
+                        <div class="date-pagination flex gap-1 px-3 py-1.5 bg-slate-100/50 border-b border-slate-200 overflow-x-auto no-scrollbar"></div>
+                        <div class="cppt-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto"></div>
                     </div>
                 </div>
             `).join('')}
@@ -1228,67 +1227,114 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
 async function toggleCPPTInline(wrapper, p) {
     const container = wrapper.querySelector('.cppt-container');
     const body = container.querySelector('.cppt-body');
+    const dateBar = container.querySelector('.date-pagination');
+
+    if (!container.classList.contains('hidden')) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+
+    // 1. Reset Logic State to 'ALL' every time it opens
+    let currentFilter = 'ALL';
+    const todayStr = new Date().toISOString().split('T')[0];
+    let selectedDate = todayStr;
+
+    // 2. Select Buttons
     const filterAll = container.querySelector('.filter-cppt-all');
     const filterMine = container.querySelector('.filter-cppt-mine');
+    const filterDocs = container.querySelector('.filter-cppt-docs');
 
-    // If opening
-    if (container.classList.contains('hidden')) {
-        container.classList.remove('hidden');
+    body.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-10 text-slate-400">
+            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mb-2"></div>
+            <p class="text-[9px] font-black uppercase">Fetching...</p>
+        </div>
+    `;
 
-        // Initial Loading State
-        body.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-10 text-slate-400">
-                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mb-2"></div>
-                <p class="text-[9px] font-black uppercase tracking-widest">Fetching Records...</p>
-            </div>
-        `;
+    try {
+        const fullData = await fetchCPPTData(p.no);
+        if (!fullData || fullData.length === 0) {
+            body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No records found.</p>`;
+            return;
+        }
 
-        try {
-            const fullData = await fetchCPPTData(p.no);
+        const availableDates = [...new Set(fullData.map(r => r.TANGGAL.split(' ')[0]))].sort().reverse();
+        if (!availableDates.includes(selectedDate) && availableDates.length > 0) {
+            selectedDate = availableDates[0];
+        }
 
-            if (!fullData || fullData.length === 0) {
-                body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No records found.</p>`;
-                return;
+        const applyFilter = () => {
+            const doctorId = window.userData?.ID || "";
+            let filtered = fullData.filter(r => r.TANGGAL.startsWith(selectedDate));
+
+            if (currentFilter === 'MINE') {
+                filtered = filtered.filter(r => String(r.OLEH) === String(doctorId));
+            } else if (currentFilter === 'DOCTORS') {
+                filtered = filtered.filter(r => String(r.JENIS) === "1");
             }
 
-            // Function to handle conditional rendering based on filter
-            const applyFilter = (showOnlyMine) => {
-                // Get current doctor ID from global or local scope where userData was stored
-                // Assuming userData is available globally after loadPatientsView
-                const doctorId = window.userData?.ID || "";
+            // 3. UI SYNC: Force classes to match currentFilter state
+            [filterAll, filterMine, filterDocs].forEach(btn => {
+                if (!btn) return;
+                btn.classList.remove('bg-white', 'text-slate-800', 'text-blue-600', 'shadow-sm');
+                btn.classList.add('text-slate-500');
+            });
 
-                const filteredData = showOnlyMine
-                    ? fullData.filter(r => String(r.OLEH) === String(doctorId))
-                    : fullData;
+            if (currentFilter === 'ALL' && filterAll) {
+                filterAll.className = "filter-cppt-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all";
+            } else if (currentFilter === 'MINE' && filterMine) {
+                filterMine.className = "filter-cppt-mine px-2 py-0.5 rounded bg-white text-blue-600 shadow-sm transition-all";
+            } else if (currentFilter === 'DOCTORS' && filterDocs) {
+                filterDocs.className = "filter-cppt-docs px-2 py-0.5 rounded bg-white text-blue-600 shadow-sm transition-all";
+            }
 
-                if (filteredData.length === 0) {
-                    body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No matching records found.</p>`;
+            if (filtered.length === 0) {
+                body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No records found.</p>`;
+            } else {
+                renderCPPTData(filtered, body);
+            }
+        };
+
+        const renderDatePagination = () => {
+            dateBar.innerHTML = availableDates.map(date => {
+                const isActive = date === selectedDate;
+                let styles = "date-tab shrink-0 px-2 py-1 rounded text-[8px] font-bold transition-all ";
+                const isToday = date === todayStr;
+
+                if (isActive) {
+                    styles += "bg-blue-600 text-white";
+                } else if (isToday) {
+                    styles += "bg-amber-50 border-amber-300 text-amber-700";
                 } else {
-                    renderCPPTData(filteredData, body, false);
+                    styles += "bg-white border-slate-200 text-slate-500";
                 }
 
-                // Update UI state of buttons
-                if (showOnlyMine) {
-                    filterMine.className = "filter-cppt-mine px-2 py-0.5 rounded bg-white text-blue-600 shadow-sm transition-all";
-                    filterAll.className = "filter-cppt-all px-2 py-0.5 rounded text-slate-500 transition-all";
-                } else {
-                    filterAll.className = "filter-cppt-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all";
-                    filterMine.className = "filter-cppt-mine px-2 py-0.5 rounded text-slate-500 transition-all";
-                }
-            };
+                // ${isActive ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}
 
-            // Event Listeners for filters
-            filterAll.onclick = () => applyFilter(false);
-            filterMine.onclick = () => applyFilter(true);
+                return `<button class="${styles}" data-date="${date}">${isToday ? '★ ' : ''}${date}</button>`;
+            }).join('');
 
-            // Default render: All
-            applyFilter(false);
+            dateBar.querySelectorAll('.date-tab').forEach(btn => {
+                btn.onclick = () => {
+                    selectedDate = btn.dataset.date;
+                    renderDatePagination();
+                    applyFilter();
+                };
+            });
+        };
 
-        } catch (err) {
-            body.innerHTML = `<p class="text-center text-red-400 text-[10px] font-bold py-10">${err.message}</p>`;
-        }
-    } else {
-        container.classList.add('hidden');
+        // Attach clicks
+        if (filterAll) filterAll.onclick = () => { currentFilter = 'ALL'; applyFilter(); };
+        if (filterMine) filterMine.onclick = () => { currentFilter = 'MINE'; applyFilter(); };
+        if (filterDocs) filterDocs.onclick = () => { currentFilter = 'DOCTORS'; applyFilter(); };
+
+        renderDatePagination();
+        applyFilter(); // Initial run will now force 'ALL' styling
+
+    } catch (err) {
+        body.innerHTML = `<p class="text-center text-red-400 text-[10px] font-bold py-10">${err.message}</p>`;
     }
 }
 
@@ -1339,7 +1385,7 @@ function saveCurrentOrder(type, parentId, container) {
 }
 
 function clearAllStorage() {
-    if (confirm("Are you sure you want to reset all data? This will clear your custom sorting and cached patients.")) {
+    if (confirm("Are you sure you want to clear all data? This will reset your custom sorting and clear cached patients.")) {
         chrome.storage.local.clear(() => {
             window.location.reload();
         });
@@ -1618,19 +1664,34 @@ function renderResults(tabId, items) {
     const listContainer = document.getElementById(`results-list-${tabId}`);
     const normalizedData = items.map(item => processPatient(item));
 
-    let html = '';
-    const hierarchy = (viewMode === 'ROOM') ? buildRoomHierarchy(normalizedData) : buildDoctorHierarchy(normalizedData);
+    // Clear the container first
+    listContainer.innerHTML = '';
+
+    const hierarchy = (viewMode === 'ROOM')
+        ? buildRoomHierarchy(normalizedData)
+        : buildDoctorHierarchy(normalizedData);
 
     // Sort the primary groups alphabetically
-    const sortedGroupKeys = Object.keys(hierarchy).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const sortedGroupKeys = Object.keys(hierarchy).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true })
+    );
 
+    // 1. Get the content as a DOM Node
+    let contentNode;
     if (viewMode === 'ROOM') {
-        html = renderByRoom(hierarchy, sortedGroupKeys, sortMode);
+        contentNode = renderByRoom(hierarchy, sortedGroupKeys, sortMode);
     } else {
-        html = renderByDoctor(hierarchy, sortedGroupKeys, sortMode);
+        contentNode = renderByDoctor(hierarchy, sortedGroupKeys, sortMode);
     }
 
-    listContainer.innerHTML = html + `<p class="text-center text-slate-400 text-[10px] font-bold uppercase py-4">Total ${items.length} records deduplicated</p>`;
+    // 2. Append the main content
+    listContainer.appendChild(contentNode);
+
+    // 3. Append the footer text
+    const footer = document.createElement('p');
+    footer.className = "text-center text-slate-400 text-[10px] font-bold uppercase py-4";
+    footer.textContent = `Total ${items.length} records deduplicated`;
+    listContainer.appendChild(footer);
 
     // --- Event Listeners ---
     pane.querySelectorAll('.toggle-view').forEach(btn => {
@@ -1703,77 +1764,107 @@ function buildDoctorHierarchy(data) {
 }
 
 function renderByRoom(hierarchy, sortedRoomKeys, sortMode) {
-    let html = '';
+    const container = document.createElement('div');
+
     for (const room of sortedRoomKeys) {
         const info = hierarchy[room];
-        // Sort subgroups (doctors) within room
         const sortedDocKeys = Object.keys(info.subgroups).sort();
 
-        html += `
-        <div class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden mb-4">
+        const roomWrapper = document.createElement('div');
+        roomWrapper.className = "bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden mb-4";
+
+        roomWrapper.innerHTML = `
             <div class="bg-blue-600 px-3 py-1.5 flex justify-between items-center">
                 <span class="text-[11px] font-black text-white uppercase tracking-widest">${room}</span>
                 <div class="flex items-center gap-2">
                     <button class="btn-copy-group text-[9px] bg-blue-500 hover:bg-blue-400 text-white font-bold px-2 py-0.5 rounded transition-colors" data-group="${room}">COPY ROOM</button>
                     <span class="bg-blue-700 text-white text-center text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
                 </div>
-            </div>
-            <div class="divide-y divide-slate-100">
-                ${sortedDocKeys.map(doc => {
+            </div>`;
+
+        const bodyWrapper = document.createElement('div');
+        bodyWrapper.className = "divide-y divide-slate-100";
+
+        sortedDocKeys.forEach(doc => {
             const patients = info.subgroups[doc];
             const sortedPatients = sortPatients(patients, sortMode);
-            return `
-                    <div class="bg-slate-50/50">
-                        <div class="px-3 py-1 border-b border-slate-100 flex justify-between items-center">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight italic">${doc}</span>
-                            <span class="text-[9px] text-slate-400 font-bold">${patients.length}</span>
-                        </div>
-                        <div class="divide-y divide-slate-50">
-                            ${sortedPatients.map(p => patientRowTemplate(p)).join('')}
-                        </div>
-                    </div>`;
-        }).join('')}
-            </div>
-        </div>`;
+
+            const docSection = document.createElement('div');
+            docSection.className = "bg-slate-50/50";
+            docSection.innerHTML = `
+                <div class="px-3 py-1 border-b border-slate-100 flex justify-between items-center">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight italic">${doc}</span>
+                    <span class="text-[9px] text-slate-400 font-bold">${patients.length}</span>
+                </div>`;
+
+            const patientList = document.createElement('div');
+            patientList.className = "divide-y divide-slate-50";
+
+            // INJECT DOM NODES INSTEAD OF STRINGS
+            sortedPatients.forEach(p => {
+                patientList.appendChild(createPatientRow(p));
+            });
+
+            docSection.appendChild(patientList);
+            bodyWrapper.appendChild(docSection);
+        });
+
+        roomWrapper.appendChild(bodyWrapper);
+        container.appendChild(roomWrapper);
     }
-    return html;
+    return container; // Now returns a DOM Node
 }
 
 function renderByDoctor(hierarchy, sortedDocKeys, sortMode) {
-    let html = '';
+    const container = document.createElement('div');
+
     for (const doc of sortedDocKeys) {
         const info = hierarchy[doc];
-        // Sort subgroups (rooms) within doctor
         const sortedRoomKeys = Object.keys(info.subgroups).sort();
 
-        html += `
-        <div class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden mb-4">
+        const docWrapper = document.createElement('div');
+        docWrapper.className = "bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden mb-4";
+
+        docWrapper.innerHTML = `
             <div class="bg-emerald-600 px-3 py-1.5 flex justify-between items-center">
                 <span class="text-[11px] font-black text-white uppercase tracking-widest">${doc}</span>
                 <div class="flex items-center gap-2">
                     <button class="btn-copy-group text-[9px] bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-2 py-0.5 rounded transition-colors" data-group="${doc}">COPY DOCTOR</button>
                     <span class="bg-emerald-700 text-white text-center text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
                 </div>
-            </div>
-            <div class="divide-y divide-slate-100">
-                ${sortedRoomKeys.map(room => {
+            </div>`;
+
+        const bodyWrapper = document.createElement('div');
+        bodyWrapper.className = "divide-y divide-slate-100";
+
+        sortedRoomKeys.forEach(room => {
             const patients = info.subgroups[room];
             const sortedPatients = sortPatients(patients, sortMode);
-            return `
-                    <div class="bg-slate-50/50">
-                        <div class="px-3 py-1 border-b border-slate-100 flex justify-between items-center">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">${room}</span>
-                            <span class="text-[9px] text-slate-400 font-bold">${patients.length}</span>
-                        </div>
-                        <div class="divide-y divide-slate-50">
-                            ${sortedPatients.map(p => patientRowTemplate(p)).join('')}
-                        </div>
-                    </div>`;
-        }).join('')}
-            </div>
-        </div>`;
+
+            const roomSection = document.createElement('div');
+            roomSection.className = "bg-slate-50/50";
+            roomSection.innerHTML = `
+                <div class="px-3 py-1 border-b border-slate-100 flex justify-between items-center">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">${room}</span>
+                    <span class="text-[9px] text-slate-400 font-bold">${patients.length}</span>
+                </div>`;
+
+            const patientList = document.createElement('div');
+            patientList.className = "divide-y divide-slate-50";
+
+            // INJECT DOM NODES INSTEAD OF STRINGS
+            sortedPatients.forEach(p => {
+                patientList.appendChild(createPatientRow(p));
+            });
+
+            roomSection.appendChild(patientList);
+            bodyWrapper.appendChild(roomSection);
+        });
+
+        docWrapper.appendChild(bodyWrapper);
+        container.appendChild(docWrapper);
     }
-    return html;
+    return container;
 }
 
 function patientRowTemplate(p) {
@@ -1794,6 +1885,26 @@ function patientRowTemplate(p) {
             </button>
         </div>
     </div>`;
+}
+
+function createPatientRow(p) {
+    const row = document.createElement('div');
+    row.className = "compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors";
+    row.innerHTML = `
+        <div class="text-xs font-medium text-slate-700 leading-relaxed patient-data">
+            <span class="font-bold text-slate-400">${p.bedName}</span>/<span class="font-bold text-slate-900">${p.fullName}</span>/<span class="font-bold text-slate-400">${p.mrn}</span>/<span class="text-slate-500">${p.age}</span>/<span class="text-blue-600 font-semibold">${p.diagnosis}</span>
+        </div>
+        <div class="actions flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity items-end sm:items-center">
+            <button class="btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200 transition-colors">
+                Copy
+            </button>
+        </div>`;
+    const addBtn = document.createElement('button');
+    addBtn.className = "btn-more text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 border border-emerald-200 transition-colors";
+    addBtn.textContent = "Add";
+    addBtn.dataset.patient = JSON.stringify(p);
+    row.querySelector('.actions').appendChild(addBtn);
+    return row;
 }
 
 // --- Copy, More, and Export Logic ---
@@ -1894,7 +2005,7 @@ function openPatientModal(p) {
                 <button id="modal-add-btn" class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 shadow-sm transition-colors flex items-center justify-center gap-2">ADD TO MY PATIENTS</button>
                 <div class="flex gap-2">
                     <button id="modal-close-btn" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">Close</button>
-                    <button id="modal-cppt-btn" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2">CPPT</button>
+                    <button id="modal-cppt-btn" class="flex-1 px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 shadow-sm transition-colors flex items-center justify-center gap-2">CPPT</button>
                 </div>
             </div>
         </div>`;
@@ -2059,7 +2170,7 @@ function renderPagination(fullData, activeDate, onDateSelect) {
     });
 }
 
-function renderCPPTData(records, container, isDoctorFilterActive) {
+function renderCPPTData(records, container, isDoctorFilterActive = false) {
     if (records.length === 0) {
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-20 px-10 text-center">

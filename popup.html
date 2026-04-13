@@ -126,6 +126,10 @@
                 background-color: #eff6ff !important;
                 border-left: 4px solid #3b82f6 !important;
             }
+            .patient-wrapper:has(.cppt-container:not(.hidden)) .patient-card {
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+            }
         </style>
     </head>
     <body class="bg-slate-50 flex h-screen overflow-hidden text-slate-900">
@@ -372,7 +376,7 @@
                                             d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                                         />
                                     </svg>
-                                    Reset System
+                                    CLEAR ALL
                                 </button>
                             </div>
                         </div>
@@ -387,7 +391,7 @@
                                     <span
                                         class="w-2 h-2 rounded-full bg-emerald-500"
                                     ></span>
-                                    Wards / Inpatient
+                                    Inpatient
                                 </h2>
                                 <div
                                     id="container-jenis-3"
@@ -406,7 +410,7 @@
                                         <span
                                             class="w-2 h-2 rounded-full bg-red-500 animate-pulse"
                                         ></span>
-                                        Emergency Unit
+                                        ER
                                     </h2>
                                     <div
                                         id="container-jenis-2"
@@ -414,7 +418,7 @@
                                     ></div>
                                 </section>
 
-                                <!-- 3. Outpatient Services -->
+                                <!-- 3. Outpatient -->
                                 <section class="space-y-3">
                                     <h2
                                         class="px-2 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2"
@@ -422,7 +426,7 @@
                                         <span
                                             class="w-2 h-2 rounded-full bg-slate-400"
                                         ></span>
-                                        Outpatient Services
+                                        Outpatient
                                     </h2>
                                     <div
                                         id="container-jenis-1"
