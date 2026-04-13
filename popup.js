@@ -1140,6 +1140,7 @@ function processPatient(item) {
 
     return {
         fullName: toTitleCase(cleanField(pasien?.NAMA)),
+        mrn: cleanField(pasien?.NORM),
         age: calculateAge(cleanField(pasien?.TANGGAL_LAHIR)),
         diagnosis: diagObj ? `${diagObj.CODE} - ${diagObj.STR}` : "??",
         bedName: cleanField(ref?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR),
@@ -1184,7 +1185,7 @@ function renderByRoom(hierarchy, sortedRoomKeys, sortMode) {
                 <span class="text-[11px] font-black text-white uppercase tracking-widest">${room}</span>
                 <div class="flex items-center gap-2">
                     <button class="btn-copy-group text-[9px] bg-blue-500 hover:bg-blue-400 text-white font-bold px-2 py-0.5 rounded transition-colors" data-group="${room}">COPY ROOM</button>
-                    <span class="bg-blue-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
+                    <span class="bg-blue-700 text-white text-center text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
                 </div>
             </div>
             <div class="divide-y divide-slate-100">
@@ -1221,7 +1222,7 @@ function renderByDoctor(hierarchy, sortedDocKeys, sortMode) {
                 <span class="text-[11px] font-black text-white uppercase tracking-widest">${doc}</span>
                 <div class="flex items-center gap-2">
                     <button class="btn-copy-group text-[9px] bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-2 py-0.5 rounded transition-colors" data-group="${doc}">COPY DOCTOR</button>
-                    <span class="bg-emerald-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
+                    <span class="bg-emerald-700 text-white text-center text-[9px] font-bold px-2 py-0.5 rounded-full">${info.total} ${info.total === 1 ? 'PATIENT' : 'PATIENTS'}</span>
                 </div>
             </div>
             <div class="divide-y divide-slate-100">
@@ -1249,10 +1250,15 @@ function patientRowTemplate(p) {
     return `
     <div class="compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors">
         <div class="text-xs font-medium text-slate-700 leading-relaxed patient-data">
-            <span class="font-bold text-slate-400">${p.bedName}</span>/<span class="font-bold text-slate-900">${p.fullName}</span>/<span class="text-slate-500">${p.age}</span>/<span class="text-blue-600 font-semibold">${p.diagnosis}</span>
+            <span class="font-bold text-slate-400">${p.bedName}</span>/<span class="font-bold text-slate-900">${p.fullName}</span>/<span class="font-bold text-slate-400">${p.mrn}</span>/<span class="text-slate-500">${p.age}</span>/<span class="text-blue-600 font-semibold">${p.diagnosis}</span>
         </div>
-        <div class="actions opacity-0 group-hover:opacity-100 transition-opacity">
-            <button class="btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200">Copy</button>
+        <div class="actions flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity items-end sm:items-center">
+            <button class="btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200 transition-colors">
+                Copy
+            </button>
+            <button class="btn-more text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors">
+                More
+            </button>
         </div>
     </div>`;
 }
@@ -1278,7 +1284,7 @@ function formatGroupText(groupName, info, viewMode, sortMode, summaryOnly) {
             const sorted = sortPatients(patients, sortMode);
             sorted.forEach(p => {
                 const diag = p.diagnosis;
-                lines.push(`- ${p.bedName}/${p.fullName}/${p.age}/${diag}`);
+                lines.push(`- ${p.bedName}/${p.fullName}/${p.mrn}/${p.age}/${diag}`);
             });
         }
     }
@@ -1291,7 +1297,7 @@ function copyGroup(btn, hierarchy, viewMode, sortMode) {
     if (!info) return;
 
     const output = formatGroupText(groupName, info, viewMode, sortMode, false);
-    executeClipboardCopy(output, btn);
+    executeClipboardCopy(output, btn, 'COPIED!');
 }
 
 function copyAllGlobal(hierarchy, sortedGroupKeys, viewMode, sortMode, summaryOnly) {
@@ -1301,16 +1307,10 @@ function copyAllGlobal(hierarchy, sortedGroupKeys, viewMode, sortMode, summaryOn
         totalOutput.push(formatGroupText(groupName, info, viewMode, sortMode, summaryOnly));
     }
 
-    const finalString = totalOutput.join('\n\n');
-    const tempBtn = document.createElement('button'); // Dummy for feedback
-    executeClipboardCopy(finalString, tempBtn);
-
-    // Visual feedback on the trigger buttons
     const btnId = summaryOnly ? `copy-summary-${activeTabId}` : `copy-all-${activeTabId}`;
     const btn = document.getElementById(btnId);
-    const originalText = btn.innerText;
-    btn.innerText = 'COPIED TO CLIPBOARD!';
-    setTimeout(() => btn.innerText = originalText, 1500);
+    const finalString = totalOutput.join('\n\n');
+    executeClipboardCopy(finalString, btn, 'COPIED TO CLIPBOARD!');
 }
 
 function copyPatientRow(btn) {
@@ -1319,18 +1319,20 @@ function copyPatientRow(btn) {
     executeClipboardCopy(textContent, btn);
 }
 
-function executeClipboardCopy(text, feedbackEl) {
-    const el = document.createElement('textarea');
-    el.value = text;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
+async function executeClipboardCopy(text, feedbackEl, copiedText = 'Copied!') {
+    try {
+        await navigator.clipboard.writeText(text);
 
-    if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
-        const originalText = feedbackEl.innerText;
-        feedbackEl.innerText = 'Copied!';
-        setTimeout(() => feedbackEl.innerText = originalText, 1000);
+        if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
+            const originalText = feedbackEl.innerText;
+            feedbackEl.innerText = copiedText;
+            setTimeout(() => {
+                feedbackEl.innerText = originalText;
+            }, 1000);
+        }
+    } catch (err) {
+        console.error('Failed to copy text: ', err);
+        if (feedbackEl) feedbackEl.innerText = 'Error';
     }
 }
 
