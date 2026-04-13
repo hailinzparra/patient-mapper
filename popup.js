@@ -811,6 +811,15 @@ function parseInputToGroups(input) {
     });
 }
 
+async function getAuthenticatedToken() {
+    try {
+        const sessionData = await getSessionToken();
+        return atob(sessionData.rawToken);
+    } catch (err) {
+        throw new Error("Active session not found. Please re-login.");
+    }
+}
+
 async function handleFetch(serializedDocs, serializedRooms) {
     const fetchBtn = document.getElementById('main-fetch-btn');
     const authBar = document.getElementById('auth-status');
@@ -1125,6 +1134,10 @@ function renderResults(tabId, items) {
     });
 
     pane.querySelectorAll('.btn-copy').forEach(btn => btn.addEventListener('click', () => copyPatientRow(btn)));
+    pane.querySelectorAll('.btn-more').forEach(btn => btn.addEventListener('click', () => {
+        const patientData = JSON.parse(btn.getAttribute("data-patient"));
+        openPatientModal(patientData);
+    }));
     pane.querySelectorAll('.btn-copy-group').forEach(btn => btn.addEventListener('click', () => copyGroup(btn, hierarchy, viewMode, sortMode)));
 
     document.getElementById(`copy-all-${tabId}`).addEventListener('click', () => copyAllGlobal(hierarchy, sortedGroupKeys, viewMode, sortMode, false));
@@ -1132,6 +1145,7 @@ function renderResults(tabId, items) {
 }
 
 function processPatient(item) {
+    const no = item.NOMOR;
     const ref = item.REFERENSI;
     const pendaftaran = ref?.PENDAFTARAN;
     const pasien = pendaftaran?.REFERENSI?.PASIEN;
@@ -1139,6 +1153,7 @@ function processPatient(item) {
     const rawRoomName = cleanField(ref?.RUANGAN?.DESKRIPSI);
 
     return {
+        no: String(cleanField(no, "")),
         fullName: toTitleCase(cleanField(pasien?.NAMA)),
         mrn: cleanField(pasien?.NORM),
         age: calculateAge(cleanField(pasien?.TANGGAL_LAHIR)),
@@ -1256,14 +1271,17 @@ function patientRowTemplate(p) {
             <button class="btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200 transition-colors">
                 Copy
             </button>
-            <button class="btn-more text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors">
+            <button 
+                class="btn-more text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
+                data-patient='${JSON.stringify(p)}'
+            >
                 More
             </button>
         </div>
     </div>`;
 }
 
-// --- Copy & Export Logic ---
+// --- Copy, More, and Export Logic ---
 
 /**
  * Formats a block of text for a single group or global copy
@@ -1336,6 +1354,267 @@ async function executeClipboardCopy(text, feedbackEl, copiedText = 'Copied!') {
     }
 }
 
+// --- Detailed Patient Modal ---
+function openPatientModal(p) {
+    const modal = document.createElement('div');
+    modal.id = "patient-modal";
+    modal.className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4";
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-slate-800 text-sm">Patient Details</h3>
+                <button id="modal-close-x" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto text-sm">
+                ${renderField("Room", p.roomName || 'N/A')}
+                ${renderField("Bed", p.bedName)}
+                ${renderField("Full Name", p.fullName, "font-bold text-slate-900")}
+                ${renderField("MRN", p.mrn)}
+                ${renderField("Age", p.age)}
+                ${renderField("Diagnosis", p.diagnosis, "text-blue-600 font-semibold")}
+                ${renderField("Physician in Charge (DPJP)", p.doctorName || 'Not Assigned')}
+            </div>
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-100 flex gap-2">
+                <button id="modal-close-btn" class="flex-1 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">Close</button>
+                <button id="modal-cppt-btn" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2">CPPT</button>
+            </div>
+        </div>`;
+
+    document.body.appendChild(modal);
+
+    // Event Listeners
+    modal.querySelector("#modal-close-x").onclick = () => modal.remove();
+    modal.querySelector("#modal-close-btn").onclick = () => modal.remove();
+    modal.querySelector("#modal-cppt-btn").onclick = () => {
+        modal.remove();
+        openCPPTModal(p);
+    };
+}
+
+// Helper for modal fields
+function renderField(label, value, valueClass = "font-semibold text-slate-800") {
+    return `
+        <section>
+            <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400">${label}</p>
+            <p class="${valueClass}">${value || '-'}</p>
+        </section>`;
+}
+
+// --- CPPT Modal ---
+async function fetchCPPTData(visitId, signal) {
+    const decodedToken = await getAuthenticatedToken();
+    const dc = Date.now();
+    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt?_dc=${dc}&KUNJUNGAN=${visitId}&STATUS=1&page=1&start=0&limit=25`;
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${decodedToken}`,
+            'Accept': 'application/json'
+        },
+        signal: signal
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const result = await response.json();
+    if (!result.success) throw new Error(result.detail || "API Error");
+
+    return result.data || [];
+}
+
+async function openCPPTModal(p) {
+    const controller = new AbortController();
+    const visitId = p.no;
+
+    const modal = document.createElement('div');
+    modal.className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[10000] p-4";
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-5 py-4 border-b border-slate-200 bg-white">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="leading-tight">
+                        <h3 class="font-black text-slate-900 text-sm uppercase">${p.fullName}</h3>
+                        <p class="text-[10px] text-slate-500 font-mono">${p.mrn} • ${p.age} • ${p.no}</p>
+                    </div>
+                    <button id="cppt-close-x" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                </div>
+                <div class="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-1 rounded inline-block">
+                    ${p.roomName} / ${p.bedName} — ${p.diagnosis}
+                </div>
+            </div>
+
+            <div class="sticky top-0 z-10 bg-white border-b border-slate-100">
+                <div class="px-5 py-2 bg-slate-50 flex items-center justify-between border-b border-slate-200/50">
+                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter</span>
+                    <div class="flex bg-slate-200 p-0.5 rounded-md">
+                        <button id="filter-all" class="px-3 py-1 text-[9px] font-bold rounded shadow-sm bg-white text-slate-800 transition-all">ALL</button>
+                        <button id="filter-docs" class="px-3 py-1 text-[9px] font-bold rounded text-slate-500 transition-all">DOCTORS</button>
+                    </div>
+                </div>
+                
+                <div id="date-pagination" class="px-3 py-2 flex gap-2 overflow-x-auto no-scrollbar bg-white">
+                    </div>
+            </div>
+            
+            <div id="cppt-content" class="p-4 overflow-y-auto space-y-4 bg-slate-100 flex-grow min-h-[300px]">
+                <div class="flex flex-col items-center justify-center py-20 text-slate-400">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
+                    <p class="text-[10px] font-bold uppercase tracking-widest">Accessing Records...</p>
+                </div>
+            </div>
+
+            <div class="px-5 py-3 bg-white border-t border-slate-100">
+                <button id="cppt-back-btn" class="w-full px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700">Close</button>
+            </div>
+        </div>`;
+
+    document.body.appendChild(modal);
+
+    let fullData = [];
+    let activeDate = null;
+    let showOnlyDocs = false;
+
+    const close = () => { controller.abort(); modal.remove(); };
+    modal.querySelector("#cppt-close-x").onclick = close;
+    modal.querySelector("#cppt-back-btn").onclick = close;
+
+    const refreshUI = () => {
+        const filteredByProfession = showOnlyDocs
+            ? fullData.filter(r => r.REFERENSI?.JENIS?.ID === "1")
+            : fullData;
+
+        const filteredByDate = filteredByProfession.filter(r => r.TANGGAL.startsWith(activeDate));
+
+        renderPagination(fullData, activeDate, (newDate) => {
+            activeDate = newDate;
+            refreshUI();
+        });
+
+        renderCPPTData(filteredByDate, modal.querySelector("#cppt-content"), showOnlyDocs);
+    };
+
+    // Filter Listeners
+    modal.querySelector("#filter-all").onclick = () => {
+        showOnlyDocs = false;
+        modal.querySelector("#filter-all").className = "px-3 py-1 text-[9px] font-bold rounded shadow-sm bg-white text-slate-800";
+        modal.querySelector("#filter-docs").className = "px-3 py-1 text-[9px] font-bold rounded text-slate-500";
+        refreshUI();
+    };
+    modal.querySelector("#filter-docs").onclick = () => {
+        showOnlyDocs = true;
+        modal.querySelector("#filter-docs").className = "px-3 py-1 text-[9px] font-bold rounded shadow-sm bg-white text-blue-600";
+        modal.querySelector("#filter-all").className = "px-3 py-1 text-[9px] font-bold rounded text-slate-500";
+        refreshUI();
+    };
+
+    try {
+        fullData = await fetchCPPTData(visitId, controller.signal);
+        if (fullData.length > 0) {
+            // Sort descending so index 0 is the newest date
+            const uniqueDates = [...new Set(fullData.map(r => r.TANGGAL.split(' ')[0]))].sort().reverse();
+            activeDate = uniqueDates[0]; // Set default to the newest date
+        }
+        refreshUI();
+    } catch (err) {
+        if (err.name === 'AbortError') return;
+        modal.querySelector("#cppt-content").innerHTML = `<p class="text-center text-red-500 text-[10px] font-bold py-10">${err.message}</p>`;
+    }
+}
+
+function renderPagination(fullData, activeDate, onDateSelect) {
+    const nav = document.getElementById("date-pagination");
+    const uniqueDates = [...new Set(fullData.map(r => r.TANGGAL.split(' ')[0]))].sort().reverse();
+    const today = new Date().toISOString().split('T')[0];
+
+    nav.innerHTML = uniqueDates.map(date => {
+        const isActive = date === activeDate;
+        const isToday = date === today;
+
+        // Base styles
+        let styles = "flex-shrink-0 px-3 py-1.5 rounded-md text-[10px] font-bold border transition-all whitespace-nowrap ";
+
+        if (isActive) {
+            // Active selection: Blue highlight
+            styles += "bg-blue-600 border-blue-600 text-white shadow-md z-10 scale-105";
+        } else if (isToday) {
+            // Today but not active: Distinct Amber/Gold highlight
+            styles += "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100";
+        } else {
+            // Regular historical dates: Clean Slate
+            styles += "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100";
+        }
+
+        return `
+            <button class="${styles}" data-date="${date}">
+                ${isToday ? '★ TODAY' : date}
+            </button>`;
+    }).join('');
+
+    // Attach click events
+    nav.querySelectorAll('button').forEach(btn => {
+        btn.onclick = () => onDateSelect(btn.dataset.date);
+    });
+}
+
+function renderCPPTData(records, container, isDoctorFilterActive) {
+    if (records.length === 0) {
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-20 px-10 text-center">
+                <div class="bg-white p-4 rounded-full mb-3 shadow-sm italic text-slate-300 text-xl">!</div>
+                <p class="text-slate-800 text-[11px] font-bold uppercase">No records found</p>
+                <p class="text-slate-400 text-[10px] mt-1">
+                    ${isDoctorFilterActive ? "There are no physician entries for this specific date." : "No clinical notes available for this date."}
+                </p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = records.map(r => {
+        const isDoctor = r.REFERENSI?.JENIS?.ID === "1";
+        const badgeColor = isDoctor ? "bg-blue-600" : "bg-emerald-600";
+
+        const formatForCopy = (val) => {
+            if (!val) return '-';
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = val.replace(/<br\s*\/?>/gi, '\n');
+            return tempDiv.textContent || tempDiv.innerText || "";
+        };
+        const soapText = `S:\n${formatForCopy(r.SUBYEKTIF)}\n\nO:\n${formatForCopy(r.OBYEKTIF)}\n\nA:\n${formatForCopy(r.ASSESMENT)}\n\nP:\n${formatForCopy(r.PLANNING)}`;
+
+        return `
+            <div class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col mb-4">
+                <div class="px-4 py-1.5 flex justify-between items-center ${badgeColor}">
+                    <span class="text-white text-[9px] font-black uppercase tracking-tighter">${r.REFERENSI?.JENIS?.DESKRIPSI || 'Staff'}</span>
+                    <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" 
+                            data-soap="${encodeURIComponent(soapText)}">Copy SOAP</button>
+                </div>
+                <div class="p-4 space-y-3">
+                    <div class="flex justify-between items-start border-b border-slate-50 pb-2">
+                        <p class="text-[10px] font-bold text-slate-800 uppercase flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full ${isDoctor ? 'bg-blue-600' : 'bg-emerald-600'}"></span>
+                            ${r.REFERENSI?.TENAGA_MEDIS?.NAMA || 'Unknown'}
+                        </p>
+                        <p class="text-[9px] font-mono text-slate-400 font-bold">${r.TANGGAL.split(' ')[1]}</p>
+                    </div>
+
+                    <div class="space-y-3 text-[11px] leading-relaxed text-slate-700">
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Subjective (S)</b><p>${r.SUBYEKTIF || '-'}</p></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Objective (O)</b><p>${r.OBYEKTIF || '-'}</p></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Assessment (A)</b><p>${r.ASSESMENT || '-'}</p></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Planning (P)</b><p>${r.PLANNING || '-'}</p></div>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+
+    container.querySelectorAll('.cppt-copy-btn').forEach(btn => {
+        btn.onclick = (e) => executeClipboardCopy(decodeURIComponent(e.currentTarget.dataset.soap), e.currentTarget);
+    });
+}
+
 // --- Helper Functions ---
 
 function sortPatients(patients, mode) {
@@ -1345,8 +1624,8 @@ function sortPatients(patients, mode) {
     });
 }
 
-function cleanField(val) {
-    return (val === null || val === undefined || String(val).trim() === "" || String(val).trim() === "null") ? "??" : val;
+function cleanField(val, placeholder = '??') {
+    return (val === null || val === undefined || String(val).trim() === "" || String(val).trim() === "null") ? placeholder : val;
 }
 
 function toTitleCase(str) {
