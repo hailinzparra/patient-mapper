@@ -4,6 +4,8 @@
  * Features: Hierarchical view, Sorting, and advanced Copy functions.
  */
 
+const api = typeof browser !== "undefined" ? browser : chrome;
+
 let tabCounter = 0;
 let activeTabId = 'home';
 let sidebarCollapsed = false;
@@ -681,18 +683,18 @@ function setupForm() {
 async function getSession(forceRefresh = false) {
     if (cachedSession && !forceRefresh) return cachedSession;
 
-    if (typeof chrome === 'undefined' || !chrome.tabs) {
-        throw new Error("Chrome Extension context not found.");
+    if (typeof api === 'undefined' || !api.tabs) {
+        throw new Error("Extension context not found.");
     }
 
-    const allTabs = await chrome.tabs.query({ url: "*://*.rsudsoediranms.com/*" });
+    const allTabs = await api.tabs.query({ url: "*://*.rsudsoediranms.com/*" });
     const targetTab = allTabs[0];
 
     if (!targetTab) {
         throw new Error("RSUD Portal not found. Please open the website in another tab.");
     }
 
-    const injectionResults = await chrome.scripting.executeScript({
+    const injectionResults = await api.scripting.executeScript({
         target: { tabId: targetTab.id },
         func: () => ({
             token: localStorage.getItem('_lapp-access_token'),
@@ -714,9 +716,6 @@ async function getSession(forceRefresh = false) {
     return cachedSession;
 }
 
-/**
- * Handles Bearer token injection and automatic decryption if enabled
- */
 /**
  * Universal wrapper that handles Auth and Decryption.
  * Returns the full API response object for better control.
@@ -966,7 +965,7 @@ async function loadPatientsView() {
     try {
         const [authResponse, storage] = await Promise.all([
             checkAuthStatus(),
-            new Promise(resolve => chrome.storage.local.get(['fetchedPatients', 'customOrders'], resolve))
+            new Promise(resolve => api.storage.local.get(['fetchedPatients', 'customOrders'], resolve))
         ]);
 
         if (!authResponse || !authResponse.data) throw new Error("Not Authenticated");
@@ -1366,7 +1365,7 @@ function moveElement(el, direction, type, parentId) {
 }
 
 function saveCurrentOrder(type, parentId, container) {
-    chrome.storage.local.get(['customOrders'], (res) => {
+    api.storage.local.get(['customOrders'], (res) => {
         let co = res.customOrders || { rooms: {}, patients: {} };
         if (!co.rooms) co.rooms = {};
         if (!co.patients) co.patients = {};
@@ -1381,20 +1380,20 @@ function saveCurrentOrder(type, parentId, container) {
             co.patients[parentId] = ids;
         }
 
-        chrome.storage.local.set({ customOrders: co });
+        api.storage.local.set({ customOrders: co });
     });
 }
 
 function clearAllStorage() {
     if (confirm("Are you sure you want to clear all data? This will reset your custom sorting and clear cached patients.")) {
-        chrome.storage.local.clear(() => {
+        api.storage.local.clear(() => {
             window.location.reload();
         });
     }
 }
 
 function deletePatientFromStorage(patientId) {
-    chrome.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
+    api.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
         let patients = result.fetchedPatients || [];
         let customOrders = result.customOrders || { rooms: {}, patients: {} };
 
@@ -1408,7 +1407,7 @@ function deletePatientFromStorage(patientId) {
             });
         }
 
-        chrome.storage.local.set({
+        api.storage.local.set({
             fetchedPatients: filteredPatients,
             customOrders: customOrders
         }, () => {
@@ -1418,7 +1417,7 @@ function deletePatientFromStorage(patientId) {
 }
 
 function addPatientToStorage(patientData, roomId) {
-    chrome.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
+    api.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
         let patients = result.fetchedPatients || [];
         let customOrders = result.customOrders || { rooms: {}, patients: {} };
 
@@ -1437,7 +1436,7 @@ function addPatientToStorage(patientData, roomId) {
         customOrders.patients[roomId] = customOrders.patients[roomId].filter(id => id !== patientData.no);
         customOrders.patients[roomId].push(patientData.no);
 
-        chrome.storage.local.set({
+        api.storage.local.set({
             fetchedPatients: patients,
             customOrders: customOrders
         }, () => {
