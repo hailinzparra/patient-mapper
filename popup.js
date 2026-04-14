@@ -16,8 +16,8 @@ const doctorDatabase = [
     { name: "dr. Firman, Sp.B", id: "37" },
     { name: "dr. Satria, Sp.B", id: "71" },
     { name: "dr. Andri, Sp.U", id: "36" },
-    // { name: "dr. Aris, Sp.BS", id: "98" },
-    // { name: "dr. Robin, Sp.BA", id: "104" },
+    { name: "dr. Aris, Sp.BS", id: "98" },
+    { name: "dr. Robin, Sp.BA", id: "104" },
     { name: "dr. Amir, Sp.OT", id: "24" },
     { name: "dr. Twody, Sp.OT", id: "10" },
     { name: "dr. Eka, Sp.OG", id: "11" },
@@ -47,12 +47,17 @@ const doctorDatabase = [
 
 const roomDatabase = [
     { name: "Poli Anak", id: "101010107" },
-    { name: "Instalasi ICU", id: "101150101" },
+    { name: "Poli Syaraf", id: "101010111" },
+    { name: "Poli Jantung", id: "101010114" },
+    { name: "Poli Kebidanan dan Kandungan", id: "101010116" },
+    { name: "Poli Anastesi", id: "101010125" },
     { name: "RD Bedah Umum", id: "101020101" },
+    { name: "RD Non Bedah", id: "101020201" },
     { name: "RD Kandungan", id: "101020301" },
     { name: "RD Psikiatri", id: "101020401" },
     { name: "RD Anak", id: "101020501" },
     { name: "RD Bedah Orthopedi", id: "101020601" },
+    { name: "RD Bedah Saraf", id: "101020701" },
     { name: "Bangsal Amarilis", id: "101030101" },
     { name: "Bangsal Aster 1", id: "101030102" },
     { name: "Bangsal Aster 2", id: "101030103" },
@@ -66,11 +71,10 @@ const roomDatabase = [
     { name: "Bangsal Asoka", id: "101030111" },
     { name: "Bangsal Cempaka", id: "101030112" },
     { name: "Bangsal Dahlia", id: "101030113" },
-    { name: "RD Non Bedah", id: "101020201" },
-    // { name: "Bangsal Mawar", id: "101030114" },
-    { name: "Ruang Medik Operatif (IBS)", id: "101080201" },
+    { name: "Bangsal Mawar", id: "101030114" },
     { name: "Bangsal Anyelir 2 (Unit stroke)", id: "101030115" },
-    // { name: "RD Bedah Saraf", id: "101020701" },
+    { name: "Ruang Medik Operatif (IBS)", id: "101080201" },
+    { name: "Instalasi ICU", id: "101150101" },
 ];
 
 const templates = [
@@ -78,7 +82,7 @@ const templates = [
         id: "igd",
         name: "IGD",
         docs: [],
-        rooms: ["101020101", "101020301", "101020401", "101020501", "101020601", "101020201"],
+        rooms: ["101020101", "101020201", "101020301", "101020401", "101020501", "101020601", "101020701"],
     },
     {
         id: "anak",
@@ -178,6 +182,8 @@ function setupEventListeners() {
     document.getElementById('sidebar-workspace').addEventListener('click', () => switchView('workspace'));
     document.getElementById('sidebar-patients').addEventListener('click', () => switchView('patients'));
     document.getElementById('sidebar-ids').addEventListener('click', () => switchView('ids'));
+    document.getElementById('btn-save-data').addEventListener('click', handleSaveData);
+    document.getElementById('btn-load-data').addEventListener('click', handleLoadData);
     document.getElementById('btn-reset-data').addEventListener('click', clearAllStorage);
 
     document.getElementById('tab-home').addEventListener('click', () => {
@@ -1164,7 +1170,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
         wrapper.querySelector('.delete-p-btn').addEventListener('click', () => {
             if (confirm(`Remove ${patientData.fullName}?`)) {
                 // 1. Remove from Storage
-                deletePatientFromStorage(pId);
+                deletePatientFromStorage(pId, patientData.fullName);
 
                 // 2. Remove from DOM
                 wrapper.remove();
@@ -1384,15 +1390,7 @@ function saveCurrentOrder(type, parentId, container) {
     });
 }
 
-function clearAllStorage() {
-    if (confirm("Are you sure you want to clear all data? This will reset your custom sorting and clear cached patients.")) {
-        api.storage.local.clear(() => {
-            window.location.reload();
-        });
-    }
-}
-
-function deletePatientFromStorage(patientId) {
+function deletePatientFromStorage(patientId, patientName) {
     api.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
         let patients = result.fetchedPatients || [];
         let customOrders = result.customOrders || { rooms: {}, patients: {} };
@@ -1411,7 +1409,8 @@ function deletePatientFromStorage(patientId) {
             fetchedPatients: filteredPatients,
             customOrders: customOrders
         }, () => {
-            showToast("Patient removed from list", "success");
+            const message = `Patient ${patientName} removed.`;
+            showToast(message, "success");
         });
     });
 }
@@ -1421,18 +1420,28 @@ function addPatientToStorage(patientData, roomId) {
         let patients = result.fetchedPatients || [];
         let customOrders = result.customOrders || { rooms: {}, patients: {} };
 
-        const exists = patients.find(p => p.no === patientData.no);
+        // Find index to see if patient already exists
+        const existingIndex = patients.findIndex(p => p.no === patientData.no);
+        const isUpdate = existingIndex !== -1;
 
-        if (!exists) {
-            if (!patientData.REFERENSI) patientData.REFERENSI = {};
-            if (!patientData.REFERENSI.RUANGAN) patientData.REFERENSI.RUANGAN = {};
-            patientData.REFERENSI.RUANGAN.ID = roomId;
+        // Ensure nested objects exist
+        if (!patientData.REFERENSI) patientData.REFERENSI = {};
+        if (!patientData.REFERENSI.RUANGAN) patientData.REFERENSI.RUANGAN = {};
+        patientData.REFERENSI.RUANGAN.ID = roomId;
+
+        if (isUpdate) {
+            // Replace existing patient data
+            patients[existingIndex] = patientData;
+        } else {
+            // Add new patient
             patients.push(patientData);
         }
 
+        // Handle custom ordering
         if (!customOrders.patients) customOrders.patients = {};
         if (!customOrders.patients[roomId]) customOrders.patients[roomId] = [];
 
+        // Move to the end of the list (re-add effect)
         customOrders.patients[roomId] = customOrders.patients[roomId].filter(id => id !== patientData.no);
         customOrders.patients[roomId].push(patientData.no);
 
@@ -1440,40 +1449,152 @@ function addPatientToStorage(patientData, roomId) {
             fetchedPatients: patients,
             customOrders: customOrders
         }, () => {
-            showToast(`Patient ${patientData.fullName} added!`, 'success');
+            // Dynamic message based on whether it was an update or new entry
+            const message = isUpdate
+                ? `Patient ${patientData.fullName} updated!`
+                : `Patient ${patientData.fullName} added!`;
+
+            showToast(message, 'success');
         });
     });
 }
 
-function showToast(message, type = 'success') {
-    // Remove existing toast if present
-    const existingToast = document.getElementById('extension-toast');
-    if (existingToast) existingToast.remove();
+function clearAllStorage() {
+    if (confirm("Are you sure you want to clear all data? This will reset your custom sorting and clear cached patients.")) {
+        api.storage.local.clear(() => {
+            window.location.reload();
+        });
+    }
+}
 
+async function handleSaveData() {
+    try {
+        // 1. Get current data from storage
+        api.storage.local.get(['fetchedPatients', 'customOrders'], (data) => {
+            const exportData = {
+                fetchedPatients: data.fetchedPatients || [],
+                customOrders: data.customOrders || { rooms: {}, patients: {} },
+                exportDate: new Date().toISOString(),
+                version: "1.0"
+            };
+
+            // 2. Create a blob and a download link
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const doctorName = window.userData?.NAME ? window.userData.NAME.replace(/\s+/g, '_').toLowerCase() : 'backup';
+
+            link.href = url;
+            link.download = `${doctorName}_patients_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`;
+
+            // 3. Trigger download and cleanup
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showToast("Backup saved to device.", "success");
+        });
+    } catch (error) {
+        showToast("Failed to save backup.", "error");
+        console.error("Save error:", error);
+    }
+}
+
+function handleLoadData() {
+    // 1. Create a hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+
+    fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedData = JSON.parse(event.target.result);
+
+                // Validation: Ensure the JSON has the keys we expect
+                if (!importedData.fetchedPatients || !importedData.customOrders) {
+                    throw new Error("Invalid backup file format");
+                }
+
+                // 2. Save to local storage
+                api.storage.local.set({
+                    fetchedPatients: importedData.fetchedPatients,
+                    customOrders: importedData.customOrders
+                }, () => {
+                    showToast("Data loaded successfully! Refreshing...", "success");
+                    // Optional: Reload the page to reflect new data immediately
+                    setTimeout(() => window.location.reload(), 1500);
+                });
+
+            } catch (err) {
+                showToast("Error parsing backup file.", "error");
+                console.error("Load error:", err);
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    fileInput.click();
+}
+
+function showToast(message, type = 'success') {
+    const TOAST_GAP = 12; // Space between toasts in pixels
+
+    // 1. Get all existing toasts to calculate their new positions
+    const existingToasts = document.querySelectorAll('.extension-toast');
+
+    // 2. Move every existing toast up
+    existingToasts.forEach((existingToast) => {
+        // Get current bottom offset or default to the base (20px)
+        const currentBottom = parseInt(existingToast.style.bottom) || 20;
+        // Move it up by its own height + the gap
+        existingToast.style.bottom = `${currentBottom + existingToast.offsetHeight + TOAST_GAP}px`;
+    });
+
+    // 3. Create the new toast
     const toast = document.createElement('div');
-    toast.id = 'extension-toast';
+    // Use a class instead of ID for multiple instances
+    toast.className = `extension-toast fixed right-5 z-[9999] px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold flex items-center gap-3 transition-all duration-500 ease-out`;
+
+    // Set initial position
+    toast.style.bottom = '20px';
 
     // Styling classes
-    const baseClasses = "fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold flex items-center gap-3 animate-bounce-in transition-all duration-300";
     const typeClasses = type === 'success'
         ? "bg-emerald-50 border-emerald-200 text-emerald-700"
         : "bg-red-50 border-red-200 text-red-700";
 
-    toast.className = `${baseClasses} ${typeClasses}`;
+    toast.className += ` ${typeClasses}`;
 
-    // Icon based on type
+    // Icon logic
     const icon = type === 'success'
         ? '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>'
         : '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>';
 
     toast.innerHTML = `${icon} <span>${message}</span>`;
+
+    // Add entrance animation via JS or Tailwind
+    toast.style.transform = 'translateX(100%)';
+    toast.style.opacity = '0';
+
     document.body.appendChild(toast);
 
-    // Auto-remove after 3 seconds
+    // Trigger entrance animation
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateX(0)';
+        toast.style.opacity = '1';
+    });
+
+    // 4. Auto-remove after 3 seconds
     setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transform = 'translateY(20px)';
-        setTimeout(() => toast.remove(), 300);
+        toast.style.transform = 'translateX(20px)';
+        setTimeout(() => toast.remove(), 500);
     }, 3000);
 }
 
@@ -1722,6 +1843,8 @@ function processPatient(item) {
     const no = item.NOMOR;
     const ref = item.REFERENSI;
     const roomId = cleanField(item.RUANGAN);
+    const admDate = item.MASUK; // string "yyyy-mm-dd hh:mm:dd" or null
+    const disDate = item.KELUAR; // string "yyyy-mm-dd hh:mm:dd" or null
     const pendaftaran = ref?.PENDAFTARAN;
     const pasien = pendaftaran?.REFERENSI?.PASIEN;
     const diagObj = pendaftaran?.DIAGNOSAMASUK?.REFERENSI?.DIAGNOSA;
@@ -1736,7 +1859,9 @@ function processPatient(item) {
         diagnosis: diagObj ? `${diagObj.CODE} - ${diagObj.STR}` : "??",
         bedName: cleanField(ref?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR),
         roomName: rawRoomName.replace(/^Bangsal\s+/i, ''),
-        doctorName: cleanField(ref?.DPJP?.NAMA)
+        doctorName: cleanField(ref?.DPJP?.NAMA),
+        admDate,
+        disDate
     };
 }
 
