@@ -1015,20 +1015,25 @@ async function loadPatientsView() {
         }, {});
 
         // 5. Render Columns
+        // 5. Render Columns
         columnOrder.forEach(jenisId => {
             const container = containerMap[jenisId];
+            const countElement = document.getElementById(`count-jenis-${jenisId}`); // Target the new counter span
             if (!container) return;
+
             container.innerHTML = '';
+            let totalPatientsInColumn = 0; // Initialize counter for this column
 
             // Filter rooms belonging to this Jenis
             let roomsInJenis = userData.RUANGANS.filter(r => String(r.JENIS_KUNJUNGAN) === jenisId);
 
             if (roomsInJenis.length === 0) {
+                if (countElement) countElement.textContent = `(0)`;
                 container.innerHTML = `<div class="p-8 border-2 border-dashed border-slate-200 rounded-2xl text-center text-slate-400 text-xs italic">No rooms assigned in this category</div>`;
                 return;
             }
 
-            // Apply custom room sorting if exists
+            // Apply custom room sorting
             const savedRoomOrder = customOrders.rooms[jenisId];
             if (savedRoomOrder) {
                 roomsInJenis.sort((a, b) => {
@@ -1041,7 +1046,10 @@ async function loadPatientsView() {
             roomsInJenis.forEach(ruangan => {
                 let roomPatients = patientMap[ruangan.ID] || [];
 
-                // Apply custom patient sorting if exists
+                // --- ADD TO COUNTER ---
+                totalPatientsInColumn += roomPatients.length;
+
+                // Apply custom patient sorting
                 const savedPatientOrder = customOrders.patients[ruangan.ID];
                 if (savedPatientOrder) {
                     roomPatients.sort((a, b) => {
@@ -1054,6 +1062,11 @@ async function loadPatientsView() {
                 const roomEl = createRoomGroup(ruangan.DESKRIPSI, roomPatients, ruangan.ID, jenisId);
                 container.appendChild(roomEl);
             });
+
+            // --- UPDATE UI COUNTER ---
+            if (countElement) {
+                countElement.textContent = `(${totalPatientsInColumn})`;
+            }
         });
 
     } catch (err) {
@@ -1088,7 +1101,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                 <div>
                     <h4 class="text-[11px] font-black text-slate-700 uppercase leading-none mb-1">${displayName}</h4>
                     <span class="room-count text-[9px] font-bold ${hasPatients ? 'text-blue-500' : 'text-slate-400'} uppercase tracking-tight">
-                        ${patients.length} Patient(s)
+                        ${patients.length} Patient${patients.length !== 1 ? 's' : ''}
                     </span>
                 </div>
             </div>
@@ -1101,13 +1114,22 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
         <div class="patient-list p-2 space-y-2 ${hasPatients ? '' : 'hidden'}">
             ${patients.length === 0 ?
             `<p class="empty-placeholder text-[10px] text-slate-300 italic text-center py-4 bg-slate-50/30 rounded-lg border border-dashed border-slate-100">Empty Room</p>` :
-            patients.map(p => `
+            patients.map(p => {
+                const losData = getPatientLOS(p.admDate, p.disDate);
+                const freshStyles = losData.isFresh ? 'bg-amber-50 border-amber-200' : 'bg-slate-100 border-slate-200';
+                return `
                 <div class="patient-wrapper flex flex-col gap-2" data-id="${p.no}">
                     <div class="patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all flex items-center gap-3">
                         <!-- Bed Info (Left) -->
-                        <div class="flex flex-col items-center justify-center min-w-[45px] py-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <div class="flex flex-col items-center justify-center min-w-[55px] py-2 ${freshStyles} rounded-lg border transition-colors duration-500">
                             <span class="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Bed</span>
-                            <span class="text-[11px] font-black text-blue-600 leading-none">${p.bedName}</span>
+                            <span class="text-[11px] font-black text-blue-700 leading-none">${p.bedName}</span>
+                            
+                            <div class="mt-1.5 pt-1 border-t border-black/5 w-full flex justify-center">
+                                <span class="text-[9px] font-bold ${losData.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none">
+                                    ${losData.text}
+                                </span>
+                            </div>
                         </div>
 
                         <!-- Main Content -->
@@ -1148,7 +1170,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                         <div class="cppt-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto"></div>
                     </div>
                 </div>
-            `).join('')}
+            `}).join('')}
         </div>
     `;
 
@@ -1180,7 +1202,18 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                 const countBadge = div.querySelector('.room-count');
                 const count = remainingWrappers.length;
 
-                countBadge.innerText = `${count} Patient(s)`;
+                countBadge.innerText = `${count} Patient${count !== 1 ? 's' : ''}`;
+
+                // --- NEW: 3.5 Update Global Column Count ---
+                const globalCountEl = document.getElementById(`count-jenis-${jenisId}`);
+                if (globalCountEl) {
+                    // Get all patients currently in this specific column container
+                    const columnContainer = document.getElementById(`container-jenis-${jenisId}`);
+                    const totalInColumn = columnContainer.querySelectorAll('.patient-wrapper').length;
+
+                    // Update the header text
+                    globalCountEl.textContent = `(${totalInColumn})`;
+                }
 
                 // 4. Update style if 0
                 if (count === 0) {
@@ -1409,7 +1442,7 @@ function deletePatientFromStorage(patientId, patientName) {
             fetchedPatients: filteredPatients,
             customOrders: customOrders
         }, () => {
-            const message = `Patient ${patientName} removed.`;
+            const message = `Patient ${patientName} removed`;
             showToast(message, "success");
         });
     });
@@ -1493,10 +1526,10 @@ async function handleSaveData() {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
-            showToast("Backup saved to device.", "success");
+            showToast("Backup saved to device", "success");
         });
     } catch (error) {
-        showToast("Failed to save backup.", "error");
+        showToast("Failed to save backup", "error");
         console.error("Save error:", error);
     }
 }
@@ -1532,7 +1565,7 @@ function handleLoadData() {
                 });
 
             } catch (err) {
-                showToast("Error parsing backup file.", "error");
+                showToast("Error parsing backup file", "error");
                 console.error("Load error:", err);
             }
         };
@@ -1831,7 +1864,8 @@ function renderResults(tabId, items) {
     pane.querySelectorAll('.btn-copy').forEach(btn => btn.addEventListener('click', () => copyPatientRow(btn)));
     pane.querySelectorAll('.btn-more').forEach(btn => btn.addEventListener('click', () => {
         const patientData = JSON.parse(btn.getAttribute("data-patient"));
-        openPatientModal(patientData);
+        addPatientToStorage(patientData, patientData.roomId);
+        // openPatientModal(patientData);
     }));
     pane.querySelectorAll('.btn-copy-group').forEach(btn => btn.addEventListener('click', () => copyGroup(btn, hierarchy, viewMode, sortMode)));
 
@@ -1992,42 +2026,41 @@ function renderByDoctor(hierarchy, sortedDocKeys, sortMode) {
     return container;
 }
 
-function patientRowTemplate(p) {
-    return `
-    <div class="compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors">
-        <div class="text-xs font-medium text-slate-700 leading-relaxed patient-data">
-            <span class="font-bold text-slate-400">${p.bedName}</span>/<span class="font-bold text-slate-900">${p.fullName}</span>/<span class="font-bold text-slate-400">${p.mrn}</span>/<span class="text-slate-500">${p.age}</span>/<span class="text-blue-600 font-semibold">${p.diagnosis}</span>
-        </div>
-        <div class="actions flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity items-end sm:items-center">
-            <button class="btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200 transition-colors">
-                Copy
-            </button>
-            <button 
-                class="btn-more text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 border border-emerald-200 transition-colors"
-                data-patient='${JSON.stringify(p)}'
-            >
-                Add
-            </button>
-        </div>
-    </div>`;
-}
-
 function createPatientRow(p) {
+    const los = getPatientLOS(p.admDate, p.disDate);
+    const losStyles = los.isFresh
+        ? "bg-amber-100 text-amber-800 border-amber-200"
+        : "bg-slate-100 text-slate-500 border-slate-200";
+
     const row = document.createElement('div');
     row.className = "compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors";
+
+    const patientDetails = [
+        `<span class="font-bold text-slate-400">${p.bedName}</span>`,
+        `<span class="font-bold text-slate-900">${p.fullName}</span>`,
+        `<span class="text-slate-500">${p.mrn}</span>`,
+        `<span class="text-slate-500">${p.age}</span>`,
+        `<span class="text-blue-600 font-semibold">${p.diagnosis}</span>`
+    ].join('/');
+
     row.innerHTML = `
         <div class="text-xs font-medium text-slate-700 leading-relaxed patient-data">
-            <span class="font-bold text-slate-400">${p.bedName}</span>/<span class="font-bold text-slate-900">${p.fullName}</span>/<span class="font-bold text-slate-400">${p.mrn}</span>/<span class="text-slate-500">${p.age}</span>/<span class="text-blue-600 font-semibold">${p.diagnosis}</span>
+            ${patientDetails}
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border ${losStyles} tracking-tighter ml-1">
+                ${los.text}
+            </span>
         </div>
         <div class="actions flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity items-end sm:items-center">
             <button class="btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200 transition-colors">
                 Copy
             </button>
         </div>`;
+
     const addBtn = document.createElement('button');
     addBtn.className = "btn-more text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 border border-emerald-200 transition-colors";
     addBtn.textContent = "Add";
     addBtn.dataset.patient = JSON.stringify(p);
+
     row.querySelector('.actions').appendChild(addBtn);
     return row;
 }
@@ -2315,17 +2348,20 @@ function renderCPPTData(records, container, isDoctorFilterActive = false) {
         const formatForCopy = (val) => {
             if (!val) return '-';
             const tempDiv = document.createElement('div');
+            // Convert <br> to newlines for clipboard
             tempDiv.innerHTML = val.replace(/<br\s*\/?>/gi, '\n');
             return tempDiv.textContent || tempDiv.innerText || "";
         };
-        const soapText = `S:\n${formatForCopy(r.SUBYEKTIF)}\n\nO:\n${formatForCopy(r.OBYEKTIF)}\n\nA:\n${formatForCopy(r.ASSESMENT)}\n\nP:\n${formatForCopy(r.PLANNING)}`;
+
+        // Updated to SOAPI
+        const soapText = `S:\n${formatForCopy(r.SUBYEKTIF)}\n\nO:\n${formatForCopy(r.OBYEKTIF)}\n\nA:\n${formatForCopy(r.ASSESMENT)}\n\nP:\n${formatForCopy(r.PLANNING)}\n\nI:\n${formatForCopy(r.INSTRUKSI)}`;
 
         return `
             <div class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col mb-4">
                 <div class="px-4 py-1.5 flex justify-between items-center ${badgeColor}">
                     <span class="text-white text-[9px] font-black uppercase tracking-tighter">${r.REFERENSI?.JENIS?.DESKRIPSI || 'Staff'}</span>
                     <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" 
-                            data-soap="${encodeURIComponent(soapText)}">Copy SOAP</button>
+                            data-soap="${encodeURIComponent(soapText)}">Copy SOAPI</button>
                 </div>
                 <div class="p-4 space-y-3">
                     <div class="flex justify-between items-start border-b border-slate-50 pb-2">
@@ -2341,6 +2377,7 @@ function renderCPPTData(records, container, isDoctorFilterActive = false) {
                         <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Objective (O)</b><p>${r.OBYEKTIF || '-'}</p></div>
                         <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Assessment (A)</b><p>${r.ASSESMENT || '-'}</p></div>
                         <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Planning (P)</b><p>${r.PLANNING || '-'}</p></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Instruction (I)</b><p>${r.INSTRUKSI || '-'}</p></div>
                     </div>
                 </div>
             </div>`;
@@ -2389,3 +2426,22 @@ function getLocalToday() {
     const localISOTime = new Date(today.getTime() - offsetInMs).toISOString();
     return localISOTime.split('T')[0];
 }
+
+const getPatientLOS = (admDateStr, disDateStr) => {
+    if (!admDateStr) return { text: "??", isFresh: false };
+
+    const start = new Date(admDateStr);
+    const end = disDateStr ? new Date(disDateStr) : new Date();
+    const diffMs = end - start;
+
+    if (isNaN(diffMs) || diffMs < 0) return { text: "??", isFresh: false };
+
+    const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+
+    return {
+        text: `${days}d ${hours}h`,
+        isFresh: totalHours < 24
+    };
+};
