@@ -1106,11 +1106,18 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                     </span>
                 </div>
             </div>
-            <button class="toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all">
-                <svg class="w-4 h-4 text-slate-400 transition-transform" style="transform: ${hasPatients ? 'rotate(0deg)' : 'rotate(-90deg)'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </button>
+            <div class="flex items-center gap-1">
+                <button class="copy-room-data p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all mr-1" title="Copy All Room Data">
+                    <svg class="w-4 h-4 text-slate-400 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                    </svg>
+                </button>
+                <button class="toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all">
+                    <svg class="w-4 h-4 text-slate-400 transition-transform" style="transform: ${hasPatients ? 'rotate(0deg)' : 'rotate(-90deg)'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div class="patient-list p-2 space-y-2 ${hasPatients ? '' : 'hidden'}">
             ${patients.length === 0 ?
@@ -1127,7 +1134,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                             <span class="text-[11px] font-black text-blue-700 leading-none">${p.bedName}</span>
                             
                             <div class="mt-1.5 pt-1 border-t border-black/5 w-full flex justify-center">
-                                <span class="text-[9px] font-bold ${losData.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none">
+                                <span class="text-[9px] font-bold ${losData.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none" data-adm="${p.admDate}">
                                     ${losData.text}
                                 </span>
                             </div>
@@ -1174,6 +1181,84 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
             `}).join('')}
         </div>
     `;
+
+    const copyBtn = div.querySelector('.copy-room-data');
+    copyBtn.addEventListener('click', function () {
+        const roomGroup = div;
+        const roomName = roomGroup.querySelector('h4').innerText.trim();
+        let output = `# ${roomName}\n\n`;
+
+        const patients = roomGroup.querySelectorAll('.patient-wrapper');
+
+        patients.forEach(patient => {
+            // 1. Get Patient Basic Info
+            const bed = patient.querySelector('.text-blue-700').innerText.trim();
+            const name = patient.querySelector('h5').innerText.trim();
+            const details = patient.querySelector('.font-mono').innerText.split('•');
+            const mrn = details[0].trim();
+            const age = details[1].trim();
+            const diagnosis = patient.querySelector('.italic').innerText.trim();
+
+            // 2. Get Doctor (DPJP)
+            const doctorElem = patient.querySelector('.text-blue-500.truncate');
+            const doctorName = doctorElem ? doctorElem.innerText.trim() : '-';
+
+            // 3. Handle Admission Date and Day Name
+            const admSpan = patient.querySelector('span[data-adm]');
+            let admDisplay = '-';
+            let losText = '-';
+
+            if (admSpan) {
+                const rawDate = admSpan.getAttribute('data-adm').trim();
+                losText = admSpan.innerText.trim();
+
+                try {
+                    // Replace space with T for ISO compatibility (YYYY-MM-DDTHH:mm:ss)
+                    const dateObj = new Date(rawDate.replace(' ', 'T'));
+                    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+                    admDisplay = `${dayName}, ${rawDate}`;
+                } catch (e) {
+                    admDisplay = rawDate;
+                }
+            }
+
+            // 4. Format Output Structure
+            output += `## ${bed}/${name}/${mrn}/${age}/${diagnosis}\n`;
+            output += `DPJP: ${doctorName}\n`;
+            output += `MRS: ${admDisplay}\n`;
+            output += `LOS: ${losText}\n\n`;
+
+            // 5. Get SOAP data
+            const firstSoapBtn = patient.querySelector('.cppt-copy-btn');
+            if (firstSoapBtn && firstSoapBtn.dataset.soap) {
+                const soapContent = decodeURIComponent(firstSoapBtn.dataset.soap);
+                output += soapContent + "\n";
+            } else {
+                output += "No CPPT records found.\n";
+            }
+
+            output += "\n-------------------------------------------\n\n";
+        });
+
+        // Copy to clipboard
+        navigator.clipboard.writeText(output).then(() => {
+            showToast(`Room ${roomName} copied!`);
+            const svg = copyBtn.querySelector('svg');
+            const originalClass = 'w-4 h-4 text-slate-400 transition-all';
+            const highlightClass = 'w-4 h-4 text-green-500 transition-all';
+            const t = String(Date.now());
+            svg.dataset.timestamp = t;
+            svg.setAttribute('class', highlightClass);
+            setTimeout(() => {
+                if (svg.dataset.timestamp !== t) return;
+                svg.dataset.timestamp = '';
+                svg.setAttribute('class', originalClass)
+            }, 500);
+        }).catch(err => {
+            showToast(`Failed to copy room ${roomName}`, "error");
+            alert('Failed to copy text: ' + err);
+        });
+    });
 
     // Toggle Room Collapse
     const toggleBtn = div.querySelector('.toggle-room');
@@ -1338,7 +1423,7 @@ async function toggleCPPTInline(wrapper, p) {
             if (filtered.length === 0) {
                 body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No records found.</p>`;
             } else {
-                renderCPPTData(filtered, body);
+                renderCPPTData(filtered, body, doctorId);
             }
         };
 
@@ -2282,7 +2367,7 @@ async function openCPPTModal(p) {
             refreshUI();
         });
 
-        renderCPPTData(filteredByDate, modal.querySelector("#cppt-content"), showOnlyDocs);
+        renderCPPTData(filteredByDate, modal.querySelector("#cppt-content"), null, showOnlyDocs);
     };
 
     // Filter Listeners
@@ -2348,7 +2433,7 @@ function renderPagination(fullData, activeDate, onDateSelect) {
     });
 }
 
-function renderCPPTData(records, container, isDoctorFilterActive = false) {
+function renderCPPTData(records, container, doctorId = null, isDoctorFilterActive = false) {
     if (records.length === 0) {
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-20 px-10 text-center">
@@ -2365,24 +2450,41 @@ function renderCPPTData(records, container, isDoctorFilterActive = false) {
         const isDoctor = r.REFERENSI?.JENIS?.ID === "1";
         const badgeColor = isDoctor ? "bg-blue-600" : "bg-emerald-600";
 
+        const canEdit = doctorId && String(r.OLEH) === String(doctorId);
+
         const formatForCopy = (val) => {
             if (!val) return '-';
             const tempDiv = document.createElement('div');
-            // Convert <br> to newlines for clipboard
             tempDiv.innerHTML = val.replace(/<br\s*\/?>/gi, '\n');
             return tempDiv.textContent || tempDiv.innerText || "";
         };
 
-        // Updated to SOAPI
         const soapText = `S:\n${formatForCopy(r.SUBYEKTIF)}\n\nO:\n${formatForCopy(r.OBYEKTIF)}\n\nA:\n${formatForCopy(r.ASSESMENT)}\n\nP:\n${formatForCopy(r.PLANNING)}\n\nI:\n${formatForCopy(r.INSTRUKSI)}`;
 
         return `
             <div class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col mb-4">
                 <div class="px-4 py-1.5 flex justify-between items-center ${badgeColor}">
                     <span class="text-white text-[9px] font-black uppercase tracking-tighter">${r.REFERENSI?.JENIS?.DESKRIPSI || 'Staff'}</span>
-                    <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" 
-                            data-soap="${encodeURIComponent(soapText)}">Copy SOAPI</button>
+                    
+                    <div class="flex gap-1">
+                        <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" 
+                            data-soap="${encodeURIComponent(soapText)}">
+                            Copy
+                        </button>
+                        
+                        ${canEdit ? `
+                        <button class="cppt-edit-btn bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all"
+                            data-id="${r.ID}"
+                            data-s="${encodeURIComponent(r.SUBYEKTIF || '')}"
+                            data-o="${encodeURIComponent(r.OBYEKTIF || '')}"
+                            data-a="${encodeURIComponent(r.ASSESMENT || '')}"
+                            data-p="${encodeURIComponent(r.PLANNING || '')}"
+                            data-i="${encodeURIComponent(r.INSTRUKSI || '')}">
+                            Edit
+                        </button>` : ''}
+                    </div>
                 </div>
+
                 <div class="p-4 space-y-3">
                     <div class="flex justify-between items-start border-b border-slate-50 pb-2">
                         <p class="text-[10px] font-bold text-slate-800 uppercase flex items-center gap-1">
@@ -2403,9 +2505,35 @@ function renderCPPTData(records, container, isDoctorFilterActive = false) {
             </div>`;
     }).join('');
 
+    // Re-attach listeners
     container.querySelectorAll('.cppt-copy-btn').forEach(btn => {
         btn.onclick = (e) => executeClipboardCopy(decodeURIComponent(e.currentTarget.dataset.soap), e.currentTarget);
     });
+
+    container.querySelectorAll('.cppt-edit-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            const ds = e.currentTarget.dataset;
+            openEditModal({
+                id: ds.id,
+                s: decodeURIComponent(ds.s),
+                o: decodeURIComponent(ds.o),
+                a: decodeURIComponent(ds.a),
+                p: decodeURIComponent(ds.p),
+                i: decodeURIComponent(ds.i)
+            });
+        };
+    });
+}
+
+/**
+ * Dummy function to handle modal opening
+ */
+function openEditModal(data) {
+    console.log("Opening modal for ID:", data.id);
+    console.log("Existing Data:", data);
+
+    // Logic to show your modal and populate inputs
+    // alert(`Editing record ${data.id}. Check console for details.`);
 }
 
 // --- Helper Functions ---
