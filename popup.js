@@ -961,14 +961,16 @@ async function fetchCPPTData(visitId, signal) {
 async function updateCPPTRecord(data) {
     const id = data.id;
     const payload = {
-        "SELESAI_RAWAT_BERSAMA": "0",
+        "ID": parseInt(id),
+        "WAKTU": data.waktu,
+        "TANGGAL": data.tanggal,
         "SUBYEKTIF": data.s,
         "OBYEKTIF": data.o,
         "ASSESMENT": data.a,
         "PLANNING": data.p,
         "INSTRUKSI": data.i,
         "DOKTER_TBAK_OR_SBAR": null,
-        "ID": parseInt(id)
+        "SELESAI_RAWAT_BERSAMA": "0",
     };
 
     const dc = Date.now();
@@ -1299,7 +1301,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
             }, 500);
         }).catch(err => {
             showToast(`Failed to copy room ${roomName}`, "error");
-            alert('Failed to copy text: ' + err);
+            console.error('Failed to copy text', err);
         });
     });
 
@@ -2503,38 +2505,28 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
         };
 
         const soapText = `S:\n${formatForCopy(r.SUBYEKTIF)}\n\nO:\n${formatForCopy(r.OBYEKTIF)}\n\nA:\n${formatForCopy(r.ASSESMENT)}\n\nP:\n${formatForCopy(r.PLANNING)}\n\nI:\n${formatForCopy(r.INSTRUKSI)}`;
+        const [datePart, timePart] = r.TANGGAL.split(' ');
 
         return `
             <div class="cppt-card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col mb-4" data-record-id="${r.ID}">
                 <div class="px-4 py-1.5 flex justify-between items-center ${badgeColor}">
                     <span class="text-white text-[9px] font-black uppercase tracking-tighter">${r.REFERENSI?.JENIS?.DESKRIPSI || 'Staff'}</span>
-                    
                     <div class="flex gap-1">
-                        <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" 
-                            data-soap="${encodeURIComponent(soapText)}">
-                            Copy
-                        </button>
-
+                        <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" data-soap="${encodeURIComponent(soapText)}">Copy</button>
                         ${canEdit ? `
-                        <button class="cppt-edit-toggle bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all">
-                            Edit
-                        </button>
-                        <button class="cppt-delete-btn bg-red-500 hover:bg-red-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-red-600 transition-all"
-                            data-id="${r.ID}">
-                            Del
-                        </button>` : ''}
+                            <button class="cppt-edit-toggle bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all">Edit</button>
+                            <button class="cppt-delete-btn bg-red-500 hover:bg-red-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-red-600 transition-all" data-id="${r.ID}">Del</button>
+                        ` : ''}
                     </div>
                 </div>
-
                 <div class="p-4 space-y-3">
                     <div class="flex justify-between items-start border-b border-slate-50 pb-2">
                         <p class="text-[10px] font-bold text-slate-800 uppercase flex items-center gap-1">
                             <span class="w-1.5 h-1.5 rounded-full ${isDoctor ? 'bg-blue-600' : 'bg-emerald-600'}"></span>
                             ${r.REFERENSI?.TENAGA_MEDIS?.NAMA || 'Unknown'}
                         </p>
-                        <p class="text-[9px] font-mono text-slate-400 font-bold">${r.TANGGAL.split(' ')[1]}</p>
+                        <p class="text-[9px] font-mono text-slate-400 font-bold val-time" data-date-only="${datePart}">${timePart}</p>
                     </div>
-
                     <div class="soap-display-area space-y-3 text-[11px] leading-relaxed text-slate-700">
                         <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Subjective (S)</b><div class="val-s">${r.SUBYEKTIF || '-'}</div></div>
                         <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Objective (O)</b><div class="val-o">${r.OBYEKTIF || '-'}</div></div>
@@ -2602,29 +2594,35 @@ async function toggleInlineEdit(btn) {
     const card = btn.closest('.cppt-card');
     const recordId = card.dataset.recordId;
     const displayArea = card.querySelector('.soap-display-area');
+    const timeArea = card.querySelector('.val-time');
     const isEditing = btn.innerText === "Save";
-
     const fields = ['s', 'o', 'a', 'p', 'i'];
 
     if (!isEditing) {
-        // --- TRANSITION TO EDIT MODE ---
+        // --- SWITCH TO EDIT ---
         btn.innerText = "Save";
         btn.classList.remove('bg-white', 'text-slate-700', 'hover:bg-slate-100');
         btn.classList.add('bg-amber-50', 'hover:bg-amber-100', 'text-amber-700', 'border-amber-200', 'shadow-sm');
 
+        // Toggle Time to Input
+        const currentTime = timeArea.innerText;
+        timeArea.innerHTML = `<input type="time" step="1" class="edit-time-input bg-slate-100 border-none text-[9px] font-bold p-0 focus:ring-0" value="${currentTime}">`;
+
+        // Toggle SOAPI to Textareas
         fields.forEach(f => {
             const container = displayArea.querySelector(`.val-${f}`);
-            // Convert <br> back to \n for textarea editing
-            const currentVal = container.innerHTML === '-' ? '' : container.innerHTML.replace(/<br\s*\/?>/gi, '\n');
-
-            container.innerHTML = `
-                <textarea class="edit-input-${f} w-full bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-sans text-[11px]" 
-                rows="2" style="resize: vertical;">${currentVal}</textarea>`;
+            const val = container.innerHTML === '-' ? '' : container.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+            container.innerHTML = `<textarea class="edit-input-${f} w-full bg-slate-50 border border-slate-200 rounded p-2 focus:ring-2 focus:ring-amber-400 outline-none text-[11px]" rows="2">${val}</textarea>`;
         });
     } else {
-        // --- SAVE DATA TO SERVER ---
+        // --- SAVE DATA ---
+        const dateOnly = timeArea.dataset.dateOnly;
+        const newTime = card.querySelector('.edit-time-input').value;
+
         const updatedData = {
             id: recordId,
+            waktu: newTime,
+            tanggal: `${dateOnly} ${newTime}`,
             s: displayArea.querySelector('.edit-input-s').value.replace(/\n/g, '<br>'),
             o: displayArea.querySelector('.edit-input-o').value.replace(/\n/g, '<br>'),
             a: displayArea.querySelector('.edit-input-a').value.replace(/\n/g, '<br>'),
@@ -2638,7 +2636,7 @@ async function toggleInlineEdit(btn) {
         try {
             await updateCPPTRecord(updatedData);
 
-            // SUCCESS: Revert UI to View Mode
+            // Revert UI
             showToast(`Record ${recordId} updated!`, 'success');
 
             btn.innerText = "Edit";
@@ -2646,16 +2644,14 @@ async function toggleInlineEdit(btn) {
             btn.classList.remove('bg-amber-50', 'hover:bg-amber-100', 'text-amber-700', 'border-amber-200', 'shadow-sm');
             btn.classList.add('bg-white', 'text-slate-700', 'hover:bg-slate-100');
 
+            timeArea.innerText = updatedData.waktu;
             fields.forEach(f => {
                 const container = displayArea.querySelector(`.val-${f}`);
-                const newVal = updatedData[f].trim();
-                container.innerHTML = newVal === '' ? '-' : newVal;
+                container.innerHTML = updatedData[f] || '-';
             });
-
         } catch (err) {
             showToast(`Update failed: ${recordId}`, 'error');
             console.error("Update failed:", err);
-            alert(`Error: ${err.message}`);
             btn.innerText = "Save";
             btn.disabled = false;
         }
