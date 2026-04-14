@@ -1069,6 +1069,7 @@ async function loadPatientsView() {
             }
         });
 
+        updateSidebarTotalCount();
     } catch (err) {
         console.error("Failed to load patients view:", err);
     } finally {
@@ -1204,7 +1205,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
 
                 countBadge.innerText = `${count} Patient${count !== 1 ? 's' : ''}`;
 
-                // --- NEW: 3.5 Update Global Column Count ---
+                // --- 4. Update Column Count ---
                 const globalCountEl = document.getElementById(`count-jenis-${jenisId}`);
                 if (globalCountEl) {
                     // Get all patients currently in this specific column container
@@ -1215,7 +1216,10 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                     globalCountEl.textContent = `(${totalInColumn})`;
                 }
 
-                // 4. Update style if 0
+                // --- 5. Update Sidebar Total Count ---
+                updateSidebarTotalCount();
+
+                // --- 6. If no patients remain, update UI and auto-collapse the room ---
                 if (count === 0) {
                     countBadge.classList.replace('text-blue-500', 'text-slate-400');
                     // Add empty placeholder back
@@ -1468,6 +1472,7 @@ function addPatientToStorage(patientData, roomId) {
         } else {
             // Add new patient
             patients.push(patientData);
+            updateSidebarTotalCount(1);
         }
 
         // Handle custom ordering
@@ -1573,6 +1578,21 @@ function handleLoadData() {
     };
 
     fileInput.click();
+}
+
+function updateSidebarTotalCount(manualDelta = null) {
+    const badge = document.getElementById('sidebar-patient-count');
+    if (!badge) return;
+
+    let total;
+    if (manualDelta !== null) {
+        const currentCount = parseInt(badge.textContent) || 0;
+        total = Math.max(0, currentCount + manualDelta);
+    } else {
+        total = document.querySelectorAll('.jenis-container .patient-wrapper').length;
+    }
+
+    badge.textContent = total;
 }
 
 function showToast(message, type = 'success') {
