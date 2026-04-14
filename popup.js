@@ -945,6 +945,12 @@ async function handleFetch(serializedDocs, serializedRooms) {
     }
 }
 
+async function checkAuthStatus(signal) {
+    const dc = Date.now();
+    const url = `https://api.rsudsoediranms.com/webservice/authentication/isAuthenticate?_dc=${dc}`;
+    return await apiRequest(url, { signal });
+}
+
 async function fetchCPPTData(visitId, signal) {
     const dc = Date.now();
     const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt?_dc=${dc}&KUNJUNGAN=${visitId}&STATUS=1&page=1&start=0&limit=25`;
@@ -952,10 +958,47 @@ async function fetchCPPTData(visitId, signal) {
     return result.data || []; // Ensure the UI gets an array to map over
 }
 
-async function checkAuthStatus(signal) {
+async function updateCPPTRecord(data) {
+    const id = data.id;
+    const payload = {
+        "SELESAI_RAWAT_BERSAMA": "0",
+        "SUBYEKTIF": data.s,
+        "OBYEKTIF": data.o,
+        "ASSESMENT": data.a,
+        "PLANNING": data.p,
+        "INSTRUKSI": data.i,
+        "DOKTER_TBAK_OR_SBAR": null,
+        "ID": parseInt(id)
+    };
+
     const dc = Date.now();
-    const url = `https://api.rsudsoediranms.com/webservice/authentication/isAuthenticate?_dc=${dc}`;
-    return await apiRequest(url, { signal });
+    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt/${id}?_dc=${dc}`;
+
+    return await apiRequest(url, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    });
+}
+
+async function removeCPPTRecord(id) {
+    const payload = {
+        "STATUS": 0,
+        "ID": parseInt(id)
+    };
+
+    const dc = Date.now();
+    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt/${id}?_dc=${dc}`;
+
+    return await apiRequest(url, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    });
 }
 
 // --- My Patients ---
@@ -2449,9 +2492,9 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
     container.innerHTML = records.map(r => {
         const isDoctor = r.REFERENSI?.JENIS?.ID === "1";
         const badgeColor = isDoctor ? "bg-blue-600" : "bg-emerald-600";
-
         const canEdit = doctorId && String(r.OLEH) === String(doctorId);
 
+        // Prepare copy text
         const formatForCopy = (val) => {
             if (!val) return '-';
             const tempDiv = document.createElement('div');
@@ -2462,7 +2505,7 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
         const soapText = `S:\n${formatForCopy(r.SUBYEKTIF)}\n\nO:\n${formatForCopy(r.OBYEKTIF)}\n\nA:\n${formatForCopy(r.ASSESMENT)}\n\nP:\n${formatForCopy(r.PLANNING)}\n\nI:\n${formatForCopy(r.INSTRUKSI)}`;
 
         return `
-            <div class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col mb-4">
+            <div class="cppt-card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col mb-4" data-record-id="${r.ID}">
                 <div class="px-4 py-1.5 flex justify-between items-center ${badgeColor}">
                     <span class="text-white text-[9px] font-black uppercase tracking-tighter">${r.REFERENSI?.JENIS?.DESKRIPSI || 'Staff'}</span>
                     
@@ -2471,16 +2514,14 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
                             data-soap="${encodeURIComponent(soapText)}">
                             Copy
                         </button>
-                        
+
                         ${canEdit ? `
-                        <button class="cppt-edit-btn bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all"
-                            data-id="${r.ID}"
-                            data-s="${encodeURIComponent(r.SUBYEKTIF || '')}"
-                            data-o="${encodeURIComponent(r.OBYEKTIF || '')}"
-                            data-a="${encodeURIComponent(r.ASSESMENT || '')}"
-                            data-p="${encodeURIComponent(r.PLANNING || '')}"
-                            data-i="${encodeURIComponent(r.INSTRUKSI || '')}">
+                        <button class="cppt-edit-toggle bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all">
                             Edit
+                        </button>
+                        <button class="cppt-delete-btn bg-red-500 hover:bg-red-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-red-600 transition-all"
+                            data-id="${r.ID}">
+                            Del
                         </button>` : ''}
                     </div>
                 </div>
@@ -2494,46 +2535,131 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
                         <p class="text-[9px] font-mono text-slate-400 font-bold">${r.TANGGAL.split(' ')[1]}</p>
                     </div>
 
-                    <div class="space-y-3 text-[11px] leading-relaxed text-slate-700">
-                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Subjective (S)</b><p>${r.SUBYEKTIF || '-'}</p></div>
-                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Objective (O)</b><p>${r.OBYEKTIF || '-'}</p></div>
-                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Assessment (A)</b><p>${r.ASSESMENT || '-'}</p></div>
-                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Planning (P)</b><p>${r.PLANNING || '-'}</p></div>
-                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Instruction (I)</b><p>${r.INSTRUKSI || '-'}</p></div>
+                    <div class="soap-display-area space-y-3 text-[11px] leading-relaxed text-slate-700">
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Subjective (S)</b><div class="val-s">${r.SUBYEKTIF || '-'}</div></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Objective (O)</b><div class="val-o">${r.OBYEKTIF || '-'}</div></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Assessment (A)</b><div class="val-a">${r.ASSESMENT || '-'}</div></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Planning (P)</b><div class="val-p">${r.PLANNING || '-'}</div></div>
+                        <div><b class="text-blue-500 block text-[9px] uppercase tracking-widest mb-1">Instruction (I)</b><div class="val-i">${r.INSTRUKSI || '-'}</div></div>
                     </div>
                 </div>
             </div>`;
     }).join('');
 
-    // Re-attach listeners
+    // Attach Listeners
     container.querySelectorAll('.cppt-copy-btn').forEach(btn => {
         btn.onclick = (e) => executeClipboardCopy(decodeURIComponent(e.currentTarget.dataset.soap), e.currentTarget);
     });
 
-    container.querySelectorAll('.cppt-edit-btn').forEach(btn => {
-        btn.onclick = (e) => {
-            const ds = e.currentTarget.dataset;
-            openEditModal({
-                id: ds.id,
-                s: decodeURIComponent(ds.s),
-                o: decodeURIComponent(ds.o),
-                a: decodeURIComponent(ds.a),
-                p: decodeURIComponent(ds.p),
-                i: decodeURIComponent(ds.i)
-            });
+    container.querySelectorAll('.cppt-edit-toggle').forEach(btn => {
+        btn.onclick = (e) => toggleInlineEdit(e.currentTarget);
+    });
+
+    // Attach to the end of your renderCPPTData function
+    container.querySelectorAll('.cppt-delete-btn').forEach(btn => {
+        btn.onclick = async (e) => {
+            const id = e.currentTarget.dataset.id;
+            const deleteBtn = e.currentTarget;
+
+            // 1. Confirmation
+            if (!confirm(`Are you sure you want to delete CPPT ${id}?`)) return;
+
+            try {
+                // 2. Visual feedback
+                deleteBtn.innerText = "...";
+                deleteBtn.disabled = true;
+
+                // 3. Call API
+                await removeCPPTRecord(id);
+
+                showToast(`Record ${id} deleted!`, 'success');
+
+                // 4. Find the wrapper and re-toggle
+                // We look up for the .patient-wrapper and find its .cppt-btn
+                const wrapper = deleteBtn.closest('.patient-wrapper');
+                if (wrapper) {
+                    const refreshBtn = wrapper.querySelector('.cppt-btn');
+                    if (refreshBtn) {
+                        // Double clicks to refreshes the data
+                        refreshBtn.click();
+                        refreshBtn.click();
+                    }
+                }
+            } catch (err) {
+                showToast("Delete failed: " + id, 'error');
+                console.error("Delete failed:", err);
+                deleteBtn.innerText = "Delete";
+                deleteBtn.disabled = false;
+            }
         };
     });
 }
 
 /**
- * Dummy function to handle modal opening
+ * Handles UI transition between "View" and "Edit/Save" states
  */
-function openEditModal(data) {
-    console.log("Opening modal for ID:", data.id);
-    console.log("Existing Data:", data);
+async function toggleInlineEdit(btn) {
+    const card = btn.closest('.cppt-card');
+    const recordId = card.dataset.recordId;
+    const displayArea = card.querySelector('.soap-display-area');
+    const isEditing = btn.innerText === "Save";
 
-    // Logic to show your modal and populate inputs
-    // alert(`Editing record ${data.id}. Check console for details.`);
+    const fields = ['s', 'o', 'a', 'p', 'i'];
+
+    if (!isEditing) {
+        // --- TRANSITION TO EDIT MODE ---
+        btn.innerText = "Save";
+        btn.classList.remove('bg-white', 'text-slate-700', 'hover:bg-slate-100');
+        btn.classList.add('bg-amber-50', 'hover:bg-amber-100', 'text-amber-700', 'border-amber-200', 'shadow-sm');
+
+        fields.forEach(f => {
+            const container = displayArea.querySelector(`.val-${f}`);
+            // Convert <br> back to \n for textarea editing
+            const currentVal = container.innerHTML === '-' ? '' : container.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+
+            container.innerHTML = `
+                <textarea class="edit-input-${f} w-full bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-sans text-[11px]" 
+                rows="2" style="resize: vertical;">${currentVal}</textarea>`;
+        });
+    } else {
+        // --- SAVE DATA TO SERVER ---
+        const updatedData = {
+            id: recordId,
+            s: displayArea.querySelector('.edit-input-s').value.replace(/\n/g, '<br>'),
+            o: displayArea.querySelector('.edit-input-o').value.replace(/\n/g, '<br>'),
+            a: displayArea.querySelector('.edit-input-a').value.replace(/\n/g, '<br>'),
+            p: displayArea.querySelector('.edit-input-p').value.replace(/\n/g, '<br>'),
+            i: displayArea.querySelector('.edit-input-i').value.replace(/\n/g, '<br>'),
+        };
+
+        btn.innerText = "Saving...";
+        btn.disabled = true;
+
+        try {
+            await updateCPPTRecord(updatedData);
+
+            // SUCCESS: Revert UI to View Mode
+            showToast(`Record ${recordId} updated!`, 'success');
+
+            btn.innerText = "Edit";
+            btn.disabled = false;
+            btn.classList.remove('bg-amber-50', 'hover:bg-amber-100', 'text-amber-700', 'border-amber-200', 'shadow-sm');
+            btn.classList.add('bg-white', 'text-slate-700', 'hover:bg-slate-100');
+
+            fields.forEach(f => {
+                const container = displayArea.querySelector(`.val-${f}`);
+                const newVal = updatedData[f].trim();
+                container.innerHTML = newVal === '' ? '-' : newVal;
+            });
+
+        } catch (err) {
+            showToast(`Update failed: ${recordId}`, 'error');
+            console.error("Update failed:", err);
+            alert(`Error: ${err.message}`);
+            btn.innerText = "Save";
+            btn.disabled = false;
+        }
+    }
 }
 
 // --- Helper Functions ---

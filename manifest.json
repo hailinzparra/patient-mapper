@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Patient Mapper",
-    "version": "2.8",
+    "version": "2.9",
     "description": "Maps hospital patients.",
     "permissions": ["tabs", "scripting", "activeTab", "storage"],
     "host_permissions": [
