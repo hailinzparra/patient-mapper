@@ -6,6 +6,8 @@
 
 const api = typeof browser !== "undefined" ? browser : chrome;
 
+const BASE_URL = 'https://api.rsudsoediranms.com/webservice';
+
 let tabCounter = 0;
 let activeTabId = 'home';
 let sidebarCollapsed = false;
@@ -992,7 +994,7 @@ async function handleFetch(serializedDocs, serializedRooms) {
                 "Pendaftaran": true, "Referensi": true, "RuangKamarTidur": true, "DPJP": true, "Mutasi": true
             });
 
-            let url = `https://api.rsudsoediranms.com/webservice/pendaftaran/kunjungan?_dc=${dc}&STATUS=${status}&REFERENSI=${encodeURIComponent(referensi)}`;
+            let url = `${BASE_URL}/pendaftaran/kunjungan?_dc=${dc}&STATUS=${status}&REFERENSI=${encodeURIComponent(referensi)}`;
             if (admDate) url += `&MASUK=${admDate}`;
             if (q.doc) url += `&DPJP=${q.doc}`;
             if (q.room) url += `&RUANGAN=${q.room}`;
@@ -1034,13 +1036,47 @@ async function handleFetch(serializedDocs, serializedRooms) {
 
 async function checkAuthStatus(signal) {
     const dc = Date.now();
-    const url = `https://api.rsudsoediranms.com/webservice/authentication/isAuthenticate?_dc=${dc}`;
+    const url = `${BASE_URL}/authentication/isAuthenticate?_dc=${dc}`;
     return await apiRequest(url, { signal });
+}
+
+async function fetchLatestPatientData(mrn, no, signal) {
+    const dc = Date.now();
+    const statusParams = encodeURIComponent('[1,2]');
+    const url = `${BASE_URL}/pendaftaran/kunjungan?_dc=${dc}&NORM=${mrn}&STATUS=${statusParams}&start=0&limit=10&page=1`;
+
+    try {
+        const result = await apiRequest(url, { signal });
+        if (result && result.data && result.data.length > 0) {
+            // check if the visit 'no' still exists in the latest 10 data and get that value,
+            // if not exists then the patient is considered discharged from that room
+            const myVisit = result.data.find(item => item.NOMOR === no);
+            if (myVisit && myVisit.NOMOR === no) {
+                const status = cleanField(myVisit.STATUS);
+                const admDate = myVisit.MASUK;
+                const disDate = myVisit.KELUAR;
+                return {
+                    status,
+                    admDate,
+                    disDate,
+                }
+            }
+            else {
+                return {
+                    status: '2', // consider as discharged for current room
+                }
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error(`Error fetching data for MRN ${mrn}:`, error);
+        throw error;
+    }
 }
 
 async function fetchCPPTData(visitId, signal) {
     const dc = Date.now();
-    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt?_dc=${dc}&KUNJUNGAN=${visitId}&STATUS=1&page=1&start=0&limit=25`;
+    const url = `${BASE_URL}/medicalrecord/cppt?_dc=${dc}&KUNJUNGAN=${visitId}&STATUS=1&page=1&start=0&limit=25`;
     const result = await apiRequest(url, { signal });
     return result.data || []; // Ensure the UI gets an array to map over
 }
@@ -1061,7 +1097,7 @@ async function updateCPPTRecord(data) {
     };
 
     const dc = Date.now();
-    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt/${id}?_dc=${dc}`;
+    const url = `${BASE_URL}/medicalrecord/cppt/${id}?_dc=${dc}`;
 
     return await apiRequest(url, {
         method: 'PUT',
@@ -1079,7 +1115,7 @@ async function removeCPPTRecord(id) {
     };
 
     const dc = Date.now();
-    const url = `https://api.rsudsoediranms.com/webservice/medicalrecord/cppt/${id}?_dc=${dc}`;
+    const url = `${BASE_URL}/medicalrecord/cppt/${id}?_dc=${dc}`;
 
     return await apiRequest(url, {
         method: 'PUT',
@@ -1209,6 +1245,15 @@ async function loadPatientsView() {
     }
 }
 
+function getStatusStyles(status) {
+    const statusMap = {
+        '1': { label: 'Active', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', dot: 'bg-emerald-500' },
+        '2': { label: 'Finished', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', dot: 'bg-slate-400' },
+        '3': { label: 'Deceased', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', dot: 'bg-red-500' }
+    };
+    return statusMap[status] || statusMap['1'];
+}
+
 /**
  * Renders the Room and Patient cards.
  */
@@ -1216,11 +1261,6 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
     const div = document.createElement('div');
     const displayName = roomName.replace(/^Bangsal\s+/i, '');
     const hasPatients = patients.length > 0;
-    const statusMap = {
-        '1': { label: 'Active', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', dot: 'bg-emerald-500' },
-        '2': { label: 'Finished', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', dot: 'bg-slate-400' },
-        '3': { label: 'Deceased', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', dot: 'bg-red-500' }
-    };
 
     div.className = "room-group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-2 self-start";
     div.dataset.roomId = roomId;
@@ -1244,7 +1284,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                 </div>
             </div>
             <div class="flex items-center gap-1">
-                <button class="copy-room-data p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all mr-1" title="Copy All Room Data">
+                <button class="copy-room-data p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all mr-1">
                     <svg class="w-4 h-4 text-slate-400 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
                     </svg>
@@ -1260,7 +1300,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
             ${patients.length === 0 ?
             `<p class="empty-placeholder text-[10px] text-slate-300 italic text-center py-4 bg-slate-50/30 rounded-lg border border-dashed border-slate-100">Empty Room</p>` :
             patients.map(p => {
-                const s = statusMap[p.status] || statusMap['1'];
+                const s = getStatusStyles(p.status);
                 const losData = getPatientLOS(p.admDate, p.disDate);
                 const freshStyles = losData.isFresh ? 'bg-amber-50 border-amber-200' : 'bg-slate-100 border-slate-200';
                 return `
@@ -1287,15 +1327,15 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                             </div>
                             <!-- Action Buttons -->
                             <div class="flex items-center gap-1">
-                                <button class="create-record-btn p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all" title="Create New Record">
+                                <button class="create-record-btn p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
                                     </svg>
                                 </button>
-                                <button class="cppt-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all" title="View CPPT Records">
+                                <button class="cppt-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                 </button>
-                                <button class="delete-p-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all" title="Remove Patient">
+                                <button class="delete-p-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 </button>
                                 <div class="flex flex-col gap-0.5 ml-1">
@@ -1306,24 +1346,38 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                         </div>
                         <div class="flex items-center justify-between mt-1">
                             <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                                <div class="flex items-center ${s.bg} border ${s.border} px-2 py-0.5 rounded-full">
-                                    <div class="w-1.5 h-1.5 rounded-full ${s.dot} mr-1.5 ${p.status === '1' ? 'animate-pulse' : ''}"></div>
-                                    <span class="text-[8px] font-black tracking-tight ${s.color}">${s.label}</span>
+                                <div class="flex items-center ${s.bg} border ${s.border} px-2 py-0.5 rounded-full js-status-pill">
+                                    <div class="w-1.5 h-1.5 rounded-full ${s.dot} mr-1.5 js-status-dot ${p.status === '1' ? 'animate-pulse' : ''}"></div>
+                                    <span class="text-[8px] font-black tracking-tight ${s.color} js-status-label">${s.label}</span>
                                 </div>
                                 <div class="flex items-center bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
                                     <span class="text-[8px] font-black text-blue-400 mr-1 tracking-tighter">In:</span>
-                                    <span class="text-[8px] font-bold text-blue-700 whitespace-nowrap">${formatDateWithDay(p.admDate || '-')}</span>
+                                    <span class="text-[8px] font-bold text-blue-700 whitespace-nowrap js-adm-date">${formatDateWithDay(p.admDate || '-')}</span>
                                 </div>
                                 <div class="flex items-center bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full">
                                     <span class="text-[8px] font-black text-slate-400 mr-1 tracking-tighter">Out:</span>
-                                    <span class="text-[8px] font-bold text-slate-600 whitespace-nowrap">${formatDateWithDay(p.disDate || '-')}</span>
+                                    <span class="text-[8px] font-bold text-slate-600 whitespace-nowrap js-dis-date">${formatDateWithDay(p.disDate || '-')}</span>
                                 </div>
                             </div>
-                            <button class="refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group" title="Refresh Patient Status">
+                            <button class="refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group">
                                 <svg class="w-2.5 h-2.5 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                             </button>
+                        </div>
+                        <div class="mt-1 pt-1.5 border-t border-slate-50 flex items-center justify-between">
+                            <div class="flex items-center gap-1.5 text-slate-400">
+                                <svg class="w-2 h-2 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div class="flex items-baseline gap-1">
+                                    <span class="text-[6.5px] font-bold uppercase tracking-wider">Last Sync</span>
+                                    <span class="text-[8px] font-mono font-medium leading-none js-last-sync">
+                                        ${formatFullTimestamp(p.lastUpdated)}
+                                    </span>
+                                </div>
+                            </div>
+                            ${(Date.now() - p.lastUpdated > 24 * 60 * 60 * 1000) ? '<span class="flex h-1.5 w-1.5 rounded-full bg-slate-200"></span>' : ''}
                         </div>
                     </div>
 
@@ -1510,17 +1564,16 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
             refreshBtn.classList.add('text-blue-600');
 
             try {
-                // 2. The API Call (Placeholder for your future API)
-                // const response = await refreshPatientStatusApi(pId);
+                showToast(`Refreshing ${patientData.fullName}...`, 'info');
+                const refreshedData = await fetchLatestPatientData(patientData.mrn, patientData.no);
+                const newPatientData = {
+                    ...patientData,
+                    ...refreshedData,
+                    lastUpdated: Date.now(),
+                };
 
-                // Simulating API delay for now
-                showToast('Work in progress...', 'info');
-                await new Promise(resolve => setTimeout(resolve, 1500));
-
-                // 3. Success Handling
-                // Update your patientData object and DOM here (status badge, out date, etc.)
-                // updatePatientUI(wrapper, response.data); 
-                // showToast(`Refreshed data for ${patientData.fullName}`, 'success');
+                updatePatientUI(wrapper, newPatientData);
+                addPatientToStorage(newPatientData, patientData.roomId, patientData.lastUpdated);
             } catch (err) {
                 console.error("Refresh failed:", err);
                 showToast(`Failed to refresh ${patientData.fullName}`, 'error');
@@ -1546,9 +1599,38 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
     return div;
 }
 
-/**
- * Toggles a collapsible CPPT area inside the patient card instead of a full modal.
- */
+function updatePatientUI(wrapper, newInfo) {
+    if (!wrapper || !newInfo) return;
+
+    const s = getStatusStyles(newInfo.status);
+    const pill = wrapper.querySelector('.js-status-pill');
+    const label = wrapper.querySelector('.js-status-label');
+    const dot = wrapper.querySelector('.js-status-dot');
+
+    if (pill) pill.className = `flex items-center ${s.bg} border ${s.border} px-2 py-0.5 rounded-full js-status-pill`;
+    if (label) {
+        label.textContent = s.label;
+        label.className = `text-[8px] font-black tracking-tight ${s.color} js-status-label`;
+    }
+    if (dot) {
+        dot.className = `w-1.5 h-1.5 rounded-full ${s.dot} mr-1.5 js-status-dot ${newInfo.status === '1' ? 'animate-pulse' : ''}`;
+    }
+
+    const admEl = wrapper.querySelector('.js-adm-date');
+    const disEl = wrapper.querySelector('.js-dis-date');
+    if (admEl) admEl.textContent = formatDateWithDay(newInfo.admDate || '-');
+    if (disEl) disEl.textContent = formatDateWithDay(newInfo.disDate || '-');
+
+    const syncEl = wrapper.querySelector('.js-last-sync');
+    if (syncEl) syncEl.textContent = formatFullTimestamp(newInfo.lastUpdated || Date.now());
+
+    const staleIndicator = wrapper.querySelector('.js-stale-dot');
+    if (staleIndicator) {
+        const isStale = (Date.now() - newInfo.lastUpdated > 24 * 60 * 60 * 1000);
+        staleIndicator.classList.toggle('hidden', !isStale);
+    }
+}
+
 async function toggleCPPTInline(wrapper, p) {
     const container = wrapper.querySelector('.cppt-container');
     const body = container.querySelector('.cppt-body');
@@ -1732,45 +1814,37 @@ function deletePatientFromStorage(patientId, patientName) {
     });
 }
 
-function addPatientToStorage(patientData, roomId) {
+function addPatientToStorage(patientData, roomId, lastUpdated = Date.now()) {
+    if (typeof patientData === 'object' && patientData !== null) {
+        patientData.lastUpdated = lastUpdated;
+    }
     api.storage.local.get(['fetchedPatients', 'customOrders'], (result) => {
         let patients = result.fetchedPatients || [];
         let customOrders = result.customOrders || { rooms: {}, patients: {} };
-
-        // Find index to see if patient already exists
         const existingIndex = patients.findIndex(p => p.no === patientData.no);
         const isUpdate = existingIndex !== -1;
 
-        // Ensure nested objects exist
-        if (!patientData.REFERENSI) patientData.REFERENSI = {};
-        if (!patientData.REFERENSI.RUANGAN) patientData.REFERENSI.RUANGAN = {};
-        patientData.REFERENSI.RUANGAN.ID = roomId;
-
         if (isUpdate) {
-            // Replace existing patient data
-            patients[existingIndex] = patientData;
+            patients[existingIndex] = { ...patients[existingIndex], ...patientData };
         } else {
-            // Add new patient
             patients.push(patientData);
             updateSidebarTotalCount(1);
         }
 
-        // Handle custom ordering
         if (!customOrders.patients) customOrders.patients = {};
         if (!customOrders.patients[roomId]) customOrders.patients[roomId] = [];
 
-        // Move to the end of the list (re-add effect)
-        customOrders.patients[roomId] = customOrders.patients[roomId].filter(id => id !== patientData.no);
-        customOrders.patients[roomId].push(patientData.no);
+        if (!customOrders.patients[roomId].includes(patientData.no)) {
+            customOrders.patients[roomId].push(patientData.no);
+        }
 
         api.storage.local.set({
             fetchedPatients: patients,
             customOrders: customOrders
         }, () => {
-            // Dynamic message based on whether it was an update or new entry
             const message = isUpdate
-                ? `Patient ${patientData.fullName} updated!`
-                : `Patient ${patientData.fullName} added!`;
+                ? `Updated: ${patientData.fullName || 'Patient data'}`
+                : `Added: ${patientData.fullName}`;
 
             showToast(message, 'success');
         });
@@ -1780,14 +1854,13 @@ function addPatientToStorage(patientData, roomId) {
 function clearAllStorage() {
     if (confirm("Are you sure you want to clear all data? This will reset your custom sorting and clear cached patients.")) {
         api.storage.local.clear(() => {
-            window.location.reload();
+            switchView('patients');
         });
     }
 }
 
 async function handleSaveData() {
     try {
-        // 1. Get current data from storage
         api.storage.local.get(['fetchedPatients', 'customOrders'], (data) => {
             const exportData = {
                 fetchedPatients: data.fetchedPatients || [],
@@ -1796,16 +1869,18 @@ async function handleSaveData() {
                 version: "1.0"
             };
 
-            // 2. Create a blob and a download link
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const blob = new Blob([spondylosis(JSON.stringify(exportData))], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
+
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-GB').replace(/\//g, '-');
+            const timeStr = now.toLocaleTimeString('en-GB').replace(/:/g, '-');
+            const doctorName = window.userData?.NAME?.replace(/\s+/g, '_').toLowerCase() || 'backup';
+
             const link = document.createElement('a');
-            const doctorName = window.userData?.NAME ? window.userData.NAME.replace(/\s+/g, '_').toLowerCase() : 'backup';
-
             link.href = url;
-            link.download = `${doctorName}_patients_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`;
+            link.download = `${doctorName}_patients_${dateStr}_${timeStr}.txt`;
 
-            // 3. Trigger download and cleanup
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -1820,10 +1895,9 @@ async function handleSaveData() {
 }
 
 function handleLoadData() {
-    // 1. Create a hidden file input
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.json';
+    fileInput.accept = '.txt';
 
     fileInput.onchange = (e) => {
         const file = e.target.files[0];
@@ -1832,21 +1906,17 @@ function handleLoadData() {
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
-                const importedData = JSON.parse(event.target.result);
+                const importedData = JSON.parse(spondylitis(event.target.result));
 
-                // Validation: Ensure the JSON has the keys we expect
                 if (!importedData.fetchedPatients || !importedData.customOrders) {
                     throw new Error("Invalid backup file format");
                 }
-
-                // 2. Save to local storage
                 api.storage.local.set({
                     fetchedPatients: importedData.fetchedPatients,
                     customOrders: importedData.customOrders
                 }, () => {
                     showToast("Data loaded successfully! Refreshing...", "success");
-                    // Optional: Reload the page to reflect new data immediately
-                    setTimeout(() => window.location.reload(), 1500);
+                    switchView('patients');
                 });
 
             } catch (err) {
@@ -1886,7 +1956,7 @@ function syncSidebarCountFromStorage() {
 }
 
 function showToast(message, type = 'success') {
-    const TOAST_GAP = 12;
+    const TOAST_GAP = 8; // Reduced gap
 
     const existingToasts = document.querySelectorAll('.extension-toast');
     existingToasts.forEach((existingToast) => {
@@ -1896,32 +1966,32 @@ function showToast(message, type = 'success') {
 
     const toastConfigs = {
         success: {
-            classes: "bg-emerald-50 border-emerald-200 text-emerald-700",
-            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>'
+            classes: "bg-emerald-50/90 border-emerald-200 text-emerald-800",
+            icon: '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>'
         },
         error: {
-            classes: "bg-red-50 border-red-200 text-red-700",
-            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>'
+            classes: "bg-red-50/90 border-red-200 text-red-800",
+            icon: '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>'
         },
         warning: {
-            classes: "bg-amber-50 border-amber-200 text-amber-700",
-            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>'
+            classes: "bg-amber-50/90 border-amber-200 text-amber-800",
+            icon: '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>'
         },
         info: {
-            classes: "bg-blue-50 border-blue-200 text-blue-700",
-            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>'
+            classes: "bg-blue-50/90 border-blue-200 text-blue-800",
+            icon: '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>'
         }
     };
 
     const config = toastConfigs[type] || toastConfigs.info;
 
     const toast = document.createElement('div');
-    toast.className = `extension-toast fixed right-5 z-[9999] px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold flex items-center gap-3 transition-all duration-500 ease-out ${config.classes}`;
+    toast.className = `extension-toast fixed left-5 z-[9999] px-3 py-1.5 rounded-lg shadow-lg border text-[11px] font-medium flex items-center gap-2 transition-all duration-500 ease-out pointer-events-none backdrop-blur-sm ${config.classes}`;
 
     toast.style.bottom = '20px';
-    toast.style.transform = 'translateX(100%)';
+    toast.style.transform = 'translateX(-100%)';
     toast.style.opacity = '0';
-    toast.innerHTML = `${config.icon} <span>${message}</span>`;
+    toast.innerHTML = `${config.icon} <span class="leading-tight">${message}</span>`;
 
     document.body.appendChild(toast);
 
@@ -1932,7 +2002,7 @@ function showToast(message, type = 'success') {
 
     setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(20px)';
+        toast.style.transform = 'translateX(-20px)';
         setTimeout(() => toast.remove(), 500);
     }, 3000);
 }
@@ -2668,7 +2738,10 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
         return `
             <div class="cppt-card bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col mb-4" data-record-id="${r.ID}">
                 <div class="px-4 py-1.5 flex justify-between items-center ${badgeColor}">
-                    <span class="text-white text-[9px] font-black uppercase tracking-tighter">${r.REFERENSI?.JENIS?.DESKRIPSI || 'Staff'}</span>
+                    <div class="flex flex-col gap-0">
+                        <span class="text-white text-[8px] font-black uppercase tracking-tighter">${r.REFERENSI?.JENIS?.DESKRIPSI || 'Staff'}</span>
+                        <span class="text-white text-[7px] font-mono">ID: ${r.ID}</span>
+                    </div>
                     <div class="flex gap-1">
                         <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" data-soap="${encodeURIComponent(soapText)}">Copy</button>
                         ${canEdit ? `
@@ -2711,21 +2784,15 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
             const id = e.currentTarget.dataset.id;
             const deleteBtn = e.currentTarget;
 
-            // 1. Confirmation
-            if (!confirm(`Are you sure you want to delete CPPT ${id}?`)) return;
+            if (!confirm(`Delete CPPT ${id}?`)) return;
 
             try {
-                // 2. Visual feedback
                 deleteBtn.innerText = "...";
                 deleteBtn.disabled = true;
 
-                // 3. Call API
                 await removeCPPTRecord(id);
-
                 showToast(`Record ${id} deleted!`, 'success');
 
-                // 4. Find the wrapper and re-toggle
-                // We look up for the .patient-wrapper and find its .cppt-btn
                 const wrapper = deleteBtn.closest('.patient-wrapper');
                 if (wrapper) {
                     const refreshBtn = wrapper.querySelector('.cppt-btn');
@@ -2889,4 +2956,41 @@ function formatDateWithDay(dateStr) {
 
     // return `${dName}, ${dNum} ${mName} '${yShort}`;
     return `${dName}, ${dNum} ${mName}`;
+}
+
+function formatFullTimestamp(ms) {
+    if (!ms) return '-';
+    const d = new Date(ms);
+    const date = d.toLocaleDateString('en-GB');
+    const time = d.toLocaleTimeString('en-GB', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    const millis = String(d.getMilliseconds()).padStart(3, '0');
+
+    return `${date} ${time}.${millis}`;
+}
+
+const get_pain = () => {
+    const _K = '2d3e5f6g9h0i1j4k7l2m5n8o1p4q7r0s3t6u9v2w5x8y1z4a7b0c3d6e9f2g5h8i';
+    return _K.split('').reverse().map(c => String.fromCharCode(c.charCodeAt(0) - 1)).join('').substring(0, 64);
+};
+
+function spondylosis(wear) {
+    const back = get_pain();
+    const charCodes = Array.from(wear).map((char, i) =>
+        char.charCodeAt(0) ^ back.charCodeAt(i % back.length)
+    );
+    return btoa(String.fromCharCode(...charCodes));
+}
+
+function spondylitis(tear) {
+    const back = get_pain();
+    const text = atob(tear);
+    const charCodes = Array.from(text).map((char, i) =>
+        char.charCodeAt(0) ^ back.charCodeAt(i % back.length)
+    );
+    return String.fromCharCode(...charCodes);
 }
