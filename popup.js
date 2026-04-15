@@ -687,39 +687,51 @@ function setupForm() {
 
 // --- Authentication & Fetch Flow ---
 async function getSession(forceRefresh = false) {
-    if (cachedSession && !forceRefresh) return cachedSession;
+    try {
+        if (cachedSession && !forceRefresh) return cachedSession;
 
-    if (typeof api === 'undefined' || !api.tabs) {
-        throw new Error("Extension context not found.");
+        if (!api || !api.tabs || !api.scripting) {
+            throw new Error("Extension APIs not available.");
+        }
+
+        const allTabs = await api.tabs.query({ url: "*://*.rsudsoediranms.com/*" });
+        const targetTab = allTabs[0];
+
+        if (!targetTab || !targetTab.id) {
+            throw new Error("RSUD Portal not found. Please open the website in another tab.");
+        }
+
+        const injectionResults = await api.scripting.executeScript({
+            target: { tabId: targetTab.id },
+            func: () => {
+                return {
+                    token: localStorage.getItem('_lapp-access_token'),
+                    isEncrypted: localStorage.getItem('_lapp-https_encrypt') === 'true'
+                };
+            }
+        });
+
+        const result = injectionResults && injectionResults[0] ? injectionResults[0].result : null;
+
+        if (!result || !result.token) {
+            throw new Error("Token not found. Please log in first.");
+        }
+
+        try {
+            cachedSession = {
+                rawToken: result.token, // Original Base64 token used for decryption key
+                decodedToken: atob(result.token), // Decoded token used for Bearer Header
+                isEncryptionEnabled: result.isEncrypted
+            };
+        } catch (e) {
+            throw new Error("Invalid token format.");
+        }
+
+        return cachedSession;
+    } catch (error) {
+        console.error("Session Error:", error);
+        throw error;
     }
-
-    const allTabs = await api.tabs.query({ url: "*://*.rsudsoediranms.com/*" });
-    const targetTab = allTabs[0];
-
-    if (!targetTab) {
-        throw new Error("RSUD Portal not found. Please open the website in another tab.");
-    }
-
-    const injectionResults = await api.scripting.executeScript({
-        target: { tabId: targetTab.id },
-        func: () => ({
-            token: localStorage.getItem('_lapp-access_token'),
-            isEncrypted: localStorage.getItem('_lapp-https_encrypt') === 'true'
-        })
-    });
-
-    const result = injectionResults[0]?.result;
-    if (!result?.token) {
-        throw new Error("Token not found. Please log in first.");
-    }
-
-    cachedSession = {
-        rawToken: result.token, // Original Base64 token used for decryption key
-        decodedToken: atob(result.token), // Decoded token used for Bearer Header
-        isEncryptionEnabled: result.isEncrypted
-    };
-
-    return cachedSession;
 }
 
 /**
@@ -727,28 +739,58 @@ async function getSession(forceRefresh = false) {
  * Returns the full API response object for better control.
  */
 async function apiRequest(url, options = {}) {
-    const session = await getSession();
+    try {
+        const session = await getSession();
 
-    const headers = {
-        'Authorization': `Bearer ${session.decodedToken}`,
-        'Accept': 'application/json',
-        ...options.headers
-    };
+        const headers = {
+            'Authorization': `Bearer ${session.decodedToken}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
 
-    const response = await fetch(url, { ...options, headers });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        let response;
+        try {
+            response = await fetch(url, { ...options, headers });
+        } catch (fetchError) {
+            throw new Error(`Connection failed: Please check your internet or site permissions.`);
+        }
 
-    const result = await response.json();
+        if (!response.ok) {
+            let errorMsg = `HTTP Error ${response.status}`;
+            try {
+                const errorData = await response.json();
+                errorMsg = errorData.message || errorData.detail || errorMsg;
+            } catch { }
+            throw new Error(errorMsg);
+        }
 
-    if (!result.success) {
-        throw new Error(result.detail || "API Error");
+        let result;
+        try {
+            result = await response.json();
+        } catch (jsonError) {
+            throw new Error("The server returned an invalid data format.");
+        }
+
+        if (result.success !== true) {
+            throw new Error(result.message || result.detail || "The API returned an unsuccessful status.");
+        }
+
+        if (session.isEncryptionEnabled && typeof result.data === 'string' && result.data.length > 0) {
+            try {
+                result.data = await decryptData(result.data, session.rawToken);
+            } catch (decryptError) {
+                console.error("Decryption failed:", decryptError);
+                throw new Error("Security Error: Could not decrypt the received data.");
+            }
+        }
+
+        return result;
+
+    } catch (error) {
+        console.error(`[API Request Failure] URL: ${url} | Error: ${error.message}`);
+        throw error;
     }
-
-    if (session.isEncryptionEnabled && typeof result.data === 'string' && result.data.length > 0) {
-        result.data = await decryptData(result.data, session.rawToken);
-    }
-
-    return result;
 }
 
 // --- Decryption Utilities ---
