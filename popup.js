@@ -1040,6 +1040,24 @@ async function checkAuthStatus(signal) {
     return await apiRequest(url, { signal });
 }
 
+async function getDoctorByNIP(nip, signal = null) {
+    const dc = Date.now();
+    // JENIS=1 usually filters for Doctors specifically in this API
+    const url = `${BASE_URL}/general/tenagamedis?_dc=${dc}&JENIS=1&NIP=${nip}&page=1&start=0&limit=25`;
+
+    try {
+        const result = await apiRequest(url, { method: 'GET', signal });
+        if (result && result.data && result.data.length > 0) {
+            return result.data[0];
+        }
+        console.warn(`No doctor found with NIP: ${nip}`);
+        return null;
+    } catch (err) {
+        console.error("Failed to fetch Doctor ID from NIP:", err);
+        throw err;
+    }
+}
+
 async function fetchLatestPatientData(mrn, no, signal) {
     const dc = Date.now();
     const statusParams = encodeURIComponent('[1,2]');
@@ -1079,6 +1097,57 @@ async function fetchCPPTData(visitId, signal) {
     const url = `${BASE_URL}/medicalrecord/cppt?_dc=${dc}&KUNJUNGAN=${visitId}&STATUS=1&page=1&start=0&limit=25`;
     const result = await apiRequest(url, { signal });
     return result.data || []; // Ensure the UI gets an array to map over
+}
+
+async function saveNewRecord(data, visitId, doctorId) {
+    if (visitId === null || visitId === undefined) {
+        throw new Error("Visit ID is required to save a new record.");
+    }
+    if (doctorId === null || doctorId === undefined) {
+        throw new Error("Doctor ID is required to save a new record.");
+    }
+
+    // Generate cycling ID: (current seconds % 100) + 1 (yields 1-100)
+    const cyclingNum = (Math.floor(Date.now() / 1000) % 100) + 1;
+    const modelId = `rekammedis.cppt.Model-${cyclingNum}`;
+
+    const timeValue = data.tanggal.split(' ')[1] || "00:00:00";
+
+    const payload = {
+        "STATUS": 1,
+        "JENIS": 1,
+        "SUBYEKTIF": data.subyektif,
+        "OBYEKTIF": data.obyektif,
+        "ASSESMENT": data.assesment,
+        "PLANNING": data.planning,
+        "INSTRUKSI": data.instruksi,
+        "KUNJUNGAN": visitId,
+        "TANGGAL": data.tanggal,
+        "WAKTU": timeValue,
+        "ID": modelId,
+        "TENAGA_MEDIS": parseInt(doctorId),
+        "TULIS": "",
+        "RENCANA_PULANG": 0,
+        "STATUS_TBAK_SBAR": 0,
+        "STATUS_TBAK": 0,
+        "STATUS_SBAR": 0,
+        "BACA": 0,
+        "KONFIRMASI": 0,
+        "TANGGAL_RENCANA_PULANG": null,
+        "SUB_DEVISI": 0,
+        "DOKTER_TBAK_OR_SBAR": null,
+        "OLEH": 0,
+        "SELESAI_RAWAT_BERSAMA": "0"
+    };
+
+    const dc = Date.now();
+    const url = `${BASE_URL}/medicalrecord/cppt?_dc=${dc}`;
+
+    return await apiRequest(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
 }
 
 async function updateCPPTRecord(data) {
@@ -1146,6 +1215,17 @@ async function loadPatientsView() {
 
         // 1. Store globally for filters & other functions
         window.userData = authResponse.data;
+
+        const NIP = window.userData.NIP;
+        const doctor = await getDoctorByNIP(NIP);
+
+        if (!doctor) {
+            throw new Error(`Doctor with NIP ${NIP} not found.`);
+        }
+
+        window.userData.doctorId = doctor.ID;
+        window.userData.doctorName = doctor.NAMA;
+
         const userData = window.userData;
         const patients = storage.fetchedPatients || [];
         const customOrders = storage.customOrders || { rooms: {}, patients: {} };
@@ -1159,7 +1239,7 @@ async function loadPatientsView() {
             <div class="flex items-center gap-2">
                 <span>@${userData.LGN}</span>
                 <span id="logged-doctor-id" data-id="${userData.ID}" class="px-1.5 py-0 bg-slate-100 text-slate-400 text-[8px] font-black rounded uppercase tracking-tighter border border-slate-200">
-                    ID: ${userData.ID}
+                    UID: ${userData.ID}, ID: ${userData.doctorId}
                 </span>
             </div>
         `;
@@ -1448,10 +1528,10 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
             output += `LOS: ${losText}\n\n`;
 
             // 5. Get SOAP data
-            const firstSoapBtn = patient.querySelector('.cppt-copy-btn');
-            if (firstSoapBtn && firstSoapBtn.dataset.soap) {
-                const soapContent = decodeURIComponent(firstSoapBtn.dataset.soap);
-                output += soapContent + "\n";
+            const firstCard = patient.querySelector('.cppt-card');
+            if (firstCard) {
+                const data = getSoapDataFromCard(firstCard);
+                output += formatSoapForClipboard(data) + "\n";
             } else {
                 output += "No CPPT records found.\n";
             }
@@ -1492,6 +1572,11 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
     div.querySelectorAll('.patient-wrapper').forEach(wrapper => {
         const pId = wrapper.dataset.id;
         const patientData = patients.find(p => p.no === pId);
+
+        // Create new CPPT
+        wrapper.querySelector('.create-record-btn').addEventListener('click', () => {
+            openSOAPModal(patientData.no);
+        });
 
         // Delete Patient
         wrapper.querySelector('.delete-p-btn').addEventListener('click', () => {
@@ -1660,8 +1745,9 @@ async function toggleCPPTInline(wrapper, p) {
         </div>
     `;
 
+    const visitId = p.no;
     try {
-        const fullData = await fetchCPPTData(p.no);
+        const fullData = await fetchCPPTData(visitId);
         if (!fullData || fullData.length === 0) {
             body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No records found.</p>`;
             return;
@@ -1673,11 +1759,11 @@ async function toggleCPPTInline(wrapper, p) {
         }
 
         const applyFilter = () => {
-            const doctorId = window.userData?.ID || "";
+            const userId = window.userData?.ID || "";
             let filtered = fullData.filter(r => r.TANGGAL.startsWith(selectedDate));
 
             if (currentFilter === 'MINE') {
-                filtered = filtered.filter(r => String(r.OLEH) === String(doctorId));
+                filtered = filtered.filter(r => String(r.OLEH) === String(userId));
             } else if (currentFilter === 'DOCTORS') {
                 filtered = filtered.filter(r => String(r.JENIS) === "1");
             }
@@ -1700,7 +1786,7 @@ async function toggleCPPTInline(wrapper, p) {
             if (filtered.length === 0) {
                 body.innerHTML = `<p class="text-center text-slate-400 text-[10px] py-10 italic">No records found.</p>`;
             } else {
-                renderCPPTData(filtered, body, doctorId);
+                renderCPPTData(visitId, filtered, body, userId);
             }
         };
 
@@ -2557,7 +2643,7 @@ function openPatientModal(p) {
     };
     modal.querySelector("#modal-cppt-btn").onclick = () => {
         modal.remove();
-        openCPPTModal(p);
+        // openCPPTModal(p);
     };
 }
 
@@ -2570,151 +2656,13 @@ function renderField(label, value, valueClass = "font-semibold text-slate-800") 
         </section>`;
 }
 
-// --- CPPT Modal ---
-async function openCPPTModal(p) {
-    const controller = new AbortController();
-    const visitId = p.no;
-
-    const modal = document.createElement('div');
-    modal.className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[10000] p-4";
-
-    modal.innerHTML = `
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-            <div class="px-5 py-4 border-b border-slate-200 bg-white">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="leading-tight">
-                        <h3 class="font-black text-slate-900 text-sm uppercase">${p.fullName}</h3>
-                        <p class="text-[10px] text-slate-500 font-mono">${p.mrn} • ${p.age} • ${p.no}</p>
-                    </div>
-                    <button id="cppt-close-x" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
-                </div>
-                <div class="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-1 rounded inline-block">
-                    ${p.roomName} / ${p.bedName} — ${p.diagnosis}
-                </div>
-            </div>
-
-            <div class="sticky top-0 z-10 bg-white border-b border-slate-100">
-                <div class="px-5 py-2 bg-slate-50 flex items-center justify-between border-b border-slate-200/50">
-                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter</span>
-                    <div class="flex bg-slate-200 p-0.5 rounded-md">
-                        <button id="filter-all" class="px-3 py-1 text-[9px] font-bold rounded shadow-sm bg-white text-slate-800 transition-all">ALL</button>
-                        <button id="filter-docs" class="px-3 py-1 text-[9px] font-bold rounded text-slate-500 transition-all">DOCTORS</button>
-                    </div>
-                </div>
-                
-                <div id="date-pagination" class="px-3 py-2 flex gap-2 overflow-x-auto no-scrollbar bg-white">
-                    </div>
-            </div>
-            
-            <div id="cppt-content" class="p-4 overflow-y-auto space-y-4 bg-slate-100 flex-grow min-h-[300px]">
-                <div class="flex flex-col items-center justify-center py-20 text-slate-400">
-                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
-                    <p class="text-[10px] font-bold uppercase tracking-widest">Accessing Records...</p>
-                </div>
-            </div>
-
-            <div class="px-5 py-3 bg-white border-t border-slate-100">
-                <button id="cppt-back-btn" class="w-full px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700">Close</button>
-            </div>
-        </div>`;
-
-    document.body.appendChild(modal);
-
-    let fullData = [];
-    let activeDate = null;
-    let showOnlyDocs = false;
-
-    const close = () => { controller.abort(); modal.remove(); };
-    modal.querySelector("#cppt-close-x").onclick = close;
-    modal.querySelector("#cppt-back-btn").onclick = close;
-
-    const refreshUI = () => {
-        const filteredByProfession = showOnlyDocs
-            ? fullData.filter(r => r.REFERENSI?.JENIS?.ID === "1")
-            : fullData;
-
-        const filteredByDate = filteredByProfession.filter(r => r.TANGGAL.startsWith(activeDate));
-
-        renderPagination(fullData, activeDate, (newDate) => {
-            activeDate = newDate;
-            refreshUI();
-        });
-
-        renderCPPTData(filteredByDate, modal.querySelector("#cppt-content"), null, showOnlyDocs);
-    };
-
-    // Filter Listeners
-    modal.querySelector("#filter-all").onclick = () => {
-        showOnlyDocs = false;
-        modal.querySelector("#filter-all").className = "px-3 py-1 text-[9px] font-bold rounded shadow-sm bg-white text-slate-800";
-        modal.querySelector("#filter-docs").className = "px-3 py-1 text-[9px] font-bold rounded text-slate-500";
-        refreshUI();
-    };
-    modal.querySelector("#filter-docs").onclick = () => {
-        showOnlyDocs = true;
-        modal.querySelector("#filter-docs").className = "px-3 py-1 text-[9px] font-bold rounded shadow-sm bg-white text-blue-600";
-        modal.querySelector("#filter-all").className = "px-3 py-1 text-[9px] font-bold rounded text-slate-500";
-        refreshUI();
-    };
-
-    try {
-        fullData = await fetchCPPTData(visitId, controller.signal);
-        if (fullData.length > 0) {
-            // Sort descending so index 0 is the newest date
-            const uniqueDates = [...new Set(fullData.map(r => r.TANGGAL.split(' ')[0]))].sort().reverse();
-            activeDate = uniqueDates[0]; // Set default to the newest date
-        }
-        refreshUI();
-    } catch (err) {
-        if (err.name === 'AbortError') return;
-        modal.querySelector("#cppt-content").innerHTML = `<p class="text-center text-red-500 text-[10px] font-bold py-10">${err.message}</p>`;
-    }
-}
-
-function renderPagination(fullData, activeDate, onDateSelect) {
-    const nav = document.getElementById("date-pagination");
-    const uniqueDates = [...new Set(fullData.map(r => r.TANGGAL.split(' ')[0]))].sort().reverse();
-    const today = getLocalToday();
-
-    nav.innerHTML = uniqueDates.map(date => {
-        const isActive = date === activeDate;
-        const isToday = date === today;
-
-        // Base styles
-        let styles = "flex-shrink-0 px-3 py-1.5 rounded-md text-[10px] font-bold border transition-all whitespace-nowrap ";
-
-        if (isActive) {
-            // Active selection: Blue highlight
-            styles += "bg-blue-600 border-blue-600 text-white shadow-md z-10 scale-105";
-        } else if (isToday) {
-            // Today but not active: Distinct Amber/Gold highlight
-            styles += "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100";
-        } else {
-            // Regular historical dates: Clean Slate
-            styles += "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100";
-        }
-
-        return `
-            <button class="${styles}" data-date="${date}">
-                ${isToday ? '★ TODAY' : date}
-            </button>`;
-    }).join('');
-
-    // Attach click events
-    nav.querySelectorAll('button').forEach(btn => {
-        btn.onclick = () => onDateSelect(btn.dataset.date);
-    });
-}
-
-function renderCPPTData(records, container, doctorId = null, isDoctorFilterActive = false) {
+function renderCPPTData(visitId, records, container, userId = null) {
     if (records.length === 0) {
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-20 px-10 text-center">
                 <div class="bg-white p-4 rounded-full mb-3 shadow-sm italic text-slate-300 text-xl">!</div>
                 <p class="text-slate-800 text-[11px] font-bold uppercase">No records found</p>
-                <p class="text-slate-400 text-[10px] mt-1">
-                    ${isDoctorFilterActive ? "There are no physician entries for this specific date." : "No clinical notes available for this date."}
-                </p>
+                <p class="text-slate-400 text-[10px] mt-1">No clinical notes available for this date.</p>
             </div>`;
         return;
     }
@@ -2722,7 +2670,10 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
     container.innerHTML = records.map(r => {
         const isDoctor = r.REFERENSI?.JENIS?.ID === "1";
         const badgeColor = isDoctor ? "bg-blue-600" : "bg-emerald-600";
-        const canEdit = doctorId && String(r.OLEH) === String(doctorId);
+        const dupClass = isDoctor
+            ? "bg-emerald-500 hover:bg-emerald-600 border-emerald-600"
+            : "bg-slate-700 hover:bg-slate-800 text-white border-slate-900/20 shadow-sm";
+        const canEdit = userId && String(r.OLEH) === String(userId);
 
         // Prepare copy text
         const formatForCopy = (val) => {
@@ -2743,7 +2694,8 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
                         <span class="text-white text-[7px] font-mono">ID: ${r.ID}</span>
                     </div>
                     <div class="flex gap-1">
-                        <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all" data-soap="${encodeURIComponent(soapText)}">Copy</button>
+                        <button class="cppt-duplicate-btn ${dupClass} text-white text-[9px] font-bold px-2 py-0.5 rounded border transition-all">Dup</button>
+                        <button class="cppt-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all">Copy</button>
                         ${canEdit ? `
                             <button class="cppt-edit-toggle bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all">Edit</button>
                             <button class="cppt-delete-btn bg-red-500 hover:bg-red-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-red-600 transition-all" data-id="${r.ID}">Del</button>
@@ -2770,15 +2722,26 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
     }).join('');
 
     // Attach Listeners
+    container.querySelectorAll('.cppt-duplicate-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            const card = e.currentTarget.closest('.cppt-card');
+            const data = getSoapDataFromCard(card);
+            openSOAPModal(visitId, "Duplicate Record", data);
+        };
+    });
+
     container.querySelectorAll('.cppt-copy-btn').forEach(btn => {
-        btn.onclick = (e) => executeClipboardCopy(decodeURIComponent(e.currentTarget.dataset.soap), e.currentTarget);
+        btn.onclick = (e) => {
+            const card = e.currentTarget.closest('.cppt-card');
+            const data = getSoapDataFromCard(card);
+            executeClipboardCopy(formatSoapForClipboard(data), e.currentTarget);
+        };
     });
 
     container.querySelectorAll('.cppt-edit-toggle').forEach(btn => {
         btn.onclick = (e) => toggleInlineEdit(e.currentTarget);
     });
 
-    // Attach to the end of your renderCPPTData function
     container.querySelectorAll('.cppt-delete-btn').forEach(btn => {
         btn.onclick = async (e) => {
             const id = e.currentTarget.dataset.id;
@@ -2811,6 +2774,149 @@ function renderCPPTData(records, container, doctorId = null, isDoctorFilterActiv
         };
     });
 }
+
+function getSoapDataFromCard(card) {
+    const area = card.querySelector('.soap-display-area');
+    const fields = ['s', 'o', 'a', 'p', 'i'];
+    const data = {};
+
+    fields.forEach(f => {
+        const container = area.querySelector(`.val-${f}`);
+        const textarea = container.querySelector('textarea');
+
+        if (textarea) {
+            // --- We are in EDIT MODE ---
+            data[f] = textarea.value.trim();
+        } else {
+            // --- We are in VIEW MODE ---
+            const html = container.innerHTML;
+            if (!html || html.trim() === '-' || html === 'undefined') {
+                data[f] = '';
+            } else {
+                data[f] = html.replace(/<br\s*\/?>/gi, '\n').trim();
+            }
+        }
+    });
+
+    return data;
+}
+
+function formatSoapForClipboard(data) {
+    return `S: ${data.s || '-'}\nO: ${data.o || '-'}\nA: ${data.a || '-'}\nP: ${data.p || '-'}\nI: ${data.i || '-'}`;
+}
+
+const openSOAPModal = (visitId, title = "New Record", data = null) => {
+    const now = new Date();
+    const localDate = now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0');
+    const localTime = String(now.getHours()).padStart(2, '0') + ':' +
+        String(now.getMinutes()).padStart(2, '0') + ':' +
+        String(now.getSeconds()).padStart(2, '0');
+
+    const doctorId = window.userData?.doctorId || 'Unknown ID';
+    const doctorName = window.userData?.doctorName || 'Unknown Doctor';
+
+    const values = {
+        s: data?.s || '',
+        o: data?.o || '',
+        a: data?.a || '',
+        p: data?.p || '',
+        i: data?.i || ''
+    };
+
+    const overlay = document.createElement('div');
+    overlay.className = "fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4";
+
+    const modal = document.createElement('div');
+    modal.className = "bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border border-slate-200 animate-in fade-in zoom-in duration-150";
+
+    modal.innerHTML = `
+        <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+            <h3 class="text-[11px] font-black text-slate-700 uppercase tracking-widest">${title}</h3>
+            <button class="close-modal text-slate-400 hover:text-red-500 text-xl font-light px-2">&times;</button>
+        </div>
+        
+        <div class="p-4 space-y-4 max-h-[70vh] overflow-y-auto bg-white">
+            <div class="grid grid-cols-2 gap-3 pb-2 border-b border-slate-100">
+                <div>
+                    <label class="block text-[9px] font-black text-slate-400 uppercase mb-1">Entry Date</label>
+                    <input type="date" id="soap-date" value="${localDate}" class="w-full border border-slate-200 rounded p-1.5 text-[11px] focus:ring-2 focus:ring-emerald-500/20 outline-none">
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-400 uppercase mb-1">Entry Time</label>
+                    <input type="time" id="soap-time" step="1" value="${localTime}" class="w-full border border-slate-200 rounded p-1.5 text-[11px] focus:ring-2 focus:ring-emerald-500/20 outline-none">
+                </div>
+            </div>
+
+            ${['S', 'O', 'A', 'P', 'I'].map(key => `
+                <div>
+                    <label class="block text-[9px] font-black text-emerald-600 uppercase mb-1 tracking-tighter">
+                        ${key} - ${{ S: 'Subjective', O: 'Objective', A: 'Assessment', P: 'Planning', I: 'Instruction' }[key]}
+                    </label>
+                    <textarea class="w-full border border-slate-200 rounded-md p-2 text-[11px] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all" rows="3" id="soap-${key.toLowerCase()}">${values[key.toLowerCase()]}</textarea>
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="px-4 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <p class="text-[10px] text-emerald-700 font-medium">
+                Recording as: <b class="uppercase">${doctorName}</b> <span class="opacity-60">(${doctorId})</span>
+            </p>
+        </div>
+
+        <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <button class="cancel-modal px-4 py-2 text-[10px] font-bold text-slate-500 hover:text-slate-700 uppercase">Cancel</button>
+            <button class="submit-soap px-6 py-2 text-[10px] font-bold bg-emerald-600 text-white rounded shadow-md hover:bg-emerald-700 transition-all uppercase">Save Record</button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    overlay.appendChild(modal);
+
+    const close = () => overlay.remove();
+    modal.querySelector('.close-modal').onclick = close;
+    modal.querySelector('.cancel-modal').onclick = close;
+
+    modal.querySelector('.submit-soap').onclick = async (e) => {
+        const btn = e.currentTarget;
+        const soapData = {
+            tanggal: `${modal.querySelector('#soap-date').value} ${modal.querySelector('#soap-time').value}`,
+            subyektif: modal.querySelector('#soap-s').value.trim().replace(/\n/g, '<br>'),
+            obyektif: modal.querySelector('#soap-o').value.trim().replace(/\n/g, '<br>'),
+            assesment: modal.querySelector('#soap-a').value.trim().replace(/\n/g, '<br>'),
+            planning: modal.querySelector('#soap-p').value.trim().replace(/\n/g, '<br>'),
+            instruksi: modal.querySelector('#soap-i').value.trim().replace(/\n/g, '<br>'),
+        };
+
+        try {
+            btn.innerText = "SAVING...";
+            btn.disabled = true;
+
+            await saveNewRecord(soapData, visitId, doctorId);
+
+            showToast("Record Saved!", "success");
+            close();
+
+            const wrapper = document.querySelector(`.patient-wrapper[data-id="${visitId}"]`);
+            if (wrapper) {
+                const refreshBtn = wrapper.querySelector('.cppt-btn');
+                const cpptContainer = wrapper.querySelector('.cppt-container');
+                if (cpptContainer.classList.contains('hidden')) {
+                    refreshBtn.click();
+                } else {
+                    refreshBtn.click();
+                    refreshBtn.click();
+                }
+            }
+        } catch (err) {
+            showToast("Failed to save", "error");
+            btn.innerText = "SAVE RECORD";
+            btn.disabled = false;
+        }
+    };
+};
 
 /**
  * Handles UI transition between "View" and "Edit/Save" states
