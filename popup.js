@@ -43,6 +43,50 @@ const doctorDatabase = [
     { name: "dr. Yoice, Sp.THT-KL", id: "17" },
     { name: "dr. Retna, Sp.M", id: "80" },
     { name: "dr. Anin, Sp.DVE", id: "101" },
+    // --- New Entries ---
+    { name: "dr. Yosie, Sp.An", id: "21" },
+    { name: "dr. Giri, Sp.An", id: "9" },
+    { name: "dr. Erry, Sp.An", id: "68" },
+    { name: "dr. Endrawati, Sp.Rad", id: "4" },
+    { name: "dr. Yusuf, Sp.Rad", id: "5" },
+    { name: "dr. Harnadi, Sp.PK", id: "2" },
+    { name: "dr. Magendi, Sp.PK", id: "99" },
+    { name: "dr. Kumala, Sp.MK", id: "111" },
+    { name: "dr. Mukhtar Ali, Sp.KFR", id: "100" },
+    { name: "dr. Pitut, MM", id: "95" },
+    { name: "dr. Supriyadi", id: "38" },
+    { name: "dr. Sartono", id: "39" },
+    { name: "dr. Yuline", id: "40" },
+    { name: "dr. Gatot", id: "41" },
+    { name: "dr. Galih", id: "43" },
+    { name: "dr. Yudi", id: "46" },
+    { name: "dr. Liliek", id: "47" },
+    { name: "dr. Mursit", id: "51" },
+    { name: "dr. Bram", id: "54" },
+    { name: "dr. Septiana", id: "55" },
+    { name: "dr. Hendra", id: "72" },
+    { name: "dr. Rohmah", id: "73" },
+    { name: "dr. Candra", id: "75" },
+    { name: "dr. Fauzi", id: "76" },
+    { name: "dr. Arief", id: "77" },
+    { name: "dr. Azizah", id: "78" },
+    { name: "dr. Isnaini", id: "79" },
+    { name: "dr. Paramita", id: "81" },
+    { name: "dr. Amelia", id: "82" },
+    { name: "dr. Nurdiana", id: "83" },
+    { name: "dr. Ibnu", id: "84" },
+    { name: "dr. Anton", id: "85" },
+    { name: "dr. Ery", id: "86" },
+    { name: "dr. Onika", id: "87" },
+    { name: "dr. Risky", id: "88" },
+    { name: "dr. Philia", id: "105" },
+    { name: "dr. Esna", id: "107" },
+    { name: "dr. Britania", id: "108" },
+    { name: "dr. Thallyta", id: "110" },
+    { name: "drg. Anita, Sp.Pros", id: "34" },
+    { name: "drg. Retno, Sp.Ort", id: "35" },
+    { name: "drg. Hikmah", id: "90" },
+    { name: "drg. Qumara", id: "106" },
 ];
 
 const roomDatabase = [
@@ -175,6 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     setupForm();
     setIDLists();
+    syncSidebarCountFromStorage();
 });
 
 function setupEventListeners() {
@@ -1171,6 +1216,11 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
     const div = document.createElement('div');
     const displayName = roomName.replace(/^Bangsal\s+/i, '');
     const hasPatients = patients.length > 0;
+    const statusMap = {
+        '1': { label: 'Active', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', dot: 'bg-emerald-500' },
+        '2': { label: 'Finished', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', dot: 'bg-slate-400' },
+        '3': { label: 'Deceased', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', dot: 'bg-red-500' }
+    };
 
     div.className = "room-group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-2 self-start";
     div.dataset.roomId = roomId;
@@ -1210,56 +1260,84 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
             ${patients.length === 0 ?
             `<p class="empty-placeholder text-[10px] text-slate-300 italic text-center py-4 bg-slate-50/30 rounded-lg border border-dashed border-slate-100">Empty Room</p>` :
             patients.map(p => {
+                const s = statusMap[p.status] || statusMap['1'];
                 const losData = getPatientLOS(p.admDate, p.disDate);
                 const freshStyles = losData.isFresh ? 'bg-amber-50 border-amber-200' : 'bg-slate-100 border-slate-200';
                 return `
                 <div class="patient-wrapper flex flex-col gap-2" data-id="${p.no}">
-                    <div class="patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all flex items-center gap-3">
-                        <!-- Bed Info (Left) -->
-                        <div class="flex flex-col items-center justify-center min-w-[55px] py-2 ${freshStyles} rounded-lg border transition-colors duration-500">
-                            <span class="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Bed</span>
-                            <span class="text-[11px] font-black text-blue-700 leading-none">${p.bedName}</span>
-                            
-                            <div class="mt-1.5 pt-1 border-t border-black/5 w-full flex justify-center">
-                                <span class="text-[9px] font-bold ${losData.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none" data-adm="${p.admDate}">
-                                    ${losData.text}
-                                </span>
+                    <div class="patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all">
+                        <div class="flex items-center gap-3">
+                            <!-- Bed Info (Left) -->
+                            <div class="flex flex-col items-center justify-center min-w-[55px] px-1 py-2 ${freshStyles} rounded-lg border transition-colors duration-500">
+                                <span class="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Bed</span>
+                                <span class="text-[11px] font-black text-blue-700 leading-none">${p.bedName}</span>
+                                
+                                <div class="mt-1.5 pt-1 border-t border-black/5 w-full flex justify-center">
+                                    <span class="text-[9px] font-bold ${losData.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none" data-adm="${p.admDate}">
+                                        ${losData.text}
+                                    </span>
+                                </div>
+                            </div>
+                            <!-- Main Content -->
+                            <div class="flex-1 min-w-0">
+                                <h5 class="text-[11px] font-black text-slate-800 truncate uppercase leading-tight">${p.fullName}</h5>
+                                <p class="text-[9px] text-slate-500 font-mono mb-1 truncate">${p.mrn} • ${p.age || '--'} • ${p.no}</p>
+                                <p class="text-[9px] font-medium text-slate-500 truncate italic">${p.diagnosis || 'No Diagnosis'}</p>
+                                <p class="text-[9px] font-bold text-blue-500 truncate">${p.doctorName || 'No DPJP'}</p>
+                            </div>
+                            <!-- Action Buttons -->
+                            <div class="flex items-center gap-1">
+                                <button class="create-record-btn p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all" title="Create New Record">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                </button>
+                                <button class="cppt-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all" title="View CPPT Records">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                </button>
+                                <button class="delete-p-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all" title="Remove Patient">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                                <div class="flex flex-col gap-0.5 ml-1">
+                                    <button class="move-p-up p-1 text-slate-300 hover:text-blue-500 transition-colors"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"/></svg></button>
+                                    <button class="move-p-down p-1 text-slate-300 hover:text-blue-500 transition-colors"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg></button>
+                                </div>
                             </div>
                         </div>
-
-                        <!-- Main Content -->
-                        <div class="flex-1 min-w-0">
-                            <h5 class="text-[11px] font-black text-slate-800 truncate uppercase leading-tight">${p.fullName}</h5>
-                            <p class="text-[9px] text-slate-500 font-mono mb-1">${p.mrn} • ${p.age || '--'} • ${p.no}</p>
-                            <p class="text-[9px] font-medium text-slate-500 truncate italic">${p.diagnosis || 'No Diagnosis'}</p>
-                            <p class="text-[9px] font-bold text-blue-500 truncate">${p.doctorName || 'No DPJP'}</p>
-                        </div>
-
-                        <!-- Action Buttons -->
-                        <div class="flex items-center gap-1">
-                            <button class="cppt-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all" title="View CPPT Records">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            </button>
-                            <button class="delete-p-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all" title="Remove Patient">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            </button>
-                            <div class="flex flex-col gap-0.5 ml-1">
-                                <button class="move-p-up p-1 text-slate-300 hover:text-blue-500 transition-colors"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"/></svg></button>
-                                <button class="move-p-down p-1 text-slate-300 hover:text-blue-500 transition-colors"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg></button>
+                        <div class="flex items-center justify-between mt-1">
+                            <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                                <div class="flex items-center ${s.bg} border ${s.border} px-2 py-0.5 rounded-full">
+                                    <div class="w-1.5 h-1.5 rounded-full ${s.dot} mr-1.5 ${p.status === '1' ? 'animate-pulse' : ''}"></div>
+                                    <span class="text-[8px] font-black tracking-tight ${s.color}">${s.label}</span>
+                                </div>
+                                <div class="flex items-center bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                                    <span class="text-[8px] font-black text-blue-400 mr-1 tracking-tighter">In:</span>
+                                    <span class="text-[8px] font-bold text-blue-700 whitespace-nowrap">${formatDateWithDay(p.admDate || '-')}</span>
+                                </div>
+                                <div class="flex items-center bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full">
+                                    <span class="text-[8px] font-black text-slate-400 mr-1 tracking-tighter">Out:</span>
+                                    <span class="text-[8px] font-bold text-slate-600 whitespace-nowrap">${formatDateWithDay(p.disDate || '-')}</span>
+                                </div>
                             </div>
+                            <button class="refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group" title="Refresh Patient Status">
+                                <svg class="w-2.5 h-2.5 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
+
                     <!-- Collapsible CPPT Area -->
                     <div class="cppt-container hidden bg-slate-50 border border-slate-200 border-t-0 -mt-2 rounded-b-xl shadow-sm overflow-hidden transition-all duration-300">
                         <div class="cppt-header px-3 py-1.5 border-b border-slate-200 flex justify-between items-center bg-white/50">
-                                <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2">
                                 <div class="flex bg-slate-200 p-0.5 rounded-md text-[8px] font-bold">
                                     <button class="filter-cppt-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all">ALL</button>
                                     <button class="filter-cppt-mine px-2 py-0.5 rounded text-slate-500 transition-all">MINE</button>
                                     <button class="filter-cppt-docs px-2 py-0.5 rounded text-slate-500 transition-all">DOCTORS</button>
                                 </div>
-                                </div>
-                                <button class="cppt-close-inner text-slate-400 hover:text-red-500 text-[12px] font-black px-1">✕</button>
+                            </div>
+                            <button class="cppt-close-inner text-slate-400 hover:text-red-500 text-[12px] font-black px-1">✕</button>
                         </div>
                         <div class="date-pagination flex gap-1 px-3 py-1.5 bg-slate-100/50 border-b border-slate-200 overflow-x-auto no-scrollbar"></div>
                         <div class="cppt-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto"></div>
@@ -1329,7 +1407,7 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
 
         // Copy to clipboard
         navigator.clipboard.writeText(output).then(() => {
-            showToast(`Room ${roomName} copied!`);
+            showToast(`Room ${roomName} copied!`, 'success');
             const svg = copyBtn.querySelector('svg');
             const originalClass = 'w-4 h-4 text-slate-400 transition-all';
             const highlightClass = 'w-4 h-4 text-green-500 transition-all';
@@ -1421,6 +1499,36 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
 
         wrapper.querySelector('.move-p-down').addEventListener('click', () => {
             moveElement(wrapper, 'down', 'patient', roomId);
+        });
+
+        const refreshBtn = wrapper.querySelector('.refresh-patient-btn');
+        const refreshIcon = refreshBtn.querySelector('svg');
+
+        refreshBtn.addEventListener('click', async () => {
+            refreshBtn.disabled = true;
+            refreshIcon.classList.add('animate-spin-slow');
+            refreshBtn.classList.add('text-blue-600');
+
+            try {
+                // 2. The API Call (Placeholder for your future API)
+                // const response = await refreshPatientStatusApi(pId);
+
+                // Simulating API delay for now
+                showToast('Work in progress...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // 3. Success Handling
+                // Update your patientData object and DOM here (status badge, out date, etc.)
+                // updatePatientUI(wrapper, response.data); 
+                // showToast(`Refreshed data for ${patientData.fullName}`, 'success');
+            } catch (err) {
+                console.error("Refresh failed:", err);
+                showToast(`Failed to refresh ${patientData.fullName}`, 'error');
+            } finally {
+                refreshBtn.disabled = false;
+                refreshIcon.classList.remove('animate-spin-slow');
+                refreshBtn.classList.remove('text-blue-600');
+            }
         });
     });
 
@@ -1767,55 +1875,61 @@ function updateSidebarTotalCount(manualDelta = null) {
     badge.textContent = total;
 }
 
+function syncSidebarCountFromStorage() {
+    api.storage.local.get(['fetchedPatients'], (result) => {
+        const badge = document.getElementById('sidebar-patient-count');
+        if (!badge) return;
+
+        const patients = result.fetchedPatients || [];
+        badge.textContent = patients.length;
+    });
+}
+
 function showToast(message, type = 'success') {
-    const TOAST_GAP = 12; // Space between toasts in pixels
+    const TOAST_GAP = 12;
 
-    // 1. Get all existing toasts to calculate their new positions
     const existingToasts = document.querySelectorAll('.extension-toast');
-
-    // 2. Move every existing toast up
     existingToasts.forEach((existingToast) => {
-        // Get current bottom offset or default to the base (20px)
         const currentBottom = parseInt(existingToast.style.bottom) || 20;
-        // Move it up by its own height + the gap
         existingToast.style.bottom = `${currentBottom + existingToast.offsetHeight + TOAST_GAP}px`;
     });
 
-    // 3. Create the new toast
+    const toastConfigs = {
+        success: {
+            classes: "bg-emerald-50 border-emerald-200 text-emerald-700",
+            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>'
+        },
+        error: {
+            classes: "bg-red-50 border-red-200 text-red-700",
+            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>'
+        },
+        warning: {
+            classes: "bg-amber-50 border-amber-200 text-amber-700",
+            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>'
+        },
+        info: {
+            classes: "bg-blue-50 border-blue-200 text-blue-700",
+            icon: '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>'
+        }
+    };
+
+    const config = toastConfigs[type] || toastConfigs.info;
+
     const toast = document.createElement('div');
-    // Use a class instead of ID for multiple instances
-    toast.className = `extension-toast fixed right-5 z-[9999] px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold flex items-center gap-3 transition-all duration-500 ease-out`;
+    toast.className = `extension-toast fixed right-5 z-[9999] px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold flex items-center gap-3 transition-all duration-500 ease-out ${config.classes}`;
 
-    // Set initial position
     toast.style.bottom = '20px';
-
-    // Styling classes
-    const typeClasses = type === 'success'
-        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-        : "bg-red-50 border-red-200 text-red-700";
-
-    toast.className += ` ${typeClasses}`;
-
-    // Icon logic
-    const icon = type === 'success'
-        ? '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>'
-        : '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>';
-
-    toast.innerHTML = `${icon} <span>${message}</span>`;
-
-    // Add entrance animation via JS or Tailwind
     toast.style.transform = 'translateX(100%)';
     toast.style.opacity = '0';
+    toast.innerHTML = `${config.icon} <span>${message}</span>`;
 
     document.body.appendChild(toast);
 
-    // Trigger entrance animation
     requestAnimationFrame(() => {
         toast.style.transform = 'translateX(0)';
         toast.style.opacity = '1';
     });
 
-    // 4. Auto-remove after 3 seconds
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(20px)';
@@ -2068,6 +2182,7 @@ function renderResults(tabId, items) {
 function processPatient(item) {
     const no = item.NOMOR;
     const ref = item.REFERENSI;
+    const status = cleanField(item.STATUS);
     const roomId = cleanField(item.RUANGAN);
     const admDate = item.MASUK; // string "yyyy-mm-dd hh:mm:dd" or null
     const disDate = item.KELUAR; // string "yyyy-mm-dd hh:mm:dd" or null
@@ -2078,6 +2193,7 @@ function processPatient(item) {
 
     return {
         no: String(cleanField(no, "")),
+        status,
         roomId,
         fullName: toTitleCase(cleanField(pasien?.NAMA)),
         mrn: cleanField(pasien?.NORM),
@@ -2087,7 +2203,7 @@ function processPatient(item) {
         roomName: rawRoomName.replace(/^Bangsal\s+/i, ''),
         doctorName: cleanField(ref?.DPJP?.NAMA),
         admDate,
-        disDate
+        disDate,
     };
 }
 
@@ -2756,4 +2872,21 @@ const getPatientLOS = (admDateStr, disDateStr) => {
         text: `${days}d ${hours}h`,
         isFresh: totalHours < 24
     };
-};
+}
+
+function formatDateWithDay(dateStr) {
+    if (!dateStr || dateStr === '-') return '--';
+    const date = new Date(dateStr);
+    if (isNaN(date)) return dateStr;
+
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    const dName = days[date.getDay()];
+    const dNum = date.getDate();
+    const mName = months[date.getMonth()];
+    const yShort = date.getFullYear().toString().slice(-2);
+
+    // return `${dName}, ${dNum} ${mName} '${yShort}`;
+    return `${dName}, ${dNum} ${mName}`;
+}
