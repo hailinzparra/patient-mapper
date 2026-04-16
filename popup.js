@@ -1,9 +1,8 @@
 /**
  * Patient Mapper - Popup Logic
- * Handles authentication, tab management, and multi-fetch API logic.
- * Features: Hierarchical view, Sorting, and advanced Copy functions.
  */
 
+// #region Init
 const api = typeof browser !== "undefined" ? browser : chrome;
 
 const BASE_URL = 'https://api.rsudsoediranms.com/webservice';
@@ -731,7 +730,9 @@ function setupForm() {
 
     renderTemplates();
 }
+// #endregion
 
+// #region Auth/Fetch Flow
 // --- Authentication & Fetch Flow ---
 async function getSession(forceRefresh = false) {
     try {
@@ -1194,7 +1195,9 @@ async function removeCPPTRecord(id) {
         body: JSON.stringify(payload)
     });
 }
+// #endregion
 
+// #region My Patients
 // --- My Patients ---
 let customOrders = {
     rooms: {},    // { jenisId: [roomIds...] }
@@ -2092,7 +2095,9 @@ function showToast(message, type = 'success') {
         setTimeout(() => toast.remove(), 500);
     }, 3000);
 }
+// #endregion
 
+// #region View
 function setIDLists() {
     function renderTable(data, containerId) {
         const tableBody = document.getElementById(containerId);
@@ -2243,7 +2248,9 @@ function showTabError(tabId, errorMessage) {
     if (loader) loader.remove();
     updateTabStatus(tabId, "Error", "bg-rose-100 text-rose-600", errorMessage);
 }
+// #endregion
 
+// #region Workspace
 // --- Data Rendering ---
 function renderResults(tabId, items) {
     const pane = document.getElementById('pane-' + tabId);
@@ -2655,7 +2662,9 @@ function renderField(label, value, valueClass = "font-semibold text-slate-800") 
             <p class="${valueClass}">${value || '-'}</p>
         </section>`;
 }
+// #endregion
 
+// #region CPPT
 function renderCPPTData(visitId, records, container, userId = null) {
     if (records.length === 0) {
         container.innerHTML = `
@@ -2988,7 +2997,9 @@ async function toggleInlineEdit(btn) {
         }
     }
 }
+// #endregion
 
+// #region Helper
 // --- Helper Functions ---
 
 function sortPatients(patients, mode) {
@@ -3100,3 +3111,4 @@ function spondylitis(tear) {
     );
     return String.fromCharCode(...charCodes);
 }
+// #endregion
