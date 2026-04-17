@@ -1646,14 +1646,33 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
         const refreshBtn = wrapper.querySelector('.refresh-patient-btn');
         const refreshIcon = refreshBtn.querySelector('svg');
 
-        refreshBtn.addEventListener('click', async () => {
+        refreshBtn.addEventListener('click', async (ev) => {
+            const isBatchRefresh = ev.detail?.isBatchRefresh || false;
+            const callback = ev.detail?.callback || null;
+
+            if (isBatchRefresh) {
+                refreshBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            if (refreshBtn.disabled) {
+                if (isBatchRefresh && callback) {
+                    callback(`Already refreshing: ${patientData.fullName}`, 'info');
+                }
+                return;
+            }
+
             refreshBtn.disabled = true;
             refreshIcon.classList.add('animate-spin-slow');
             refreshBtn.classList.add('text-blue-600');
 
             try {
-                showToast(`Refreshing ${patientData.fullName}...`, 'info');
+                if (!isBatchRefresh) {
+                    showToast(`Refreshing ${patientData.fullName}...`, 'info');
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 const refreshedData = await fetchLatestPatientData(patientData.mrn, patientData.no);
+
                 const newPatientData = {
                     ...patientData,
                     ...refreshedData,
@@ -1661,10 +1680,19 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                 };
 
                 updatePatientUI(wrapper, newPatientData);
-                addPatientToStorage(newPatientData, patientData.roomId, patientData.lastUpdated);
+                addPatientToStorage(newPatientData, newPatientData.roomId, newPatientData.lastUpdated, isBatchRefresh);
+                if (isBatchRefresh && callback) {
+                    callback(`Updated: ${patientData.fullName}`, 'success');
+                }
             } catch (err) {
+                const errorMsg = `Failed to refresh: ${patientData.fullName}`;
+                if (!isBatchRefresh) {
+                    showToast(errorMsg, 'error');
+                }
+                else if (isBatchRefresh && callback) {
+                    callback(errorMsg, 'error');
+                }
                 console.error("Refresh failed:", err);
-                showToast(`Failed to refresh ${patientData.fullName}`, 'error');
             } finally {
                 refreshBtn.disabled = false;
                 refreshIcon.classList.remove('animate-spin-slow');
@@ -1685,6 +1713,43 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
     });
 
     return div;
+}
+
+function refreshAllPatients() {
+    const refreshBtns = document.querySelectorAll('.room-group .patient-wrapper .refresh-patient-btn');
+
+    if (refreshBtns.length === 0) {
+        showToast('No patients to refresh!', 'info');
+        return;
+    }
+
+    toggleGlobalOverlay(true, "Refreshing All Patients...");
+
+    let currentIndex = 0;
+
+    const processNext = (toastMsg, toastType) => {
+        if (toastMsg) showToast(`${toastMsg} (${currentIndex}/${refreshBtns.length})`, toastType);
+
+        if (currentIndex >= refreshBtns.length) {
+            setTimeout(() => {
+                showToast(`Refreshing done!`, 'done');
+                toggleGlobalOverlay(false);
+            }, 500);
+            return;
+        }
+
+        const nextBtn = refreshBtns[currentIndex];
+        currentIndex++;
+
+        setTimeout(() => {
+            nextBtn.dispatchEvent(new CustomEvent('click', {
+                bubbles: true,
+                detail: { isBatchRefresh: true, callback: processNext }
+            }));
+        }, 150);
+    }
+
+    processNext('Starting batch refresh...', 'info');
 }
 
 function updatePatientUI(wrapper, newInfo) {
@@ -1903,7 +1968,7 @@ function deletePatientFromStorage(patientId, patientName) {
     });
 }
 
-function addPatientToStorage(patientData, roomId, lastUpdated = Date.now()) {
+function addPatientToStorage(patientData, roomId, lastUpdated = Date.now(), isSilent = false) {
     if (typeof patientData === 'object' && patientData !== null) {
         patientData.lastUpdated = lastUpdated;
     }
@@ -1912,6 +1977,9 @@ function addPatientToStorage(patientData, roomId, lastUpdated = Date.now()) {
         let customOrders = result.customOrders || { rooms: {}, patients: {} };
         const existingIndex = patients.findIndex(p => p.no === patientData.no);
         const isUpdate = existingIndex !== -1;
+        const message = isUpdate
+            ? `Updated: ${patientData.fullName}`
+            : `Added: ${patientData.fullName}`;
 
         if (isUpdate) {
             patients[existingIndex] = { ...patients[existingIndex], ...patientData };
@@ -1931,11 +1999,9 @@ function addPatientToStorage(patientData, roomId, lastUpdated = Date.now()) {
             fetchedPatients: patients,
             customOrders: customOrders
         }, () => {
-            const message = isUpdate
-                ? `Updated: ${patientData.fullName || 'Patient data'}`
-                : `Added: ${patientData.fullName}`;
-
-            showToast(message, 'success');
+            if (!isSilent) {
+                showToast(message, 'success');
+            }
         });
     });
 }
@@ -2094,6 +2160,36 @@ function showToast(message, type = 'success') {
         toast.style.transform = 'translateX(-20px)';
         setTimeout(() => toast.remove(), 500);
     }, 3000);
+}
+
+function toggleGlobalOverlay(isActive, message = "Processing...") {
+    let overlay = document.getElementById('global-batch-overlay');
+
+    if (isActive) {
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'global-batch-overlay';
+            // z-[9998] keeps it under the toast
+            overlay.className = `fixed inset-0 z-[9998] bg-white/10 backdrop-blur-[1px] 
+                                 flex justify-center pointer-events-auto cursor-wait transition-opacity duration-300`;
+
+            overlay.innerHTML = `
+                <div class="mt-[15vh] h-fit bg-white/80 backdrop-blur-md px-6 py-3 rounded-full shadow-xl border border-gray-200/50 flex items-center gap-3">
+                    <div class="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-sm font-semibold text-gray-700/80" id="overlay-text">${message}</span>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        } else {
+            document.getElementById('overlay-text').innerText = message;
+            overlay.classList.remove('hidden', 'opacity-0');
+        }
+    } else {
+        if (overlay) {
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+    }
 }
 // #endregion
 
