@@ -2242,10 +2242,11 @@ async function handleSaveData() {
             const dateStr = now.toLocaleDateString('en-GB').replace(/\//g, '-');
             const timeStr = now.toLocaleTimeString('en-GB').replace(/:/g, '-');
             const doctorName = window.userData?.NAME?.replace(/\s+/g, '_').toLowerCase() || 'backup';
+            const totalPatiens = exportData.fetchedPatients.length || 0;
 
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${doctorName}_patients_${dateStr}_${timeStr}.txt`;
+            link.download = `${doctorName}_${totalPatiens}_patients_${dateStr}_${timeStr}.txt`;
 
             document.body.appendChild(link);
             link.click();
