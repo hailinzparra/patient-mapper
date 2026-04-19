@@ -739,6 +739,7 @@ function setupMyPatientsHeader() {
     const dropdownMenu = document.getElementById('dropdown-menu');
     const filterButtons = document.querySelectorAll('.filter-segment');
     const batchRefreshBtn = document.getElementById('btn-batch-refresh');
+    const batchNotesBtn = document.getElementById('btn-batch-notes');
     const collapseRoomsBtn = document.getElementById('btn-collapse-rooms');
     const expandRoomsBtn = document.getElementById('btn-expand-rooms');
 
@@ -758,6 +759,13 @@ function setupMyPatientsHeader() {
         if (confirm("Refresh all patients? This will take a moment.")) {
             expandRoomsBtn.click();
             refreshAllPatients();
+        }
+    });
+
+    batchNotesBtn.addEventListener('click', () => {
+        if (confirm("Open all patients's notes? This will take a moment.")) {
+            expandRoomsBtn.click();
+            openAllNotes();
         }
     });
 
@@ -1686,8 +1694,49 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
         });
 
         // Toggle CPPT
-        wrapper.querySelector('.cppt-btn').addEventListener('click', () => {
-            toggleCPPTInline(wrapper, patientData);
+        const cpptBtn = wrapper.querySelector('.cppt-btn');
+        const cpptContainer = wrapper.querySelector('.cppt-container');
+        cpptBtn.addEventListener('click', async (ev) => {
+            const isBatchRefresh = ev.detail?.isBatchRefresh || false;
+            const forceRefresh = ev.detail?.forceRefresh === false ? false : true;
+            const callback = ev.detail?.callback || null;
+
+            const isOpened = !cpptContainer.classList.contains('hidden');
+
+            if (isBatchRefresh) {
+                cpptBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (!forceRefresh && isOpened) {
+                    if (isBatchRefresh && callback) {
+                        callback(`Already opened: ${patientData.fullName}`, 'info');
+                    }
+                    return;
+                }
+            }
+
+            try {
+                if (isBatchRefresh) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    if (isOpened) {
+                        await toggleCPPTInline(wrapper, patientData);
+                        await toggleCPPTInline(wrapper, patientData);
+                    } else {
+                        await toggleCPPTInline(wrapper, patientData);
+                    }
+                    if (isBatchRefresh && callback) {
+                        callback(`Notes opened: ${patientData.fullName}`, 'success');
+                    }
+                }
+                else {
+                    await toggleCPPTInline(wrapper, patientData);
+                }
+            }
+            catch {
+                const errorMsg = `Failed to open: ${patientData.fullName}`;
+                if (isBatchRefresh && callback) {
+                    callback(errorMsg, 'error');
+                }
+                console.error("Open notes failed:", err);
+            }
         });
 
         wrapper.querySelector('.cppt-close-inner').addEventListener('click', () => {
@@ -1818,6 +1867,50 @@ function refreshAllPatients() {
     processNext('Starting batch refresh...', 'info');
 }
 
+function openAllNotes(forceRefresh = true) {
+    const myPatientsView = document.getElementById('view-patients');
+    if (myPatientsView.classList.contains('hidden')) {
+        showToast('Please switch to My Patients view to open all notes.', 'info');
+        return;
+    }
+
+    const noteBtns = document.querySelectorAll('.room-group .patient-wrapper .cppt-btn');
+
+    if (noteBtns.length === 0) {
+        showToast('No notes to open!', 'info');
+        return;
+    }
+
+
+    toggleGlobalOverlay(true, "Opening All Notes...");
+
+    let currentIndex = 0;
+
+    const processNext = (toastMsg, toastType) => {
+        if (toastMsg) showToast(`${toastMsg} (${currentIndex}/${noteBtns.length})`, toastType);
+
+        if (currentIndex >= noteBtns.length) {
+            setTimeout(() => {
+                showToast(`Opening notes done!`, 'done');
+                toggleGlobalOverlay(false);
+            }, 500);
+            return;
+        }
+
+        const nextBtn = noteBtns[currentIndex];
+        currentIndex++;
+
+        setTimeout(() => {
+            nextBtn.dispatchEvent(new CustomEvent('click', {
+                bubbles: true,
+                detail: { isBatchRefresh: true, forceRefresh, callback: processNext }
+            }));
+        }, 150);
+    }
+
+    processNext('Starting batch open notes...', 'info');
+}
+
 function updatePatientUI(wrapper, newInfo) {
     if (!wrapper || !newInfo) return;
 
@@ -1862,7 +1955,7 @@ async function toggleCPPTInline(wrapper, p) {
 
     container.classList.remove('hidden');
 
-    // 1. Reset Logic State to 'ALL' every time it opens
+    // 1. Reset filter every time it opens
     let currentFilter = activeGlobalFilter;
     const today = getLocalToday();
     let selectedDate = today;
