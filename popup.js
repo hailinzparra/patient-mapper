@@ -1459,12 +1459,12 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
                     <div class="patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all">
                         <div class="flex items-center gap-3">
                             <!-- Bed Info (Left) -->
-                            <div class="flex flex-col items-center justify-center min-w-[55px] px-1 py-2 ${freshStyles} rounded-lg border transition-colors duration-500">
+                            <div class="bed-info flex flex-col items-center justify-center min-w-[55px] px-1 py-2 ${freshStyles} rounded-lg border transition-colors duration-500">
                                 <span class="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Bed</span>
                                 <span class="text-[11px] font-black text-blue-700 leading-none">${p.bedName}</span>
                                 
                                 <div class="mt-1.5 pt-1 border-t border-black/5 w-full flex justify-center">
-                                    <span class="text-[9px] font-bold ${losData.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none" data-adm="${p.admDate}">
+                                    <span class="los-text text-[9px] font-bold ${losData.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none" data-adm="${p.admDate}">
                                         ${losData.text}
                                     </span>
                                 </div>
@@ -1930,8 +1930,39 @@ function updatePatientUI(wrapper, newInfo) {
 
     const admEl = wrapper.querySelector('.js-adm-date');
     const disEl = wrapper.querySelector('.js-dis-date');
+    const bedInfo = wrapper.querySelector('.bed-info');
+    const losText = wrapper.querySelector('.los-text');
     if (admEl) admEl.textContent = formatDateWithDay(newInfo.admDate || '-');
     if (disEl) disEl.textContent = formatDateWithDay(newInfo.disDate || '-');
+    if (bedInfo && losText) {
+        const losData = getPatientLOS(newInfo.admDate, newInfo.disDate);
+
+        // 1. Update the Text Content
+        losText.textContent = losData.text;
+        losText.dataset.adm = newInfo.admDate;
+
+        // 2. Define Class Sets
+        const freshContainer = ['bg-amber-50', 'border-amber-200'];
+        const staleContainer = ['bg-slate-100', 'border-slate-200'];
+
+        const freshText = 'text-amber-700';
+        const staleText = 'text-slate-500';
+
+        // 3. Apply Conditional Styles to the Container (bedInfo)
+        if (losData.isFresh) {
+            bedInfo.classList.remove(...staleContainer);
+            bedInfo.classList.add(...freshContainer);
+
+            losText.classList.remove(staleText);
+            losText.classList.add(freshText);
+        } else {
+            bedInfo.classList.remove(...freshContainer);
+            bedInfo.classList.add(...staleContainer);
+
+            losText.classList.remove(freshText);
+            losText.classList.add(staleText);
+        }
+    }
 
     const syncEl = wrapper.querySelector('.js-last-sync');
     if (syncEl) syncEl.textContent = formatFullTimestamp(newInfo.lastUpdated || Date.now());
