@@ -172,6 +172,40 @@
                 opacity: 0.6;
                 background-color: #f8fafc;
             }
+            .dropdown-content {
+                display: none;
+                transform-origin: top right;
+            }
+            .dropdown-content.show {
+                display: block;
+                animation: dropdownFade 0.2s ease-out forwards;
+            }
+            @keyframes dropdownFade {
+                from {
+                    opacity: 0;
+                    transform: scale(0.95) translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1) translateY(0);
+                }
+            }
+            .filter-segment {
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .filter-segment.active {
+                background-color: white;
+                box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            }
+            .filter-segment.btn-all.active {
+                color: #000000 !important;
+            }
+            .filter-segment.btn-mine.active {
+                color: #2563eb !important;
+            }
+            .filter-segment.btn-doctors.active {
+                color: #2563eb !important;
+            }
         </style>
     </head>
     <body class="bg-slate-50 flex h-screen overflow-hidden text-slate-900">
@@ -375,7 +409,7 @@
                     <div class="max-w-[1600px] mx-auto">
                         <!-- Header -->
                         <div
-                            class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4 sm:gap-0"
+                            class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4 sm:gap-0"
                         >
                             <div class="flex items-center gap-3">
                                 <div
@@ -416,12 +450,320 @@
                                     Syncing...
                                 </div>
 
+                                <!-- Header Actions -->
+                                <div
+                                    class="flex items-center gap-1.5 flex-shrink-0"
+                                >
+                                    <button
+                                        id="btn-export-pdf"
+                                        class="p-2 bg-slate-800 text-white rounded-xl hover:bg-black active:scale-95 transition-all shadow-md border border-slate-700"
+                                    >
+                                        <svg
+                                            class="w-4 h-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2.5"
+                                                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                                            ></path>
+                                        </svg>
+                                    </button>
+
+                                    <div class="relative">
+                                        <button
+                                            id="menu-toggle"
+                                            class="p-2 bg-slate-50 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-100 active:scale-95 transition-all"
+                                        >
+                                            <svg
+                                                class="w-5 h-5"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2.5"
+                                                    d="M4 6h16M4 12h16m-7 6h7"
+                                                ></path>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Dropdown Content -->
+                                        <div
+                                            id="dropdown-menu"
+                                            class="dropdown-content absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden"
+                                        >
+                                            <!-- Batch Operations -->
+                                            <div
+                                                class="p-2 border-bottom border-slate-100 bg-slate-50/50"
+                                            >
+                                                <p
+                                                    class="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest"
+                                                >
+                                                    Batch Operations
+                                                </p>
+                                                <div
+                                                    class="flex flex-col gap-1 mt-1"
+                                                >
+                                                    <button
+                                                        id="btn-batch-refresh"
+                                                        class="flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors group"
+                                                    >
+                                                        <span
+                                                            class="flex flex-col items-start leading-tight"
+                                                        >
+                                                            <span
+                                                                >Batch
+                                                                Refresh</span
+                                                            >
+                                                            <span
+                                                                class="text-[8px] font-medium text-slate-400"
+                                                                >Refresh all
+                                                                patients</span
+                                                            >
+                                                        </span>
+                                                        <svg
+                                                            class="w-4 h-4 group-active:rotate-180 transition-transform duration-500"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <path
+                                                                stroke-linecap="round"
+                                                                stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                                            ></path>
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        id="btn-batch-notes"
+                                                        class="flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors"
+                                                    >
+                                                        <span
+                                                            class="flex flex-col items-start leading-tight"
+                                                        >
+                                                            <span
+                                                                >Batch Open
+                                                                Notes</span
+                                                            >
+                                                            <span
+                                                                class="text-[8px] font-medium text-slate-400"
+                                                                >Open all
+                                                                patients'
+                                                                notes</span
+                                                            >
+                                                        </span>
+                                                        <svg
+                                                            class="w-4 h-4"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <path
+                                                                stroke-linecap="round"
+                                                                stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                                            ></path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Storage Section -->
+                                            <div
+                                                class="p-2 border-t border-slate-100"
+                                            >
+                                                <p
+                                                    class="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest"
+                                                >
+                                                    Device Backup
+                                                </p>
+                                                <button
+                                                    id="btn-save-data"
+                                                    class="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                                                >
+                                                    <span>Save to Device</span>
+                                                    <svg
+                                                        class="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                        ></path>
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    id="btn-load-data"
+                                                    class="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                                                >
+                                                    <span
+                                                        >Load from Device</span
+                                                    >
+                                                    <svg
+                                                        class="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                        ></path>
+                                                    </svg>
+                                                </button>
+                                            </div>
+
+                                            <!-- Cloud Section -->
+                                            <div
+                                                class="p-2 border-t border-slate-100"
+                                            >
+                                                <p
+                                                    class="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest"
+                                                >
+                                                    Cloud Sync
+                                                </p>
+                                                <button
+                                                    class="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                >
+                                                    <span>Save to Cloud</span>
+                                                    <svg
+                                                        class="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
+                                                        ></path>
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    class="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                >
+                                                    <span>Load from Cloud</span>
+                                                    <svg
+                                                        class="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
+                                                        ></path>
+                                                    </svg>
+                                                </button>
+                                            </div>
+
+                                            <!-- Danger Zone -->
+                                            <div
+                                                class="p-2 bg-red-50/30 border-t border-slate-100"
+                                            >
+                                                <p
+                                                    class="px-2 py-1 text-[9px] font-bold text-red-400 uppercase tracking-widest"
+                                                >
+                                                    Danger Zone
+                                                </p>
+                                                <button
+                                                    id="btn-clear-patients"
+                                                    class="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold text-orange-600 hover:bg-orange-50 rounded-lg transition-colors group"
+                                                >
+                                                    <svg
+                                                        class="w-4 h-4 group-hover:scale-110 transition-transform"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                        ></path>
+                                                    </svg>
+                                                    Clear All Patients
+                                                </button>
+                                                <button
+                                                    id="btn-full-reset"
+                                                    class="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors group"
+                                                >
+                                                    <svg
+                                                        class="w-4 h-4 group-hover:animate-pulse"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                                        ></path>
+                                                    </svg>
+                                                    Wipe Board & Reset Order
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-Header: Global Filter & Expansion Utils -->
+                        <div
+                            class="flex items-center justify-between gap-2 mb-6"
+                        >
+                            <div
+                                class="bg-slate-200/50 p-1 rounded-xl flex items-center gap-1 flex-1 max-w-[210px]"
+                            >
                                 <button
-                                    id="btn-save-data"
-                                    class="px-3 py-1.5 bg-blue-50 text-blue-600 text-[10px] font-black rounded-xl border border-blue-100 hover:bg-blue-100 transition-all flex items-center gap-2 uppercase tracking-wider"
+                                    data-filter="ALL"
+                                    class="filter-segment btn-all flex-1 py-1 text-[10px] font-black uppercase rounded-lg text-slate-500 active:scale-95"
+                                >
+                                    All
+                                </button>
+                                <button
+                                    data-filter="MINE"
+                                    class="filter-segment btn-mine flex-1 py-1 text-[10px] font-black uppercase rounded-lg text-slate-500 active:scale-95 active"
+                                >
+                                    Mine
+                                </button>
+                                <button
+                                    data-filter="DOCTORS"
+                                    class="filter-segment btn-doctors flex-1 py-1 text-[10px] font-black uppercase rounded-lg text-slate-500 active:scale-95"
+                                >
+                                    Docs
+                                </button>
+                            </div>
+
+                            <!-- Utility Right (Room Expansion/Collapse) -->
+                            <div class="flex items-center gap-1">
+                                <button
+                                    id="btn-collapse-rooms"
+                                    class="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-blue-50 hover:text-blue-600 active:scale-90 transition-all shadow-sm"
+                                    title="Uncollapse/Expand All Rooms"
                                 >
                                     <svg
-                                        class="w-3 h-3"
+                                        class="w-4 h-4"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -430,35 +772,17 @@
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
                                             stroke-width="2.5"
-                                            d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-                                        />
+                                            d="M7 11l5-5m0 0l5 5m-5-5v12m-8-2l8 8 8-8"
+                                        ></path>
                                     </svg>
-                                    Save
                                 </button>
-
                                 <button
-                                    id="btn-load-data"
-                                    class="px-3 py-1.5 bg-amber-50 text-amber-600 text-[10px] font-black rounded-xl border border-amber-100 hover:bg-amber-100 transition-all flex items-center gap-2 uppercase tracking-wider"
+                                    id="btn-expand-rooms"
+                                    class="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-blue-50 hover:text-blue-600 active:scale-90 transition-all shadow-sm"
+                                    title="Collapse All Rooms"
                                 >
                                     <svg
-                                        class="w-3 h-3"
-                                        fill="currentColor"
-                                        viewBox="0 0 24 24"
-                                        stroke="none"
-                                    >
-                                        <path
-                                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                                        />
-                                    </svg>
-                                    Load
-                                </button>
-
-                                <button
-                                    id="btn-reset-data"
-                                    class="px-3 py-1.5 bg-red-50 text-red-600 text-[10px] font-black rounded-xl border border-red-100 hover:bg-red-100 transition-all flex items-center gap-2 uppercase tracking-wider"
-                                >
-                                    <svg
-                                        class="w-3 h-3"
+                                        class="w-4 h-4"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -467,10 +791,9 @@
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
                                             stroke-width="2.5"
-                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                        />
+                                            d="M19 13l-7 7-7-7m14-8l-7 7-7-7"
+                                        ></path>
                                     </svg>
-                                    Clear
                                 </button>
                             </div>
                         </div>

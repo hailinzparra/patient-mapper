@@ -11,6 +11,7 @@ let tabCounter = 0;
 let activeTabId = 'home';
 let sidebarCollapsed = false;
 let cachedSession = null;
+let activeGlobalFilter = 'MINE';
 
 // Data
 const doctorDatabase = [
@@ -219,6 +220,7 @@ const templates = [
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     setupForm();
+    setupMyPatientsHeader();
     setIDLists();
     syncSidebarCountFromStorage();
 });
@@ -230,7 +232,8 @@ function setupEventListeners() {
     document.getElementById('sidebar-ids').addEventListener('click', () => switchView('ids'));
     document.getElementById('btn-save-data').addEventListener('click', handleSaveData);
     document.getElementById('btn-load-data').addEventListener('click', handleLoadData);
-    document.getElementById('btn-reset-data').addEventListener('click', clearAllStorage);
+    document.getElementById('btn-clear-patients').addEventListener('click', clearPatients);
+    document.getElementById('btn-full-reset').addEventListener('click', clearAllStorage);
 
     document.getElementById('tab-home').addEventListener('click', () => {
         // If we are currently in a different view, go back to workspace
@@ -729,6 +732,63 @@ function setupForm() {
     });
 
     renderTemplates();
+}
+
+function setupMyPatientsHeader() {
+    const menuToggle = document.getElementById('menu-toggle');
+    const dropdownMenu = document.getElementById('dropdown-menu');
+    const filterButtons = document.querySelectorAll('.filter-segment');
+    const batchRefreshBtn = document.getElementById('btn-batch-refresh');
+    const collapseRoomsBtn = document.getElementById('btn-collapse-rooms');
+    const expandRoomsBtn = document.getElementById('btn-expand-rooms');
+
+    // Dropdown Toggle
+    menuToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdownMenu.classList.toggle('show');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!dropdownMenu.contains(e.target) && e.target !== menuToggle) {
+            dropdownMenu.classList.remove('show');
+        }
+    });
+
+    batchRefreshBtn.addEventListener('click', () => {
+        if (confirm("Refresh all patients? This will take a moment.")) {
+            expandRoomsBtn.click();
+            refreshAllPatients();
+        }
+    });
+
+    // Global Filter Logic
+    filterButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeGlobalFilter = btn.dataset.filter;
+        });
+    });
+
+    collapseRoomsBtn.addEventListener('click', () => toggleAllRooms(true));
+    expandRoomsBtn.addEventListener('click', () => toggleAllRooms(false));
+}
+
+function toggleAllRooms(shouldCollapse) {
+    const roomGroups = document.querySelectorAll('.room-group');
+    roomGroups.forEach(group => {
+        const toggleBtn = group.querySelector('.toggle-room')
+        const patientList = group.querySelector('.patient-list');
+        if (toggleBtn && patientList) {
+            const isCurrentlyCollapsed = patientList.classList.contains('hidden');
+            const isEmpty = patientList.querySelectorAll('.patient-wrapper')?.length === 0;
+            if (shouldCollapse && !isCurrentlyCollapsed ||
+                (!shouldCollapse && isCurrentlyCollapsed && !isEmpty)
+            ) {
+                toggleBtn.click();
+            }
+        }
+    });
 }
 // #endregion
 
@@ -1716,6 +1776,12 @@ function createRoomGroup(roomName, patients, roomId, jenisId) {
 }
 
 function refreshAllPatients() {
+    const myPatientsView = document.getElementById('view-patients');
+    if (myPatientsView.classList.contains('hidden')) {
+        showToast('Please switch to My Patients view to refresh all patients.', 'info');
+        return;
+    }
+
     const refreshBtns = document.querySelectorAll('.room-group .patient-wrapper .refresh-patient-btn');
 
     if (refreshBtns.length === 0) {
@@ -1797,7 +1863,7 @@ async function toggleCPPTInline(wrapper, p) {
     container.classList.remove('hidden');
 
     // 1. Reset Logic State to 'ALL' every time it opens
-    let currentFilter = 'ALL';
+    let currentFilter = activeGlobalFilter;
     const today = getLocalToday();
     let selectedDate = today;
 
@@ -1892,7 +1958,7 @@ async function toggleCPPTInline(wrapper, p) {
         if (filterDocs) filterDocs.onclick = () => { currentFilter = 'DOCTORS'; applyFilter(); };
 
         renderDatePagination();
-        applyFilter(); // Initial run will now force 'ALL' styling
+        applyFilter();
 
     } catch (err) {
         body.innerHTML = `<p class="text-center text-red-400 text-[10px] font-bold py-10">${err.message}</p>`;
@@ -2006,9 +2072,30 @@ function addPatientToStorage(patientData, roomId, lastUpdated = Date.now(), isSi
     });
 }
 
+function clearPatients() {
+    if (confirm("Clear all patients on the board?")) {
+        api.storage.local.get(['customOrders'], (result) => {
+            let customOrders = result.customOrders || { rooms: {}, patients: {} };
+            if (customOrders.patients) {
+                Object.keys(customOrders.patients).forEach(roomId => {
+                    customOrders.patients[roomId] = [];
+                });
+            }
+            api.storage.local.set({
+                fetchedPatients: [],
+                customOrders: customOrders
+            }, () => {
+                showToast("All patients cleared! Refreshing...", "success");
+                switchView('patients');
+            });
+        });
+    }
+}
+
 function clearAllStorage() {
-    if (confirm("Are you sure you want to clear all data? This will reset your custom sorting and clear cached patients.")) {
+    if (confirm("Wipe board and reset order? This will reset your custom sorting and clear cached patients.")) {
         api.storage.local.clear(() => {
+            showToast("Board wiped! Refreshing...", "success");
             switchView('patients');
         });
     }
