@@ -21,7 +21,7 @@ class EventEmitter {
                 try {
                     callback(data)
                 } catch (err) {
-                    console.error(`Error in event "${name}":`, err)
+                    console.error(`Error in event '${name}':`, err)
                 }
             })
         }
@@ -54,5 +54,80 @@ export const Utils = {
         else if (text) element.textContent = text
         if (children.length) element.append(...children.filter(Boolean))
         return element
+    },
+}
+
+export const Vault = {
+    app: null,
+    db: null,
+    instanceName: '',
+    init(instanceName, encodedConfig) {
+        try {
+            const existingApp = firebase.apps.find(app => app.name === instanceName)
+            if (existingApp) this.app = existingApp
+            else this.app = firebase.initializeApp(JSON.parse(atob(encodedConfig)), instanceName)
+            this.db = this.app.database()
+            this.db.INTERNAL.forceWebSockets(true)
+            this.instanceName = instanceName
+        }
+        catch (error) {
+            console.error('Failed to initialize:', error)
+        }
+    },
+    async save(path, data) {
+        if (!this.db) throw new Error('Vault not initialized.')
+        try {
+            return this.db.ref(`${this.instanceName}/${path}`).set(data)
+        }
+        catch (error) {
+            console.error('Failed to save:', error)
+            return null
+        }
+    },
+    async load(path) {
+        if (!this.db) throw new Error('Vault not initialized.')
+        try {
+            const snapshot = await this.db.ref(`${this.instanceName}/${path}`).once('value')
+            return snapshot.val()
+        }
+        catch (error) {
+            console.error('Failed to load:', error)
+            return null
+        }
+    },
+    async exists(path) {
+        if (!this.db) return false
+        try {
+            const snapshot = await this.db.ref(`${this.instanceName}/${path}`).once('value')
+            return snapshot.exists()
+        }
+        catch {
+            return false
+        }
+    },
+    async remove(path) {
+        if (!this.db) throw new Error('Vault not initialized.')
+        try {
+            return this.db.ref(`${this.instanceName}/${path}`).set(null)
+        }
+        catch (error) {
+            console.error('Failed to remove:', error)
+            return null
+        }
+    },
+    async destroy() {
+        try {
+            if (this.app) {
+                await this.app.delete()
+                this.app = null
+                this.db = null
+                this.instanceName = ''
+            }
+            return true
+        }
+        catch (error) {
+            console.error('Failed to destroy:', error)
+            return false
+        }
     },
 }

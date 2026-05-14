@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
-    "name": "Patient Mapper v3.2.0",
-    "version": "3.2.0",
+    "name": "Patient Mapper v3.3.0",
+    "version": "3.3.0",
     "description": "Maps hospital patients.",
     "permissions": ["tabs", "storage", "scripting", "activeTab"],
     "host_permissions": ["<all_urls>"],
@@ -19,5 +19,8 @@
         "16": "/src/icons/icon16.png",
         "48": "/src/icons/icon48.png",
         "128": "/src/icons/icon128.png"
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebaseio.com wss://*.firebasedatabase.app;"
     }
 }

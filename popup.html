@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Patient Mapper v3.2.0</title>
+        <title>Patient Mapper v3.3.0</title>
         <script src="/src/js/lib/tailwind.min.js"></script>
         <script src="/src/js/lib/lz-string.min.js"></script>
         <link
@@ -13,8 +13,14 @@
         <link rel="stylesheet" href="/src/css/popup.css" />
     </head>
     <body>
-        <div id="main-container"></div>
+        <div id="main-container">
+            <textarea id="content"></textarea>
+            <button id="save-button">SAVE</button>
+            <button id="load-button">LOAD</button>
+        </div>
         <script src="/src/js/lib/sweetalert2.all.min.js"></script>
+        <script src="/src/js/lib/firebase-app-compat.js"></script>
+        <script src="/src/js/lib/firebase-database-compat.js"></script>
         <script type="module" src="/src/js/popup.js"></script>
     </body>
 </html>
