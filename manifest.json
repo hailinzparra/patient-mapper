@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
-    "name": "Patient Mapper v3.3.0",
-    "version": "3.3.0",
+    "name": "Patient Mapper v3.4.0",
+    "version": "3.4.0",
     "description": "Maps hospital patients.",
     "permissions": ["tabs", "storage", "scripting", "activeTab"],
     "host_permissions": ["<all_urls>"],

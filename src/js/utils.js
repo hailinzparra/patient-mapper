@@ -1,3 +1,5 @@
+const api = typeof browser !== 'undefined' ? browser : chrome
+
 class EventEmitter {
     #listeners = new Map()
     on(name, callback) {
@@ -61,73 +63,118 @@ export const Vault = {
     app: null,
     db: null,
     instanceName: '',
+    lastLoadedData: {},
     init(instanceName, encodedConfig) {
         try {
+            const config = JSON.parse(atob(encodedConfig))
             const existingApp = firebase.apps.find(app => app.name === instanceName)
-            if (existingApp) this.app = existingApp
-            else this.app = firebase.initializeApp(JSON.parse(atob(encodedConfig)), instanceName)
+            if (existingApp) {
+                this.app = existingApp
+            } else {
+                this.app = firebase.initializeApp(config, instanceName)
+            }
             this.db = this.app.database()
             this.db.INTERNAL.forceWebSockets(true)
             this.instanceName = instanceName
-        }
-        catch (error) {
-            console.error('Failed to initialize:', error)
+        } catch (err) {
+            console.error('Vault failed to initialize:', err)
         }
     },
-    async save(path, data) {
+    loadAll() {
+        return new Promise((resolve, reject) => {
+            api.storage.local.get(null, (items) => {
+                if (api.runtime.lastError) {
+                    reject(api.runtime.lastError)
+                } else {
+                    this.lastLoadedData = items || {}
+                    resolve(this.lastLoadedData)
+                }
+            })
+        })
+    },
+    save(key, data) {
+        return new Promise((resolve, reject) => {
+            api.storage.local.set({ [key]: data }, () => {
+                if (api.runtime.lastError) {
+                    reject(api.runtime.lastError)
+                } else {
+                    this.lastLoadedData[key] = data
+                    resolve()
+                }
+            })
+        })
+    },
+    load(key) {
+        return new Promise((resolve, reject) => {
+            api.storage.local.get(key, (result) => {
+                if (api.runtime.lastError) {
+                    reject(api.runtime.lastError)
+                } else {
+                    this.lastLoadedData[key] = result[key]
+                    resolve(result[key])
+                }
+            })
+        })
+    },
+    exists(key) {
+        return new Promise((resolve, reject) => {
+            api.storage.local.get(key, (result) => {
+                if (api.runtime.lastError) {
+                    reject(api.runtime.lastError)
+                } else {
+                    resolve(result.hasOwnProperty(key))
+                }
+            })
+        })
+    },
+    remove(key) {
+        return new Promise((resolve, reject) => {
+            api.storage.local.remove(key, () => {
+                if (api.runtime.lastError) {
+                    reject(api.runtime.lastError)
+                } else {
+                    delete this.lastLoadedData[key]
+                    resolve()
+                }
+            })
+        })
+    },
+    clear() {
+        return new Promise((resolve, reject) => {
+            api.storage.local.clear(() => {
+                if (api.runtime.lastError) {
+                    reject(api.runtime.lastError)
+                } else {
+                    this.lastLoadedData = {}
+                    resolve()
+                }
+            })
+        })
+    },
+    async upload(path, data) {
         if (!this.db) throw new Error('Vault not initialized.')
-        try {
-            return this.db.ref(`${this.instanceName}/${path}`).set(data)
-        }
-        catch (error) {
-            console.error('Failed to save:', error)
-            return null
-        }
+        return this.db.ref(`${this.instanceName}/${path}`).set(data)
     },
-    async load(path) {
+    async download(path) {
         if (!this.db) throw new Error('Vault not initialized.')
-        try {
-            const snapshot = await this.db.ref(`${this.instanceName}/${path}`).once('value')
-            return snapshot.val()
-        }
-        catch (error) {
-            console.error('Failed to load:', error)
-            return null
-        }
+        const snapshot = await this.db.ref(`${this.instanceName}/${path}`).once('value')
+        return snapshot.val()
     },
-    async exists(path) {
+    async has(path) {
         if (!this.db) return false
-        try {
-            const snapshot = await this.db.ref(`${this.instanceName}/${path}`).once('value')
-            return snapshot.exists()
-        }
-        catch {
-            return false
-        }
+        const snapshot = await this.db.ref(`${this.instanceName}/${path}`).once('value')
+        return snapshot.exists()
     },
-    async remove(path) {
+    async discard(path) {
         if (!this.db) throw new Error('Vault not initialized.')
-        try {
-            return this.db.ref(`${this.instanceName}/${path}`).set(null)
-        }
-        catch (error) {
-            console.error('Failed to remove:', error)
-            return null
-        }
+        return this.db.ref(`${this.instanceName}/${path}`).set(null)
     },
     async destroy() {
-        try {
-            if (this.app) {
-                await this.app.delete()
-                this.app = null
-                this.db = null
-                this.instanceName = ''
-            }
-            return true
-        }
-        catch (error) {
-            console.error('Failed to destroy:', error)
-            return false
+        if (this.app) {
+            await this.app.delete()
+            this.app = null
+            this.db = null
+            this.instanceName = ''
         }
     },
 }
