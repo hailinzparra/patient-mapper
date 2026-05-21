@@ -1,10 +1,16 @@
 {
     "manifest_version": 3,
-    "name": "Patient Mapper v3.4.0",
-    "version": "3.4.0",
+    "name": "Patient Mapper v3.4.1",
+    "version": "3.4.1",
     "description": "Maps hospital patients.",
     "permissions": ["tabs", "storage", "scripting", "activeTab"],
-    "host_permissions": ["<all_urls>"],
+    "host_permissions": [
+        "https://api.rsudsoediranms.com/*",
+        "https://apirssoehadi.sragenkab.go.id/*",
+        "http://192.168.13.6/*",
+        "http://192.168.13.7/*",
+        "http://192.168.13.8/*"
+    ],
     "action": {
         "default_icon": {
             "16": "/src/icons/icon16.png",
@@ -19,8 +25,5 @@
         "16": "/src/icons/icon16.png",
         "48": "/src/icons/icon48.png",
         "128": "/src/icons/icon128.png"
-    },
-    "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebaseio.com wss://*.firebasedatabase.app;"
     }
 }

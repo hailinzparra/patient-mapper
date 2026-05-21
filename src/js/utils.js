@@ -37,6 +37,9 @@ class EventEmitter {
 export const Events = new EventEmitter()
 
 export const Utils = {
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms))
+    },
     getBrowser() {
         const ua = navigator.userAgent
         if (ua.match(/edg/i)) return 'Edge'
@@ -46,16 +49,36 @@ export const Utils = {
         if (ua.match(/safari/i)) return 'Safari'
         return 'Unknown'
     },
-    createElement(tag, { classes = '', attrs = {}, text = '', html = '' } = {}, children = []) {
-        const element = document.createElement(tag)
-        if (classes.length) element.className = classes
-        for (const [key, val] of Object.entries(attrs)) {
-            element.setAttribute(key, val)
-        }
-        if (html) element.innerHTML = html
-        else if (text) element.textContent = text
-        if (children.length) element.append(...children.filter(Boolean))
-        return element
+    DOM: {
+        createElement(tag, { classes = '', attrs = {}, text = '', html = '' } = {}, children = []) {
+            const element = document.createElement(tag)
+            if (classes.length) element.className = classes
+            for (const [key, val] of Object.entries(attrs)) {
+                element.setAttribute(key, val)
+            }
+            if (html) element.innerHTML = html
+            else if (text) element.textContent = text
+            if (children.length) element.append(...children.filter(Boolean))
+            return element
+        },
+        selectOptionByValue(selectEl, targetValue) {
+            const targetOption = Array.from(selectEl.options).find(option => option.value === String(targetValue))
+            if (targetOption) {
+                targetOption.selected = true;
+                selectEl.dispatchEvent(new Event('change', { bubbles: true }))
+                return true
+            }
+            return false
+        },
+        selectOptionByDatasetIndex(selectEl, targetDataset) {
+            const targetOption = Array.from(selectEl.options).find(option => String(option.dataset.index) === String(targetDataset))
+            if (targetOption) {
+                targetOption.selected = true;
+                selectEl.dispatchEvent(new Event('change', { bubbles: true }))
+                return true
+            }
+            return false
+        },
     },
 }
 
