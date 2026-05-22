@@ -55,6 +55,10 @@ const G = {
             isSidebarCollapsed: false,
             isAccordionOpen: true,
         }),
+        getPatientListById(listId) {
+            const lists = this.patients.data.lists || []
+            return lists.find(l => l.id === listId) || null
+        },
     },
     nav: {
         tabs: {
@@ -272,15 +276,17 @@ const G = {
             document.querySelectorAll('.sidebar-sub-list-btn').forEach(btn => {
                 const parentRow = btn.closest('[data-list-id]')
                 const listId = parentRow.getAttribute('data-list-id')
-                const configBtn = parentRow.querySelector('.config-btn')
+                const gearBtn = parentRow.querySelector('.gear-btn')
                 if (listId === activeSubListId) {
-                    btn.className = 'sidebar-sub-list-btn flex-1 text-left text-xs font-semibold text-blue-600 px-3 py-2 cursor-pointer truncate transition-all'
+                    btn.classList.remove('font-medium', 'text-slate-500', 'group-hover:text-slate-800')
+                    btn.classList.add('font-semibold', 'text-blue-600')
                     parentRow.classList.add('bg-blue-50/40')
-                    configBtn.classList.remove('hidden')
+                    gearBtn.classList.remove('hidden')
                 } else {
-                    btn.className = 'sidebar-sub-list-btn flex-1 text-left text-xs font-medium text-slate-500 px-3 py-2 group-hover:text-slate-800 cursor-pointer truncate transition-all'
+                    btn.classList.remove('font-semibold', 'text-blue-600')
+                    btn.classList.add('font-medium', 'text-slate-500', 'group-hover:text-slate-800')
                     parentRow.classList.remove('bg-blue-50/40')
-                    configBtn.classList.add('hidden')
+                    gearBtn.classList.add('hidden')
                 }
             })
         },
@@ -416,12 +422,16 @@ const G = {
             listBtn.innerText = patientList.name
 
             const configBtn = document.createElement('button')
-            configBtn.className = 'config-btn p-1 me-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition'
+            configBtn.className = 'gear-btn p-1 me-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition hidden'
             configBtn.innerHTML = Utils.DOM.GEAR_SVG
 
             configBtn.addEventListener('click', (e) => {
                 e.stopPropagation()
-                this.openListSettingsModal(patientList, listBtn, rowWrapper)
+                const newestPatientList = G.store.getPatientListById(rowWrapper.dataset.listId)
+                if (newestPatientList) {
+                    patientList = newestPatientList
+                }
+                this.openListDataModal(patientList, listBtn, rowWrapper)
             })
 
             rowWrapper.append(listBtn)
@@ -429,35 +439,56 @@ const G = {
 
             return rowWrapper
         },
-        async openListSettingsModal(patientList, listTextElement, wholeRowElement) {
+        async openListDataModal(patientList, listBtn, rowWrapper) {
+            const count = patientList.getPatientCount()
             const localizedDate = new Date(patientList.createdAt || Date.now()).toLocaleDateString()
-            const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0']
+            const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0', 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 text-left',
+                'flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 hover:border-slate-300 rounded-md text-xs font-bold bg-white hover:bg-slate-50 active:bg-slate-100 shadow-sm transition cursor-pointer',
+                'class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"',
+            ]
             const result = await G.swal.fire({
-                title: `<div class="truncate">${patientList.name}</div>`,
-                html: `<div class="border border-slate-200 rounded-md p-4 bg-slate-50 text-xs text-slate-600 space-y-2 mb-5">
+                title: `<div class="truncate">List Data</div>`,
+                html: `<div class="border border-slate-200 rounded-md p-4 bg-slate-50 text-xs text-slate-600 space-y-2 mb-3">
                 <div class="${cls[0]}"><span class="${cls[1]}">List Name:</span><span class="font-medium text-slate-800">${patientList.name}</span></div>
-                <div class="${cls[0]}"><span class="${cls[1]}">Total Patients:</span>
-                <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100">${patientList.getPatientCount()} records</span></div>
+                <div class="${cls[0]}"><span class="${cls[1]}">Total Records:</span>
+                <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100">${count} record${count === 1 ? '' : 's'}</span></div>
                 <div class="${cls[0]}"><span class="${cls[1]}">Created At:</span><span class="text-slate-700">${localizedDate}</span></div></div>
-                <div class="w-full"><label for="swal-input-name" class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Rename List</label>
+                <div class="w-full mb-3"><label for="swal-input-name" class="${cls[2]}">Rename List</label>
                 <input id="swal-input-name" type="text"
                     class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-800 placeholder-slate-400 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
                     value="${patientList.name}" placeholder="Enter new name..."
-                ></div>`,
+                ></div>
+                <div class="w-full mb-3"><div class="${cls[2]} mb-2">Device Backup</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button type="button" id="swal-btn-save-data" class="${cls[3]} text-slate-700">
+                <svg ${cls[4]} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Save to Device</button>
+                <button type="button" id="swal-btn-load-data" class="${cls[3]} text-slate-700">
+                <svg ${cls[4]} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Load from Device</button></div></div>
+                <div class="w-full"><div class="${cls[2]} mb-2">Cloud Sync</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button type="button" id="swal-btn-cloud-save-data" class="${cls[3]} text-blue-600">
+                <svg ${cls[4]} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                Save to Cloud</button>
+                <button type="button" id="swal-btn-cloud-load-data" class="${cls[3]} text-blue-600">
+                <svg ${cls[4]} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path></svg>
+                Load from Cloud</button></div></div>`,
                 showDenyButton: true,
                 showCancelButton: true,
                 denyButtonText: 'Delete List',
                 confirmButtonText: 'Save Changes',
                 didOpen: () => {
                     const originalName = patientList.name
-                    const input = document.getElementById('swal-input-name')
+                    const renameInput = document.getElementById('swal-input-name')
+                    const saveToDeviceBtn = document.getElementById('swal-btn-save-data')
+                    const loadFromDeviceBtn = document.getElementById('swal-btn-load-data')
+                    const saveToCloudBtn = document.getElementById('swal-btn-cloud-save-data')
+                    const loadFromCloudBtn = document.getElementById('swal-btn-cloud-load-data')
                     const confirmButton = G.swal.getConfirmButton()
-                    if (input) {
-                        input.focus()
+                    if (renameInput) {
                         if (confirmButton) {
                             confirmButton.disabled = true
                         }
-                        input.addEventListener('input', (e) => {
+                        renameInput.addEventListener('input', (e) => {
                             const currentVal = e.target.value.trim()
                             if (currentVal === originalName.trim() || !currentVal) {
                                 confirmButton.disabled = true
@@ -465,7 +496,7 @@ const G = {
                                 confirmButton.disabled = false
                             }
                         })
-                        input.addEventListener('keydown', (event) => {
+                        renameInput.addEventListener('keydown', (event) => {
                             if (event.key === 'Enter') {
                                 event.preventDefault()
                                 if (confirmButton && !confirmButton.disabled) {
@@ -473,6 +504,14 @@ const G = {
                                 }
                             }
                         })
+                    }
+
+                    saveToDeviceBtn.onclick = () => {
+                        this.triggerSave(patientList)
+                    }
+
+                    loadFromDeviceBtn.onclick = async () => {
+                        this.triggerLoad(patientList, listBtn, rowWrapper)
                     }
                 },
                 preConfirm: () => {
@@ -489,7 +528,7 @@ const G = {
                 }
             })
             if (result.isConfirmed && result.value?.action === 'rename') {
-                await this.renamePatientList(patientList.id, result.value.value, listTextElement)
+                await this.renamePatientList(patientList.id, result.value.value, listBtn)
                 G.swal.fire({
                     icon: 'success',
                     title: 'Saved successfully!',
@@ -511,7 +550,7 @@ const G = {
                     cancelButtonText: 'Cancel',
                 })
                 if (confirmDelete.isDenied) {
-                    await this.removePatientList(patientList.id, wholeRowElement)
+                    await this.removePatientList(patientList.id, rowWrapper)
                     G.swal.fire({
                         icon: 'success',
                         title: 'Deleted successfully!',
@@ -531,34 +570,125 @@ const G = {
                 }
             }
         },
-        async renamePatientList(listId, newName, rowEl) {
-            const lists = G.store.patients.data.lists || []
-            const listToRename = lists.find(l => l.id === listId)
+        async triggerSave(patientList) {
+            G.swal.fire({
+                title: 'Saving to device...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showCloseButton: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    G.swal.showLoading()
+                }
+            })
 
+            await Utils.sleep(500)
+
+            try {
+                await PatientList.saveToDevice(patientList)
+                G.swal.fire({
+                    icon: 'success',
+                    title: 'Backup saved to device!',
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    timer: 1000,
+                    timerProgressBar: true,
+                })
+            } catch (error) {
+                console.error(error)
+                G.swal.fire({
+                    icon: 'error',
+                    title: 'Error saving data',
+                    text: 'Something went wrong while generating your backup file.',
+                })
+            }
+        },
+        async triggerLoad(patientList, listBtn, rowWrapper) {
+            const originalListId = patientList.id
+
+            G.swal.fire({
+                title: 'Loading from device...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showCloseButton: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    G.swal.showLoading()
+                }
+            })
+
+            await Utils.sleep(200)
+
+            try {
+                const loadedInstance = await PatientList.loadFromDevice()
+
+                const lists = G.store.patients.data.lists || []
+                const index = lists.findIndex(l => l.id === patientList.id)
+
+                if (index === -1) throw new Error('No list to replace.')
+
+                lists[index] = loadedInstance
+
+                await G.store.patients.update({ lists })
+
+                if (listBtn) {
+                    listBtn.innerText = loadedInstance.name
+                }
+
+                if (rowWrapper) {
+                    rowWrapper.dataset.listId = loadedInstance.id
+                }
+
+                this.lastSelectedListId = loadedInstance.id
+
+                this.myPatientsBtn.click()
+
+                G.swal.fire({
+                    icon: 'success',
+                    title: 'Data loaded successfully!',
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    timer: 1000,
+                    timerProgressBar: true,
+                })
+
+            } catch (error) {
+                console.error(error)
+                if (error.message === 'File selection cancelled') {
+                    G.swal.close()
+                    return
+                }
+                G.swal.fire({
+                    icon: 'error',
+                    title: 'Error loading data',
+                    text: 'The file selected was corrupted or is not an authentic backup.',
+                })
+            }
+        },
+        async renamePatientList(listId, newName, listBtn) {
+            const listToRename = G.store.getPatientListById(listId)
             if (!listToRename || !newName.trim()) return
-
             listToRename.name = newName.trim()
 
-            await G.store.patients.update({ lists })
+            await G.store.patients.update({})
 
-            if (rowEl) {
-                rowEl.innerText = listToRename.name
+            if (listBtn) {
+                listBtn.innerText = listToRename.name
             }
-
             const activeTitle = document.querySelector(`h2.my-home-title[data-list-id="${listId}"]`)
             if (activeTitle) {
                 activeTitle.innerText = listToRename.name
             }
         },
-        async removePatientList(listId, rowEl) {
+        async removePatientList(listId, rowWrapper) {
             let lists = G.store.patients.data.lists || []
 
             lists = lists.filter(l => l.id !== listId)
 
             await G.store.patients.update({ lists })
 
-            if (rowEl && rowEl.parentNode) {
-                rowEl.remove()
+            if (rowWrapper && rowWrapper.parentNode) {
+                rowWrapper.remove()
             }
 
             this.updateMyPatientsBadge()
