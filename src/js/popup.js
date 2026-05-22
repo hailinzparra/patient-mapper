@@ -762,16 +762,18 @@ const G = {
                         `)
                     }
 
-                    const dateLabel = uploadDateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                    const dateLabel = uploadDateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                    const recordCount = Number(meta.count) || 0
+                    const recordsHtml = `<span class="text-blue-700">${recordCount} record${recordCount === 1 ? '' : 's'}</span>`
 
                     if (isExpired) {
                         validOptionsHtml.push(`
                             <div class="flex items-center justify-between p-2.5 border border-slate-100 bg-slate-100/70 rounded-md text-slate-400 select-none opacity-60 overflow-x-hidden">
                                 <div class="text-left">
                                     <div class="font-bold text-[10px] max-w-[150px] truncate line-through">${meta.name}</div>
-                                    <div class="text-[7px] text-slate-400">${dateLabel}</div>
+                                    <div class="text-[8px] text-slate-400">${dateLabel} | ${recordsHtml}</div>
                                 </div>
-                                <span class="text-[7px] font-bold tracking-wide px-2 py-0.5 rounded bg-red-50 text-red-400 border border-red-100">Expired</span>
+                                <span class="text-[8px] font-bold tracking-wide px-2 py-0.5 rounded bg-red-50 text-red-400 border border-red-100">Expired</span>
                             </div>
                         `)
                     } else {
@@ -782,10 +784,10 @@ const G = {
                                     <input type="radio" name="swal-cloud-select" value="${meta.id}" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
                                     <div>
                                         <div class="font-bold text-[10px] text-slate-700 max-w-[150px] line-clamp-2">${meta.name}</div>
-                                        <div class="text-[7px] text-slate-400">${dateLabel}</div>
+                                        <div class="text-[8px] text-slate-400">${dateLabel} | ${recordsHtml}</div>
                                     </div>
                                 </div>
-                                <span class="text-[7px] font-bold tracking-wide px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap shrink-0">
+                                <span class="text-[8px] font-bold tracking-wide px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap shrink-0">
                                     Expires in ${countdownString}
                                 </span>
                             </label>

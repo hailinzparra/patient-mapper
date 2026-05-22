@@ -150,6 +150,7 @@ export class PatientList {
         const manifestItem = {
             id: Utils.ID(),
             name: patientListInstance.name,
+            count: patientListInstance.getPatientCount(),
         }
 
         await Vault.upload(`previewlist/${timestamp}`, manifestItem)
