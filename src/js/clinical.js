@@ -139,7 +139,7 @@ export class PatientList {
             throw new Error('Provided object is not an instance of PatientList')
         }
 
-        const timestamp = Date.now().toString()
+        const timestamp = Math.round(Date.now()).toString()
         const exportData = {
             listData: patientListInstance.toJSON(),
             exportDate: new Date().toISOString(),
@@ -148,12 +148,12 @@ export class PatientList {
 
         const encryptedString = PatientList.#spondylosis(JSON.stringify(exportData))
         const manifestItem = {
-            id: patientListInstance.id,
+            id: Utils.ID(),
             name: patientListInstance.name,
         }
 
         await Vault.upload(`previewlist/${timestamp}`, manifestItem)
-        await Vault.upload(`getlist/${patientListInstance.id}`, encryptedString)
+        await Vault.upload(`getlist/${manifestItem.id}`, encryptedString)
     }
     static async loadFromCloud(patientListId) {
         const encryptedString = await Vault.download(`getlist/${patientListId}`)

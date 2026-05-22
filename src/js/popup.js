@@ -733,6 +733,8 @@ const G = {
                     return
                 }
 
+                const twoDaysMs = 2 * 24 * 60 * 60 * 1000
+                let lastRenderedDate = ''
                 keys.forEach(timestampKey => {
                     const uploadTime = parseInt(timestampKey, 10)
                     const expirationTime = uploadTime + oneDayMs
@@ -740,16 +742,27 @@ const G = {
                     const isExpired = timeLeftMs <= 0
 
                     const meta = previewMap[timestampKey]
-                    const dateLabel = new Date(uploadTime).toLocaleString('en-GB')
 
-                    const twoDaysMs = 2 * 24 * 60 * 60 * 1000
+                    const uploadDateObj = new Date(uploadTime)
+                    const dateHeaderStr = uploadDateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+
                     const isPastTwoDays = (now - uploadTime) >= twoDaysMs
-
                     if (isPastTwoDays) {
                         targetedDeletions.push(Vault.discard(`previewlist/${timestampKey}`))
                         targetedDeletions.push(Vault.discard(`getlist/${meta.id}`))
                         return
                     }
+
+                    if (dateHeaderStr !== lastRenderedDate) {
+                        lastRenderedDate = dateHeaderStr
+                        validOptionsHtml.push(`
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider pt-3 pb-1 text-left border-b border-slate-100 mb-1 first:pt-1">
+                                ${dateHeaderStr}
+                            </div>
+                        `)
+                    }
+
+                    const dateLabel = uploadDateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
                     if (isExpired) {
                         validOptionsHtml.push(`
