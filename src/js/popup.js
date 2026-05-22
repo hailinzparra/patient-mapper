@@ -1,4 +1,5 @@
 import { Events, Utils, Vault, VaultDriver } from './utils.js'
+import { Patient, PatientList } from './clinical.js'
 import { ApiSoediranDriver } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
 
@@ -19,13 +20,15 @@ const G = {
         this.mainContainer.style.minWidth = `${this.targetWidth}px`
         this.swal = Swal.mixin({
             target: this.mainContainer,
+            cancelButtonText: 'Close',
+            showCloseButton: true,
             buttonsStyling: false,
             customClass: {
                 popup: 'rounded-xl bg-white p-6 shadow-xl border border-gray-100',
-                title: 'text-lg font-bold text-gray-900',
-                htmlContainer: 'text-sm text-gray-600 mt-2',
-                confirmButton: 'mx-2 inline-flex justify-center rounded-md bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition ease-in-out duration-150',
-                cancelButton: 'mx-2 inline-flex justify-center rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition ease-in-out duration-150',
+                actions: 'flex flex-wrap items-center justify-end w-full mt-6 gap-2 pt-4',
+                denyButton: 'inline-flex justify-center rounded-md bg-red-600 px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm hover:bg-red-500 transition ease-in-out duration-150 order-1 sm:mr-auto cursor-pointer',
+                confirmButton: 'inline-flex justify-center rounded-md bg-blue-600 px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition ease-in-out duration-150 order-2 cursor-pointer',
+                cancelButton: 'inline-flex justify-center rounded-md bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition ease-in-out duration-150 order-3 cursor-pointer',
             },
         })
     },
@@ -77,6 +80,7 @@ const G = {
         // Collapsible list / Accordion components
         myPatientsCollapsedBadge: null,
         myPatientsBadge: null,
+        myPatientsAccordionBtn: null,
         myPatientsAccordionArrow: null,
         myPatientsAccordionContent: null,
         myPatientsAddBtn: null,
@@ -101,14 +105,33 @@ const G = {
             this.calculatorBtn = document.getElementById('sidebar-calculator')
             this.myPatientsCollapsedBadge = document.getElementById('sidebar-my-patients-collapsed-badge')
             this.myPatientsBadge = document.getElementById('sidebar-my-patients-badge')
+            this.myPatientsAccordionBtn = document.getElementById('sidebar-my-patients-accordion-btn')
             this.myPatientsAccordionArrow = document.getElementById('sidebar-my-patients-accordion-arrow')
             this.myPatientsAccordionContent = document.getElementById('sidebar-my-patients-accordion-content')
             this.myPatientsAddBtn = document.getElementById('sidebar-my-patients-add-btn')
             this.myPatientsListsContainer = document.getElementById('sidebar-my-patients-lists-container')
 
+            await G.store.patients.load()
+
+            const loadedLists = G.store.patients.data.lists || []
+            G.store.patients.data.lists = loadedLists.map(listData => PatientList.fromJSON(listData))
+            this.updateMyPatientsBadge()
+            this.myPatientsListsContainer.innerHTML = ''
+            G.store.patients.data.lists.forEach(patientList => {
+                const listButton = this.createListRow(patientList)
+                this.myPatientsListsContainer.appendChild(listButton)
+            })
+
             this.toggleBtn.addEventListener('click', () => {
                 G.store.settings.update({ isSidebarCollapsed: !G.store.settings.data.isSidebarCollapsed })
                 this.updateOnToggle()
+            })
+
+            this.myPatientsAccordionBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                if (G.store.settings.data.isSidebarCollapsed) return
+                G.store.settings.update({ isAccordionOpen: !G.store.settings.data.isAccordionOpen })
+                this.updateOnToggleAccordion()
             })
 
             this.targetHospitalSelect.innerHTML = Object.keys(G.HOSPITAL)
@@ -143,7 +166,25 @@ const G = {
                 })
             })
 
-            this.updateOnToggle() // call once to match loaded settings
+            this.myPatientsAddBtn.addEventListener('click', async () => {
+                const nextListName = this.generateNextListName(G.store.patients.data.lists)
+                const newList = new PatientList({ name: nextListName })
+
+                const newLists = G.store.patients.data.lists || []
+                newLists.push(newList)
+
+                await G.store.patients.update({
+                    lists: newLists,
+                })
+
+                const newListButton = this.createListRow(newList)
+                this.myPatientsListsContainer.appendChild(newListButton)
+                this.updateMyPatientsBadge()
+            })
+
+            // call once to match loaded settings
+            this.updateOnToggle()
+
             const activeDomainIndexOnLoad = G.store.settings.data.activeDomainIndex
             Utils.DOM.selectOptionByValue(this.targetHospitalSelect, G.getHospitalKeyById(G.store.settings.data.activeHospitalId))
             await Utils.sleep(100)
@@ -182,6 +223,15 @@ const G = {
                 this.myPatientsCollapsedBadge.classList.add('hidden')
                 this.myPatientsBadge.classList.remove('hidden')
             }
+
+            this.updateOnToggleAccordion()
+        },
+        updateOnToggleAccordion() {
+            const isAccordionOpen = G.store.settings.data.isAccordionOpen
+            if (!G.store.settings.data.isSidebarCollapsed) {
+                this.myPatientsAccordionContent.style.maxHeight = isAccordionOpen ? '500px' : '0px'
+            }
+            this.myPatientsAccordionArrow.style.transform = isAccordionOpen ? 'rotate(0deg)' : 'rotate(-90deg)'
         },
         async updateDomainDropdown() {
             const selectedHospitalKey = this.targetHospitalSelect.value
@@ -265,6 +315,171 @@ const G = {
             this.targetDomainSelect.disabled = false
             this.authBtn.disabled = false
         },
+        createListRow(patientList) {
+            const rowWrapper = document.createElement('div')
+            rowWrapper.className = 'group flex w-full items-center justify-between rounded-md px-3 py-1.5 hover:bg-slate-50 transition'
+            rowWrapper.dataset.listId = patientList.id
+
+            const listBtn = document.createElement('button')
+            listBtn.className = 'flex-1 text-left text-xs font-medium text-slate-500 group-hover:text-slate-800 cursor-pointer truncated'
+            listBtn.innerText = patientList.name
+            listBtn.addEventListener('click', () => {
+                // Handle switching to this list content...
+                console.log(`Switched to list: ${patientList.id}`)
+            })
+
+            const settingsBtn = document.createElement('button')
+            settingsBtn.className = 'p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition'
+            settingsBtn.innerHTML = Utils.DOM.GEAR_SVG
+
+            settingsBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                this.openListSettingsModal(patientList, listBtn, rowWrapper)
+            })
+
+            rowWrapper.appendChild(listBtn)
+            rowWrapper.appendChild(settingsBtn)
+
+            return rowWrapper
+        },
+        async openListSettingsModal(patientList, listTextElement, wholeRowElement) {
+            const localizedDate = new Date(patientList.createdAt || Date.now()).toLocaleDateString()
+            const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0']
+            const result = await G.swal.fire({
+                title: `<div class="truncate">${patientList.name}</div>`,
+                html: `<div class="border border-slate-200 rounded-md p-4 bg-slate-50 text-xs text-slate-600 space-y-2 mb-5">
+                <div class="${cls[0]}"><span class="${cls[1]}">List Name:</span><span class="font-medium text-slate-800">${patientList.name}</span></div>
+                <div class="${cls[0]}"><span class="${cls[1]}">Total Patients:</span>
+                <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100">${patientList.getPatientCount()} records</span></div>
+                <div class="${cls[0]}"><span class="${cls[1]}">Created At:</span><span class="text-slate-700">${localizedDate}</span></div></div>
+                <div class="w-full"><label for="swal-input-name" class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Rename List</label>
+                <input id="swal-input-name" type="text"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-800 placeholder-slate-400 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
+                    value="${patientList.name}" placeholder="Enter new name..."
+                ></div>`,
+                showDenyButton: true,
+                showCancelButton: true,
+                denyButtonText: 'Delete List',
+                confirmButtonText: 'Save Changes',
+                didOpen: () => {
+                    const originalName = patientList.name
+                    const input = document.getElementById('swal-input-name')
+                    const confirmButton = G.swal.getConfirmButton()
+                    if (input) {
+                        input.focus()
+                        if (confirmButton) {
+                            confirmButton.disabled = true
+                        }
+                        input.addEventListener('input', (e) => {
+                            const currentVal = e.target.value.trim()
+                            if (currentVal === originalName.trim() || !currentVal) {
+                                confirmButton.disabled = true
+                            } else {
+                                confirmButton.disabled = false
+                            }
+                        })
+                        input.addEventListener('keydown', (event) => {
+                            if (event.key === 'Enter') {
+                                event.preventDefault()
+                                if (confirmButton && !confirmButton.disabled) {
+                                    G.swal.clickConfirm()
+                                }
+                            }
+                        })
+                    }
+                },
+                preConfirm: () => {
+                    const inputVal = document.getElementById('swal-input-name').value
+                    if (!inputVal.trim()) {
+                        G.swal.showValidationMessage('The list name cannot be empty.')
+                        const validationMsg = G.swal.getValidationMessage()
+                        if (validationMsg) {
+                            validationMsg.className = 'mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 border border-red-100 text-left'
+                        }
+                        return false
+                    }
+                    return { action: 'rename', value: inputVal.trim() }
+                }
+            })
+            if (result.isConfirmed && result.value?.action === 'rename') {
+                await this.renamePatientList(patientList.id, result.value.value, listTextElement)
+                G.swal.fire({
+                    icon: 'success',
+                    title: 'Saved successfully!',
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    timer: 1000,
+                    timerProgressBar: true,
+                })
+            } else if (result.isDenied) {
+                const confirmDelete = await G.swal.fire({
+                    icon: 'warning',
+                    title: 'Are you sure?',
+                    html: `This will <strong>permanently delete "<span class="text-red-600">${patientList.name}</span>"</strong> and all records inside it.`,
+                    showDenyButton: true,
+                    showCancelButton: true,
+                    showConfirmButton: false,
+                    denyButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel',
+                })
+                if (confirmDelete.isDenied) {
+                    await this.removePatientList(patientList.id, wholeRowElement)
+                    G.swal.fire({
+                        icon: 'success',
+                        title: 'Deleted successfully!',
+                        showCloseButton: false,
+                        showConfirmButton: false,
+                        timer: 1000,
+                        timerProgressBar: true,
+                    })
+                }
+            }
+        },
+        async renamePatientList(listId, newName, rowEl) {
+            const lists = G.store.patients.data.lists || []
+            const listToRename = lists.find(l => l.id === listId)
+
+            if (!listToRename || !newName.trim()) return
+
+            listToRename.name = newName.trim()
+
+            await G.store.patients.update({ lists })
+
+            if (rowEl) {
+                rowEl.innerText = listToRename.name
+            }
+        },
+        async removePatientList(listId, rowEl) {
+            let lists = G.store.patients.data.lists || []
+
+            lists = lists.filter(l => l.id !== listId)
+
+            await G.store.patients.update({ lists })
+
+            if (rowEl && rowEl.parentNode) {
+                rowEl.remove()
+            }
+
+            this.updateMyPatientsBadge()
+        },
+        generateNextListName(existingLists) {
+            let maxNumber = 0
+            const regex = /^New List #(\d+)$/
+            existingLists.forEach(list => {
+                const match = list.name.match(regex)
+                if (match) {
+                    const num = parseInt(match[1], 10)
+                    if (num > maxNumber) {
+                        maxNumber = num
+                    }
+                }
+            })
+            return `New List #${maxNumber + 1}`
+        },
+        updateMyPatientsBadge(value = G.store.patients.data.lists.length) {
+            this.myPatientsBadge.innerText = value || 0
+            this.myPatientsCollapsedBadge.innerText = value || 0
+        },
     },
     getActiveDomain() {
         return this.sidebar.targetDomainSelect.value
@@ -306,42 +521,73 @@ const G = {
 }
 
 Events.on('entrypoint', async (ev) => {
-    G.preInit()
-    G.swal.fire({
-        title: 'Initializing...',
-        text: 'Please wait while the system loads.',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        didOpen: () => {
-            G.swal.showLoading()
+    try {
+        G.preInit()
+        G.swal.fire({
+            title: 'Initializing...',
+            text: 'Please wait while the system loads.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showCloseButton: false,
+            showConfirmButton: false,
+            didOpen: () => {
+                G.swal.showLoading()
+            }
+        })
+
+        await G.init()
+
+        // Resize logic
+        const scaleMainContainer = () => {
+            if (!G.mainContainer) return
+            const scale = window.innerWidth < G.targetWidth ? window.innerWidth / G.targetWidth : 1
+            G.mainContainer.style.scale = `${scale}`
+            G.mainContainer.style.height = `${100 / scale}vh`
         }
-    })
+        window.addEventListener('resize', scaleMainContainer)
+        scaleMainContainer()
 
-    await G.init()
-
-    // Resize logic
-    const scaleMainContainer = () => {
-        if (!G.mainContainer) return
-        const scale = window.innerWidth < G.targetWidth ? window.innerWidth / G.targetWidth : 1
-        G.mainContainer.style.scale = `${scale}`
-        G.mainContainer.style.height = `${100 / scale}vh`
+        await Utils.sleep(1000)
+        G.swal.close()
     }
-    window.addEventListener('resize', scaleMainContainer)
-    scaleMainContainer()
+    catch (err) {
+        console.error('Initialization Failed:', err)
 
-    await Utils.sleep(100)
-    G.swal.close()
+        let fullErrorPayload = ''
+        if (err instanceof Error) {
+            fullErrorPayload = err.stack || err.message
+        } else if (typeof err === 'object') {
+            try {
+                fullErrorPayload = JSON.stringify(err, null, 2)
+            } catch (_) {
+                fullErrorPayload = String(err)
+            }
+        } else {
+            fullErrorPayload = String(err)
+        }
+
+        G.swal.fire({
+            icon: 'error',
+            title: 'Initialization Failed',
+            html: `<p class="mb-3 text-sm font-medium text-slate-700">The application encountered a fatal initialization error:</p>
+            <div class="w-full max-h-60 overflow-y-auto overflow-x-auto bg-slate-900 text-rose-400 p-3 rounded-md border border-slate-800 font-mono text-[11px] leading-relaxed whitespace-pre">
+            ${Utils.escapeHtml(fullErrorPayload)}</div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showCloseButton: false,
+        })
+    }
 
     // Check for browser
     const browser = Utils.getBrowser()
     if (browser !== 'Chrome') {
         G.swal.fire({
+            icon: 'warning',
             title: `Using ${browser}?`,
             html: `This extension is for <strong>Google Chrome</strong>. Some features might not work properly on ${browser}.`,
-            icon: 'warning',
             allowOutsideClick: false,
             allowEscapeKey: false,
+            showCloseButton: false,
         })
     }
 })

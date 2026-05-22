@@ -33,3 +33,23 @@ body {
     cursor: not-allowed;
     background-color: #f1f5f9;
 }
+
+#main-container div:where(.swal2-icon) {
+    zoom: 0.7;
+}
+
+#main-container div:where(.swal2-container) h2:where(.swal2-title) {
+    font-size: 1.2em;
+}
+
+#main-container div:where(.swal2-container) div:where(.swal2-html-container) {
+    font-size: var(--text-xs);
+}
+
+#main-container
+    div:where(.swal2-container)
+    div:where(.swal2-actions)
+    button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
