@@ -1,8 +1,6 @@
-import { Events, Utils, Vault } from './utils.js'
+import { Events, Utils, Vault, VaultDriver } from './utils.js'
 import { ApiSoediranDriver } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
-
-window.Vault = Vault
 
 const api = typeof browser !== 'undefined' ? browser : chrome
 
@@ -32,64 +30,24 @@ const G = {
         })
     },
     async init() {
-        await this.settings.load()
-        if (this.settings.data.devMode) {
+        await this.store.settings.load()
+        if (this.store.settings.data.devMode) {
             Beacon.init()
         }
         await this.sidebar.init()
     },
-    session: {
-        key: 'patients',
-        data: {},
-        async update(newData) {
-            this.data = { ...this.data, ...newData }
-            await this.save()
-        },
-        async save() {
-            try {
-                await Vault.save(this.key, this.data)
-            } catch (err) {
-                console.error('Failed to save session: ', err)
-            }
-        },
-    },
-    patients: {
-        key: 'patients',
-        data: {
-            lists: [],
-            // { id: 1, name: "List #1", patientCount: 12 }
-        },
-    },
-    settings: {
-        key: 'settings',
-        data: {
+    store: {
+        session: new VaultDriver('session'),
+        patients: new VaultDriver('patients', {
+            lists: [], // { id: 1, name: 'List #1', patientCount: 12 }
+        }),
+        settings: new VaultDriver('settings', {
             devMode: false,
             activeHospitalId: 0,
             activeDomainIndex: 0,
             isSidebarCollapsed: false,
             isAccordionOpen: true,
-        },
-        async update(newData) {
-            this.data = { ...this.data, ...newData }
-            await this.save()
-        },
-        async save() {
-            try {
-                await Vault.save(this.key, this.data)
-            } catch (err) {
-                console.error('Failed to save settings: ', err)
-            }
-        },
-        async load() {
-            try {
-                const savedData = await Vault.load(this.key)
-                if (savedData) {
-                    this.data = { ...this.data, ...savedData }
-                }
-            } catch (err) {
-                console.error('Failed to load settings:', err)
-            }
-        },
+        }),
     },
     sidebar: {
         // Structural elements
@@ -146,7 +104,7 @@ const G = {
             this.myPatientsListsContainer = document.getElementById('sidebar-my-patients-lists-container')
 
             this.toggleBtn.addEventListener('click', () => {
-                G.settings.update({ isSidebarCollapsed: !G.settings.data.isSidebarCollapsed })
+                G.store.settings.update({ isSidebarCollapsed: !G.store.settings.data.isSidebarCollapsed })
                 this.updateOnToggle()
             })
 
@@ -154,7 +112,7 @@ const G = {
                 .map(key => `<option value="${key}">${G.HOSPITAL[key].NAME}</option>`)
                 .join('')
             this.targetHospitalSelect.addEventListener('change', async () => {
-                await G.settings.update({
+                await G.store.settings.update({
                     activeHospitalId: G.getActiveHospital().ID,
                     activeDomainIndex: 0,
                 })
@@ -167,7 +125,7 @@ const G = {
                         selectedIndex = Number(option.dataset.index)
                     }
                 })
-                await G.settings.update({
+                await G.store.settings.update({
                     activeDomainIndex: selectedIndex,
                 })
                 await this.runLiveEnvSync()
@@ -183,16 +141,16 @@ const G = {
             })
 
             this.updateOnToggle() // call once to match loaded settings
-            const activeDomainIndexOnLoad = G.settings.data.activeDomainIndex
-            Utils.DOM.selectOptionByValue(this.targetHospitalSelect, G.getHospitalKeyById(G.settings.data.activeHospitalId))
+            const activeDomainIndexOnLoad = G.store.settings.data.activeDomainIndex
+            Utils.DOM.selectOptionByValue(this.targetHospitalSelect, G.getHospitalKeyById(G.store.settings.data.activeHospitalId))
             await Utils.sleep(100)
             Utils.DOM.selectOptionByDatasetIndex(this.targetDomainSelect, activeDomainIndexOnLoad)
 
             Events.on('visible', () => this.runLiveEnvSync())
         },
         updateOnToggle() {
-            const isSidebarCollapsed = G.settings.data.isSidebarCollapsed
-            const isAccordionOpen = G.settings.data.isAccordionOpen
+            const isSidebarCollapsed = G.store.settings.data.isSidebarCollapsed
+            const isAccordionOpen = G.store.settings.data.isAccordionOpen
 
             const sidebarTexts = document.querySelectorAll('.sidebar-text')
             const navTexts = document.querySelectorAll('.nav-text')
@@ -239,12 +197,10 @@ const G = {
                 if (!activeDriver) throw new Error('No API driver implementation found.')
 
                 const session = await activeDriver.getSession(activeDomain, api)
-                await G.session.update({ ...session })
+                await G.store.session.update({ ...session })
 
-                const userData = await activeDriver.syncUserData(activeDomain, G.session, api)
+                const userData = await activeDriver.syncUserData(activeDomain, G.store.session.data)
 
-                // // state.lists[0].patientCount = unifiedUserData.patientCount
-                // // renderPatientLists()
                 this.updateSyncUI(true, true, userData)
             } catch (error) {
                 console.error('Pipeline sync failure:', error)
@@ -284,7 +240,7 @@ const G = {
 
             this.userName.innerHTML = `<div class="flex flex-col min-w-0"><span class="truncate text-xs font-bold text-slate-800">${userData.displayName}</span><div class="flex items-center gap-1.5 mt-0.5">
             <span class="text-[10px] text-slate-400 truncate max-w-[65px]">@${userData.username}</span>
-            <span class="px-1 py-0 bg-slate-100 text-slate-400 text-[7px] font-black rounded border border-slate-200 tracking-tighter shrink-0">UID:${userData.userId} DR:${userData.doctorId}</span></div></div>`
+            <span class="px-1 py-0 bg-slate-100 text-slate-400 text-[7px] font-black rounded border border-slate-200 tracking-tighter truncate">ID:${userData.userId}</span></div></div>`
 
             this.statusIndicator.className = 'h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse'
             this.statusText.innerText = 'Online'

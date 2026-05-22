@@ -64,16 +64,16 @@ export const Utils = {
         selectOptionByValue(selectEl, targetValue) {
             const targetOption = Array.from(selectEl.options).find(option => option.value === String(targetValue))
             if (targetOption) {
-                targetOption.selected = true;
+                targetOption.selected = true
                 selectEl.dispatchEvent(new Event('change', { bubbles: true }))
                 return true
             }
             return false
         },
-        selectOptionByDatasetIndex(selectEl, targetDataset) {
-            const targetOption = Array.from(selectEl.options).find(option => String(option.dataset.index) === String(targetDataset))
+        selectOptionByDatasetIndex(selectEl, targetDatasetIndex) {
+            const targetOption = Array.from(selectEl.options).find(option => String(option.dataset.index) === String(targetDatasetIndex))
             if (targetOption) {
-                targetOption.selected = true;
+                targetOption.selected = true
                 selectEl.dispatchEvent(new Event('change', { bubbles: true }))
                 return true
             }
@@ -200,4 +200,32 @@ export const Vault = {
             this.instanceName = ''
         }
     },
+}
+
+export class VaultDriver {
+    constructor(key, defaultData = {}) {
+        this.key = key
+        this.data = defaultData
+    }
+    async update(newData) {
+        this.data = { ...this.data, ...newData }
+        await this.save()
+    }
+    async save() {
+        try {
+            await Vault.save(this.key, this.data)
+        } catch (err) {
+            console.error(`Failed to save ${this.key}:`, err)
+        }
+    }
+    async load() {
+        try {
+            const savedData = await Vault.load(this.key)
+            if (savedData) {
+                this.data = { ...this.data, ...savedData }
+            }
+        } catch (err) {
+            console.error(`Failed to load ${this.key}:`, err)
+        }
+    }
 }

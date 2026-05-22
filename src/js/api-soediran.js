@@ -1,4 +1,4 @@
-// Helper for encryption/decryption (Assumed existing in your codebase)
+// Helper for encryption/decryption
 const myBase64 = {
     _str: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',
     decode(z) {
@@ -101,7 +101,7 @@ export const ApiSoediranDriver = {
     },
     async apiRequest(url, session, options = {}) {
         const headers = {
-            'Authorization': `Bearer ${session.decodedToken}`,
+            'Authorization': `Bearer ${session.authToken}`,
             'Accept': 'application/json',
             'Content-Type': 'application/json',
             ...options.headers,
@@ -157,19 +157,19 @@ export const ApiSoediranDriver = {
             func: () => ({
                 token: localStorage.getItem('_lapp-access_token'),
                 isEncrypted: localStorage.getItem('_lapp-https_encrypt') === 'true',
-            })
+            }),
         })
 
         const result = injectionResults?.[0]?.result
-        if (!result || !result.token) throw new Error('Token not found.')
+        if (!result || !result.token) throw new Error('Session not found.')
 
         return {
             rawToken: result.token,
-            decodedToken: atob(result.token),
+            authToken: atob(result.token),
             isEncryptionEnabled: result.isEncrypted,
         }
     },
-    async syncUserData(targetDomain, session, api) {
+    async syncUserData(targetDomain, session) {
         const dc = Date.now()
         const authUrl = `${targetDomain}${this.PATHS.BASE}/authentication/isAuthenticate?_dc=${dc}`
 
@@ -179,14 +179,10 @@ export const ApiSoediranDriver = {
 
         const rawUser = authResponse.data
 
-        const doctorId = 42 //mockup
-
         return {
             username: rawUser.LGN,
             displayName: rawUser.NAME,
             userId: rawUser.ID,
-            doctorId: doctorId,
-            patientCount: 0,
         }
-    }
+    },
 }

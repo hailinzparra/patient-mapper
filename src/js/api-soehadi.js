@@ -1,4 +1,3 @@
-// PROTOTYPE/MOCKUP
 export const ApiSoehadiDriver = {
     DOMAINS: [
         'https://apirssoehadi.sragenkab.go.id'
@@ -7,27 +6,43 @@ export const ApiSoehadiDriver = {
         HOME: '/app/',
         BASE: '/service/medifirst2000',
     },
-    /**
-     * Hospital B's own network call structure (No custom encryption payload wrapper required)
-     */
     async apiRequest(url, session, options = {}) {
-        // const headers = {
-        //     'X-Sragen-Auth': session.decodedToken, // Hypothetical alternative headers rule assignment
-        //     'Accept': 'application/json',
-        //     ...options.headers
-        // }
+        const headers = {
+            'X-AUTH-TOKEN': session.authToken || '',
+            'Accept': 'application/json, text/plain, */*',
+            'Content-Type': 'application/json',
+            ...options.headers,
+        }
 
-        // const response = await fetch(url, { ...options, headers })
-        // if (!response.ok) throw new Error("Sragen Portal Connection Error")
+        let response
+        try {
+            response = await fetch(url, { ...options, headers })
+        } catch (err) {
+            throw new Error(`Connection failed: Please check your internet or site permissions.`)
+        }
 
-        // const result = await response.json()
+        if (!response.ok) {
+            let errorMsg = `HTTP Error ${response.status}`
+            try {
+                const errorData = await response.json()
+                errorMsg = errorData.message || errorData.detail || errorMsg
+            } catch { }
+            throw new Error(errorMsg)
+        }
 
-        // // Maybe Sragen doesn't wrap data inside a ".success" property block.
-        // // We parse it directly according to their custom schema rules!
-        // return result
-        return null
+        let result
+        try {
+            result = await response.json()
+        } catch (jsonError) {
+            throw new Error('The server returned an invalid data format.')
+        }
+
+        if (result.success === false || result.statResponse === false) {
+            throw new Error(result.message || result.detail || 'The API returned an unsuccessful status.')
+        }
+
+        return result
     },
-
     async getSession(targetDomain, api) {
         const matchPattern = `${targetDomain}/*`
         const allTabs = await api.tabs.query({ url: matchPattern })
@@ -37,34 +52,42 @@ export const ApiSoehadiDriver = {
 
         const injectionResults = await api.scripting.executeScript({
             target: { tabId: targetTab.id },
-            func: () => ({
-                token: localStorage.getItem('_lapp-access_token'),
-                isEncrypted: localStorage.getItem('_lapp-https_encrypt') === 'true'
-            })
+            func: () => {
+                const rawUserLogin = localStorage.getItem('datauserlogin')
+                const rawPegawai = localStorage.getItem('pegawai')
+                const cookieArray = document.cookie.split(';')
+                let authorizationToken = ''
+
+                for (let i = 0; i < cookieArray.length; i++) {
+                    const element = cookieArray[i].trim().split('=')
+                    if (element[0].indexOf('authorization') > -1) {
+                        authorizationToken = element[1] || ''
+                        break
+                    }
+                }
+
+                return {
+                    authToken: authorizationToken,
+                    userLogin: rawUserLogin ? JSON.parse(rawUserLogin) : null,
+                    pegawai: rawPegawai ? JSON.parse(rawPegawai) : null,
+                }
+            },
         })
 
         const result = injectionResults?.[0]?.result
-        if (!result || !result.token) throw new Error('Token not found.')
+        if (!result) throw new Error('Session not found.')
 
         return {
-            rawToken: result.token,
-            decodedToken: atob(result.token),
-            isEncryptionEnabled: result.isEncrypted
+            authToken: result.authToken,
+            userData: {
+                username: result.userLogin.kdUser,
+                displayName: result.pegawai.namaLengkap,
+                userId: result.pegawai.id,
+            },
         }
     },
-
-
-    async syncUserData(targetDomain, session, api) {
-        // Query their profile endpoint
-        const profile = await this.apiRequest(`${targetDomain}/api/v1/doctor/profile`, session)
-
-        // Map their custom schema variables to match your popup's layout structure requirements
-        return {
-            username: profile.login_name,      // Map variations cleanly here
-            displayName: profile.full_name,
-            userId: profile.uid,
-            doctorId: profile.doc_id,
-            patientCount: 0
-        }
-    }
+    async syncUserData(targetDomain, session) {
+        if (!session.userData) throw new Error('Not Authenticated')
+        return session.userData
+    },
 }
