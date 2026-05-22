@@ -227,6 +227,25 @@ const G = {
                 }
             })
 
+            this.calculatorBtn.addEventListener('click', () => {
+                G.swal.fire({
+                    title: 'MDCalc Calculator',
+                    html: `
+                        <iframe
+                            src="https://www.mdcalc.com/"
+                            width="100%"
+                            height="500px"
+                            style="border: none; border-radius: 4px;">
+                        </iframe>
+                    `,
+                    draggable: true,
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                    focusConfirm: false,
+                })
+            })
+
             this.myPatientsListsContainer.addEventListener('click', (e) => {
                 const subListBtn = e.target.closest('.sidebar-sub-list-btn')
                 if (!subListBtn) return
