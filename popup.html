@@ -240,7 +240,7 @@
 
                             <div
                                 id="sidebar-my-patients-accordion-content"
-                                class="space-y-1 pl-7 overflow-hidden transition-all duration-200 max-h-[500px]"
+                                class="space-y-1 pl-3 overflow-hidden transition-all duration-200 max-h-[500px]"
                             >
                                 <button
                                     id="sidebar-my-patients-add-btn"
@@ -290,6 +290,10 @@
                         </button>
                     </nav>
                 </aside>
+                <main class="flex-1 flex-col bg-slate-50 overflow-hidden">
+                    <div id="all-patients-container"></div>
+                    <div id="my-patients-container"></div>
+                </main>
             </div>
         </div>
         <script type="module" src="/src/js/popup.js"></script>

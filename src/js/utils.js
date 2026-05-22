@@ -37,6 +37,9 @@ class EventEmitter {
 export const Events = new EventEmitter()
 
 export const Utils = {
+    ID() {
+        return crypto.randomUUID()
+    },
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms))
     },
@@ -57,6 +60,7 @@ export const Utils = {
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.767a1.123 1.123 0 0 0-.417 1.03c.004.074.006.148.006.222 0 .074-.002.148-.006.222a1.123 1.123 0 0 0 .417 1.03l1.003.767a1.125 1.125 0 0 1 .26 1.43l-1.296 2.247a1.125 1.125 0 0 1-1.37.49l-1.216-.456a1.125 1.125 0 0 0-1.075.124a2.08 2.08 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281a1.125 1.125 0 0 0-.644-.87a2.08 2.08 0 0 1-.22-.127a1.125 1.125 0 0 0-1.074-.124l-1.217.456a1.125 1.125 0 0 1-1.37-.49l-1.296-2.247a1.125 1.125 0 0 1 .26-1.43l1.002-.767a1.123 1.123 0 0 0 .417-1.03c-.004-.074-.006-.148-.006-.222c0-.074.002-.148.006-.222a1.123 1.123 0 0 0-.417-1.03l-1.002-.767a1.125 1.125 0 0 1-.26-1.43l1.296-2.247a1.125 1.125 0 0 1 1.37-.49l1.216.456c.356.133.751.072 1.076-.124c.072-.044.146-.086.22-.128c.332-.183.582-.495.644-.869l.214-1.28z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
         </svg>`,
+        CLOSE_SVG: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
         createElement(tag, { classes = '', attrs = {}, text = '', html = '' } = {}, children = []) {
             const element = document.createElement(tag)
             if (classes.length) element.className = classes
@@ -234,5 +238,154 @@ export class VaultDriver {
         } catch (err) {
             console.error(`Failed to load ${this.key}:`, err)
         }
+    }
+}
+
+export class Tab {
+    constructor(id, name, children, onCloseCallback, isPermanent = false) {
+        this.id = id
+        this.name = name
+        this.children = children
+        this.onCloseCallback = onCloseCallback
+        this.isPermanent = isPermanent
+        this.tabHeaderEl = null
+        this.tabContentEl = null
+    }
+    renderHeader() {
+        const button = document.createElement('button')
+        button.id = `tab-${this.id}`
+        button.dataset.tabId = this.id
+        button.className = 'px-4 h-full text-[11px] font-bold uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-slate-600 flex items-center gap-2 transition-all shrink-0 focus:outline-none'
+
+        const titleSpan = document.createElement('span')
+        titleSpan.textContent = this.name
+        button.append(titleSpan)
+
+        if (!this.isPermanent) {
+            const closeBtn = document.createElement('span')
+            closeBtn.className = "tab-close-icon ml-1 text-slate-400 hover:text-rose-500 transition-colors flex items-center justify-center p-0.5 rounded"
+            closeBtn.innerHTML = Utils.DOM.CLOSE_SVG
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                if (this.onCloseCallback) this.onCloseCallback(this.id)
+            })
+            button.append(closeBtn)
+        }
+
+        this.tabHeaderEl = button
+        return button
+    }
+    renderContent() {
+        const contentDiv = document.createElement('div')
+        contentDiv.className = 'tab-content-panel'
+        contentDiv.dataset.tabId = this.id
+
+        contentDiv.className = 'p-6 space-y-6 mb-10 hidden'
+        if (this.children.length) contentDiv.append(...this.children.filter(Boolean))
+
+        this.tabContentEl = contentDiv
+        return contentDiv
+    }
+    activate() {
+        if (this.tabHeaderEl) {
+            this.tabHeaderEl.classList.remove('border-transparent', 'text-slate-400', 'hover:text-slate-600')
+            this.tabHeaderEl.classList.add('border-blue-600', 'text-blue-600')
+        }
+        if (this.tabContentEl) {
+            this.tabContentEl.classList.remove('hidden')
+        }
+    }
+    deactivate() {
+        if (this.tabHeaderEl) {
+            this.tabHeaderEl.classList.remove('border-blue-600', 'text-blue-600')
+            this.tabHeaderEl.classList.add('border-transparent', 'text-slate-400', 'hover:text-slate-600')
+        }
+        if (this.tabContentEl) {
+            this.tabContentEl.classList.add('hidden')
+        }
+    }
+    destroy() {
+        this.tabHeaderEl?.remove()
+        this.tabContentEl?.remove()
+    }
+}
+
+export class TabManager {
+    constructor(containerId) {
+        this.container = document.createElement('div')
+
+        if (typeof containerId === 'string') {
+            this.container = document.getElementById(containerId)
+            if (!this.container) {
+                throw new Error(`Container #${containerId} not found.`)
+            }
+        }
+
+        this.tabs = new Map()
+        this.activeTabId = null
+
+        this.container.innerHTML = `<div class="tab-manager-wrapper hidden flex flex-col h-full w-full">
+            <div class="tab-headers-container bg-white border-b border-slate-200 flex items-center px-4 gap-1 h-10 flex-shrink-0 overflow-x-auto scrollbar-none"></div>
+            <div class="tab-contents-container flex-1 overflow-y-auto"></div></div>`
+
+        this.wrapperEl = this.container.querySelector('.tab-manager-wrapper')
+        this.headersContainer = this.container.querySelector('.tab-headers-container')
+        this.contentsContainer = this.container.querySelector('.tab-contents-container')
+    }
+    addTab(id, name, children, isPermanent = false) {
+        if (this.tabs.has(id)) {
+            this.switchTab(id)
+            return
+        }
+
+        const newTab = new Tab(id, name, children, (tabId) => this.removeTab(tabId), isPermanent)
+        this.tabs.set(id, newTab)
+
+        const headerEl = newTab.renderHeader()
+        const contentEl = newTab.renderContent()
+
+        headerEl.addEventListener('click', () => this.switchTab(id))
+
+        this.headersContainer.appendChild(headerEl)
+        this.contentsContainer.appendChild(contentEl)
+
+        this.switchTab(id)
+    }
+    switchTab(id) {
+        if (!this.tabs.has(id)) return
+        if (this.activeTabId && this.tabs.has(this.activeTabId)) {
+            this.tabs.get(this.activeTabId).deactivate()
+        }
+        this.activeTabId = id
+        this.tabs.get(id).activate()
+    }
+    removeTab(id) {
+        const tabToDestroy = this.tabs.get(id)
+
+        if (!tabToDestroy) return
+        if (tabToDestroy.isPermanent) return
+
+        tabToDestroy.destroy()
+        this.tabs.delete(id)
+
+        if (this.activeTabId === id) {
+            const remainingIds = Array.from(this.tabs.keys())
+            if (remainingIds.length > 0) {
+                this.switchTab(remainingIds[remainingIds.length - 1])
+            } else {
+                this.activeTabId = null
+            }
+        }
+    }
+    open(id = '') {
+        this.wrapperEl.classList.remove('hidden')
+        if (id) {
+            this.switchTab(id)
+        } else if (this.activeTabId) {
+            this.switchTab(this.activeTabId)
+        }
+    }
+    close() {
+        this.wrapperEl.classList.add('hidden')
     }
 }

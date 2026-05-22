@@ -1,4 +1,4 @@
-import { Events, Utils, Vault, VaultDriver } from './utils.js'
+import { Events, Utils, Vault, VaultDriver, Tab, TabManager } from './utils.js'
 import { Patient, PatientList } from './clinical.js'
 import { ApiSoediranDriver } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
@@ -37,6 +37,7 @@ const G = {
         if (this.store.settings.data.devMode) {
             Beacon.init()
         }
+        await this.nav.init()
         await this.sidebar.init()
     },
     store: {
@@ -55,7 +56,21 @@ const G = {
             isAccordionOpen: true,
         }),
     },
+    nav: {
+        tabs: {
+            allPatients: new TabManager(),
+            myPatients: new TabManager(),
+        },
+        init() {
+            this.tabs.allPatients = new TabManager('all-patients-container')
+            this.tabs.myPatients = new TabManager('my-patients-container')
+            this.tabs.allPatients.addTab('all-home', 'All Patients', [], true)
+            this.tabs.myPatients.addTab('my-home', 'My Patients', [], true)
+            G.content.myPatients.home.reset()
+        },
+    },
     sidebar: {
+        lastSelectedListId: null,
         // Structural elements
         container: null,
         brandText: null,
@@ -119,8 +134,13 @@ const G = {
             this.myPatientsListsContainer.innerHTML = ''
             G.store.patients.data.lists.forEach(patientList => {
                 const listButton = this.createListRow(patientList)
-                this.myPatientsListsContainer.appendChild(listButton)
+                this.myPatientsListsContainer.append(listButton)
             })
+
+            if (G.store.patients.data.lists.length > 0) {
+                const firstListId = G.store.patients.data.lists[0].id
+                this.lastSelectedListId = firstListId
+            }
 
             this.toggleBtn.addEventListener('click', () => {
                 G.store.settings.update({ isSidebarCollapsed: !G.store.settings.data.isSidebarCollapsed })
@@ -178,8 +198,39 @@ const G = {
                 })
 
                 const newListButton = this.createListRow(newList)
-                this.myPatientsListsContainer.appendChild(newListButton)
+                this.myPatientsListsContainer.append(newListButton)
                 this.updateMyPatientsBadge()
+                this.selectListById(newList.id)
+            })
+
+            this.allPatientsBtn.addEventListener('click', () => {
+                G.nav.tabs.myPatients.close()
+                G.nav.tabs.allPatients.open()
+                this.updateSidebarUI('all')
+            })
+
+            this.myPatientsBtn.addEventListener('click', () => {
+                G.nav.tabs.allPatients.close()
+                G.nav.tabs.myPatients.open()
+                G.nav.tabs.myPatients.switchTab('my-home')
+
+                if (this.lastSelectedListId) {
+                    G.content.myPatients.home.render(this.lastSelectedListId)
+                    this.updateSidebarUI('my', this.lastSelectedListId)
+                } else {
+                    G.content.myPatients.home.reset()
+                    this.updateSidebarUI('my')
+                }
+            })
+
+            this.myPatientsListsContainer.addEventListener('click', (e) => {
+                const subListBtn = e.target.closest('.sidebar-sub-list-btn')
+                if (!subListBtn) return
+
+                const parentRow = subListBtn.closest('[data-list-id]')
+                const clickedListId = parentRow.getAttribute('data-list-id')
+
+                this.selectListById(clickedListId)
             })
 
             // call once to match loaded settings
@@ -190,8 +241,48 @@ const G = {
             await Utils.sleep(100)
             Utils.DOM.selectOptionByDatasetIndex(this.targetDomainSelect, activeDomainIndexOnLoad)
 
+            this.allPatientsBtn.click()
+
             Events.on('visible', () => this.runLiveEnvSync())
             Events.on('target_tab_closed', () => this.runLiveEnvSync())
+        },
+        selectListById(listId) {
+            if (!listId) return
+
+            this.lastSelectedListId = listId
+
+            G.content.myPatients.home.render(listId)
+
+            G.nav.tabs.allPatients.close()
+            G.nav.tabs.myPatients.open()
+            G.nav.tabs.myPatients.switchTab('my-home')
+
+            this.updateSidebarUI('my', listId)
+        },
+        updateSidebarUI(activeMainId, activeSubListId = null) {
+            this.allPatientsBtn.className = 'nav-item w-full flex items-center px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ' +
+                (activeMainId === 'all' ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900')
+
+            this.myPatientsBtn.className = 'nav-item flex-1 flex items-center px-3 py-2 text-xs font-semibold transition-all cursor-pointer min-w-0 ' +
+                (activeMainId === 'my' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900')
+
+            this.myPatientsBtn.closest('.group').className = 'w-full flex items-center justify-between rounded-lg transition-all group ' +
+                (activeMainId === 'my' ? 'bg-blue-50/60' : 'hover:bg-slate-50')
+
+            document.querySelectorAll('.sidebar-sub-list-btn').forEach(btn => {
+                const parentRow = btn.closest('[data-list-id]')
+                const listId = parentRow.getAttribute('data-list-id')
+                const configBtn = parentRow.querySelector('.config-btn')
+                if (listId === activeSubListId) {
+                    btn.className = 'sidebar-sub-list-btn flex-1 text-left text-xs font-semibold text-blue-600 px-3 py-2 cursor-pointer truncate transition-all'
+                    parentRow.classList.add('bg-blue-50/40')
+                    configBtn.classList.remove('hidden')
+                } else {
+                    btn.className = 'sidebar-sub-list-btn flex-1 text-left text-xs font-medium text-slate-500 px-3 py-2 group-hover:text-slate-800 cursor-pointer truncate transition-all'
+                    parentRow.classList.remove('bg-blue-50/40')
+                    configBtn.classList.add('hidden')
+                }
+            })
         },
         updateOnToggle() {
             const isSidebarCollapsed = G.store.settings.data.isSidebarCollapsed
@@ -317,28 +408,24 @@ const G = {
         },
         createListRow(patientList) {
             const rowWrapper = document.createElement('div')
-            rowWrapper.className = 'group flex w-full items-center justify-between rounded-md px-3 py-1.5 hover:bg-slate-50 transition'
+            rowWrapper.className = 'group flex w-full items-center justify-between rounded-md hover:bg-slate-50 transition'
             rowWrapper.dataset.listId = patientList.id
 
             const listBtn = document.createElement('button')
-            listBtn.className = 'flex-1 text-left text-xs font-medium text-slate-500 group-hover:text-slate-800 cursor-pointer truncated'
+            listBtn.className = 'sidebar-sub-list-btn flex-1 text-left text-xs font-medium text-slate-500 px-3 py-2 group-hover:text-slate-800 cursor-pointer truncate transition-all'
             listBtn.innerText = patientList.name
-            listBtn.addEventListener('click', () => {
-                // Handle switching to this list content...
-                console.log(`Switched to list: ${patientList.id}`)
-            })
 
-            const settingsBtn = document.createElement('button')
-            settingsBtn.className = 'p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition'
-            settingsBtn.innerHTML = Utils.DOM.GEAR_SVG
+            const configBtn = document.createElement('button')
+            configBtn.className = 'config-btn p-1 me-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition'
+            configBtn.innerHTML = Utils.DOM.GEAR_SVG
 
-            settingsBtn.addEventListener('click', (e) => {
+            configBtn.addEventListener('click', (e) => {
                 e.stopPropagation()
                 this.openListSettingsModal(patientList, listBtn, rowWrapper)
             })
 
-            rowWrapper.appendChild(listBtn)
-            rowWrapper.appendChild(settingsBtn)
+            rowWrapper.append(listBtn)
+            rowWrapper.append(configBtn)
 
             return rowWrapper
         },
@@ -412,10 +499,11 @@ const G = {
                     timerProgressBar: true,
                 })
             } else if (result.isDenied) {
+                const count = patientList.getPatientCount()
                 const confirmDelete = await G.swal.fire({
                     icon: 'warning',
                     title: 'Are you sure?',
-                    html: `This will <strong>permanently delete "<span class="text-red-600">${patientList.name}</span>"</strong> and all records inside it.`,
+                    html: `This will <strong>permanently delete "<span class="text-red-600">${patientList.name}</span>"</strong> and all <strong class="text-red-600">${count}</strong> record${count === 1 ? '' : 's'} inside it.`,
                     showDenyButton: true,
                     showCancelButton: true,
                     showConfirmButton: false,
@@ -432,6 +520,14 @@ const G = {
                         timer: 1000,
                         timerProgressBar: true,
                     })
+                    if (G.store.patients.data.lists.length > 0) {
+                        const firstListId = G.store.patients.data.lists[0].id
+                        this.lastSelectedListId = firstListId
+                    }
+                    else {
+                        this.lastSelectedListId = null
+                    }
+                    this.myPatientsBtn.click()
                 }
             }
         },
@@ -447,6 +543,11 @@ const G = {
 
             if (rowEl) {
                 rowEl.innerText = listToRename.name
+            }
+
+            const activeTitle = document.querySelector(`h2.my-home-title[data-list-id="${listId}"]`)
+            if (activeTitle) {
+                activeTitle.innerText = listToRename.name
             }
         },
         async removePatientList(listId, rowEl) {
@@ -479,6 +580,49 @@ const G = {
         updateMyPatientsBadge(value = G.store.patients.data.lists.length) {
             this.myPatientsBadge.innerText = value || 0
             this.myPatientsCollapsedBadge.innerText = value || 0
+        },
+    },
+    content: {
+        myPatients: {
+            home: {
+                getPanel() {
+                    return document.querySelector('.tab-contents-container div[data-tab-id="my-home"]')
+                },
+                render(listId) {
+                    const patientList = G.store.patients.data.lists.find(list => String(list.id) === String(listId))
+                    if (!patientList) return
+
+                    let htmlContent = `
+                    <div class="space-y-4">
+                    <div>
+                        <h2 class="my-home-title text-lg font-bold text-slate-800" data-list-id="${listId}">${patientList.name}</h2>
+                        <p class="text-xs text-slate-400">Showing patients assigned to this list context</p>
+                    </div>
+                    <ul class="divide-y divide-slate-100 bg-white rounded-lg border border-slate-200">
+                `
+
+                    patientList.patients.forEach(patient => {
+                        htmlContent += `
+                <li class="p-3 text-xs text-slate-700 flex justify-between items-center hover:bg-slate-50">
+                    <span class="font-medium">${patient}</span>
+                    <button class="text-blue-600 hover:underline font-semibold" onclick="alert('Open nested profile tab for ${patient}')">View Record</button>
+                </li>`
+                    })
+
+                    htmlContent += `</ul></div>`
+
+                    const myHomePanel = this.getPanel()
+                    if (myHomePanel) {
+                        myHomePanel.innerHTML = htmlContent
+                    }
+                },
+                reset() {
+                    const myHomePanel = this.getPanel()
+                    if (myHomePanel) {
+                        myHomePanel.innerHTML = ''
+                    }
+                },
+            },
         },
     },
     getActiveDomain() {

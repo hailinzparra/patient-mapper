@@ -40,7 +40,7 @@ export class PatientList {
         this.patients = this.patients.filter(p => p.id !== patientId)
     }
     getPatient(patientId) {
-        return this.patients.find(p => p.id !== patientId)
+        return this.patients.find(p => p.id === patientId)
     }
     toJSON() {
         return {
