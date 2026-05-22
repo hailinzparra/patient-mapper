@@ -55,6 +55,29 @@ export const Utils = {
         if (ua.match(/safari/i)) return 'Safari'
         return 'Unknown'
     },
+    formatCountdown(timeLeftMs) {
+        const safeMs = Math.max(0, timeLeftMs)
+        const totalSeconds = Math.floor(safeMs / 1000)
+        const totalMinutes = Math.floor(totalSeconds / 60)
+        const totalHours = Math.floor(totalMinutes / 60)
+        const displaySeconds = String(totalSeconds % 60).padStart(2, '0')
+        const displayMinutes = String(totalMinutes % 60).padStart(2, '0')
+        const displayHours = String(totalHours)
+        return `${displayHours}:${displayMinutes}:${displaySeconds}`
+    },
+    formatCompactCountdown(timeLeftMs) {
+        const safeMs = Math.max(0, timeLeftMs)
+        const totalMinutes = Math.floor(safeMs / (1000 * 60))
+        const totalHours = Math.floor(totalMinutes / 60)
+        const days = Math.floor(totalHours / 24)
+        const hours = totalHours % 24
+        const minutes = totalMinutes % 60
+        const parts = []
+        if (days > 0) parts.push(`${days}d`)
+        if (hours > 0 || days > 0) parts.push(`${hours}h`)
+        parts.push(`${minutes}m`)
+        return parts.join(' ')
+    },
     DOM: {
         GEAR_SVG: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.767a1.123 1.123 0 0 0-.417 1.03c.004.074.006.148.006.222 0 .074-.002.148-.006.222a1.123 1.123 0 0 0 .417 1.03l1.003.767a1.125 1.125 0 0 1 .26 1.43l-1.296 2.247a1.125 1.125 0 0 1-1.37.49l-1.216-.456a1.125 1.125 0 0 0-1.075.124a2.08 2.08 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281a1.125 1.125 0 0 0-.644-.87a2.08 2.08 0 0 1-.22-.127a1.125 1.125 0 0 0-1.074-.124l-1.217.456a1.125 1.125 0 0 1-1.37-.49l-1.296-2.247a1.125 1.125 0 0 1 .26-1.43l1.002-.767a1.123 1.123 0 0 0 .417-1.03c-.004-.074-.006-.148-.006-.222c0-.074.002-.148.006-.222a1.123 1.123 0 0 0-.417-1.03l-1.002-.767a1.125 1.125 0 0 1-.26-1.43l1.296-2.247a1.125 1.125 0 0 1 1.37-.49l1.216.456c.356.133.751.072 1.076-.124c.072-.044.146-.086.22-.128c.332-.183.582-.495.644-.869l.214-1.28z" />

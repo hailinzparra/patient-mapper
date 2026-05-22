@@ -1,4 +1,4 @@
-import { Utils } from './utils.js'
+import { Utils, Vault } from './utils.js'
 
 export class Patient {
     constructor({ id, name, dob, gender, condition = '' }) {
@@ -103,6 +103,9 @@ export class PatientList {
             fileInput.type = 'file'
             fileInput.accept = '.txt'
 
+            fileInput.oncancel = (e) => {
+                return reject(new Error('File selection cancelled'))
+            }
             fileInput.onchange = (e) => {
                 const file = e.target.files[0]
                 if (!file) return reject(new Error('File selection cancelled'))
@@ -130,6 +133,44 @@ export class PatientList {
 
             fileInput.click()
         })
+    }
+    static async saveToCloud(patientListInstance) {
+        if (!(patientListInstance instanceof PatientList)) {
+            throw new Error('Provided object is not an instance of PatientList')
+        }
+
+        const timestamp = Date.now().toString()
+        const exportData = {
+            listData: patientListInstance.toJSON(),
+            exportDate: new Date().toISOString(),
+            version: '1.0',
+        }
+
+        const encryptedString = PatientList.#spondylosis(JSON.stringify(exportData))
+        const manifestItem = {
+            id: patientListInstance.id,
+            name: patientListInstance.name,
+        }
+
+        await Vault.upload(`previewlist/${timestamp}`, manifestItem)
+        await Vault.upload(`getlist/${patientListInstance.id}`, encryptedString)
+    }
+    static async loadFromCloud(patientListId) {
+        const encryptedString = await Vault.download(`getlist/${patientListId}`)
+        if (!encryptedString) {
+            throw new Error('Cloud file not found or has expired.')
+        }
+
+        const decryptedStr = PatientList.#spondylitis(encryptedString)
+        const importedData = JSON.parse(decryptedStr)
+
+        if (!importedData.listData) {
+            throw new Error('Invalid cloud database structure')
+        }
+
+        const rebuiltList = PatientList.fromJSON(importedData.listData)
+        rebuiltList.id = Utils.ID()
+        return rebuiltList
     }
     static #get_pain() {
         const _K = '2d3e5f6g9h0i1j4k7l2m5n8o1p4q7r0s3t6u9v2w5x8y1z4a7b0c3d6e9f2g5h8i'

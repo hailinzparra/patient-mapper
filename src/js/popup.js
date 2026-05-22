@@ -505,22 +505,31 @@ const G = {
                             }
                         })
                     }
-
                     saveToDeviceBtn.onclick = () => {
+                        G.swal.close()
                         this.triggerSave(patientList)
                     }
-
-                    loadFromDeviceBtn.onclick = async () => {
+                    loadFromDeviceBtn.onclick = () => {
+                        G.swal.close()
                         this.triggerLoad(patientList, listBtn, rowWrapper)
                     }
+                    saveToCloudBtn.onclick = () => {
+                        G.swal.close()
+                        this.triggerCloudSave(patientList)
+                    }
+                    loadFromCloudBtn.onclick = () => {
+                        G.swal.close()
+                        this.triggerCloudLoad(patientList, listBtn, rowWrapper)
+                    }
                 },
-                preConfirm: () => {
+                preConfirm() {
                     const inputVal = document.getElementById('swal-input-name').value
                     if (!inputVal.trim()) {
                         G.swal.showValidationMessage('The list name cannot be empty.')
                         const validationMsg = G.swal.getValidationMessage()
                         if (validationMsg) {
-                            validationMsg.className = 'mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 border border-red-100 text-left'
+                            validationMsg.className = 'mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 border border-red-100 text-center'
+                            validationMsg.style = ''
                         }
                         return false
                     }
@@ -616,7 +625,6 @@ const G = {
                     G.swal.showLoading()
                 }
             })
-
             await Utils.sleep(200)
 
             try {
@@ -624,23 +632,18 @@ const G = {
 
                 const lists = G.store.patients.data.lists || []
                 const index = lists.findIndex(l => l.id === patientList.id)
-
                 if (index === -1) throw new Error('No list to replace.')
 
                 lists[index] = loadedInstance
-
                 await G.store.patients.update({ lists })
 
                 if (listBtn) {
                     listBtn.innerText = loadedInstance.name
                 }
-
                 if (rowWrapper) {
                     rowWrapper.dataset.listId = loadedInstance.id
                 }
-
                 this.lastSelectedListId = loadedInstance.id
-
                 this.myPatientsBtn.click()
 
                 G.swal.fire({
@@ -651,7 +654,6 @@ const G = {
                     timer: 1000,
                     timerProgressBar: true,
                 })
-
             } catch (error) {
                 console.error(error)
                 if (error.message === 'File selection cancelled') {
@@ -662,6 +664,193 @@ const G = {
                     icon: 'error',
                     title: 'Error loading data',
                     text: 'The file selected was corrupted or is not an authentic backup.',
+                })
+            }
+        },
+        async triggerCloudSave(patientList) {
+            G.swal.fire({
+                title: 'Saving to cloud...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showCloseButton: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    G.swal.showLoading()
+                }
+            })
+
+            await Utils.sleep(500)
+
+            try {
+                await PatientList.saveToCloud(patientList)
+                G.swal.fire({
+                    icon: 'success',
+                    title: 'Backup saved to cloud!',
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    timer: 1000,
+                    timerProgressBar: true,
+                })
+            } catch (error) {
+                console.error(error)
+                G.swal.fire({
+                    icon: 'error',
+                    title: 'Error saving to cloud',
+                    text: error.message || 'Something went wrong while pushing data to the cloud.'
+                })
+            }
+        },
+        async triggerCloudLoad(patientList, listBtn, rowWrapper) {
+            G.swal.fire({
+                title: 'Checking cloud backups...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showCloseButton: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    G.swal.showLoading()
+                }
+            })
+
+            await Utils.sleep(200)
+
+            try {
+                const previewMap = await Vault.download('previewlist') || {}
+
+                const now = Date.now()
+                const oneDayMs = 24 * 60 * 60 * 1000
+                const validOptionsHtml = []
+                const targetedDeletions = []
+
+                const keys = Object.keys(previewMap).sort((a, b) => b - a)
+
+                if (keys.length === 0) {
+                    G.swal.fire({
+                        icon: 'info',
+                        title: 'No backups found',
+                        text: 'There are no active cloud backups available for retrieval.'
+                    })
+                    return
+                }
+
+                keys.forEach(timestampKey => {
+                    const uploadTime = parseInt(timestampKey, 10)
+                    const expirationTime = uploadTime + oneDayMs
+                    const timeLeftMs = expirationTime - now
+                    const isExpired = timeLeftMs <= 0
+
+                    const meta = previewMap[timestampKey]
+                    const dateLabel = new Date(uploadTime).toLocaleString('en-GB')
+
+                    const twoDaysMs = 2 * 24 * 60 * 60 * 1000
+                    const isPastTwoDays = (now - uploadTime) >= twoDaysMs
+
+                    if (isPastTwoDays) {
+                        targetedDeletions.push(Vault.discard(`previewlist/${timestampKey}`))
+                        targetedDeletions.push(Vault.discard(`getlist/${meta.id}`))
+                        return
+                    }
+
+                    if (isExpired) {
+                        validOptionsHtml.push(`
+                            <div class="flex items-center justify-between p-2.5 border border-slate-100 bg-slate-100/70 rounded-md text-slate-400 select-none opacity-60 overflow-x-hidden">
+                                <div class="text-left">
+                                    <div class="font-bold text-[10px] max-w-[150px] truncate line-through">${meta.name}</div>
+                                    <div class="text-[7px] text-slate-400">${dateLabel}</div>
+                                </div>
+                                <span class="text-[7px] font-bold tracking-wide px-2 py-0.5 rounded bg-red-50 text-red-400 border border-red-100">Expired</span>
+                            </div>
+                        `)
+                    } else {
+                        const countdownString = Utils.formatCompactCountdown(timeLeftMs)
+                        validOptionsHtml.push(`
+                            <label class="flex items-center justify-between p-2.5 border border-slate-200 bg-white hover:bg-slate-50 rounded-md shadow-sm cursor-pointer transition active:scale-[0.99] overflow-x-hidden">
+                                <div class="text-left flex items-center gap-3">
+                                    <input type="radio" name="swal-cloud-select" value="${meta.id}" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                                    <div>
+                                        <div class="font-bold text-[10px] text-slate-700 max-w-[150px] line-clamp-2">${meta.name}</div>
+                                        <div class="text-[7px] text-slate-400">${dateLabel}</div>
+                                    </div>
+                                </div>
+                                <span class="text-[7px] font-bold tracking-wide px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap shrink-0">
+                                    Expires in ${countdownString}
+                                </span>
+                            </label>
+                        `)
+                    }
+                })
+
+                if (targetedDeletions.length > 0) {
+                    Promise.all(targetedDeletions).catch(err => console.error('Retention purge routine failed:', err))
+                }
+
+                const selectResult = await G.swal.fire({
+                    title: 'Select Cloud Backup',
+                    html: `<div class="space-y-2 max-h-[280px] overflow-x-hidden overflow-y-auto px-1 py-1">${validOptionsHtml.join('')}</div>`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Download & Sync',
+                    preConfirm() {
+                        const checkedRadio = document.querySelector('input[name="swal-cloud-select"]:checked')
+                        if (!checkedRadio) {
+                            G.swal.showValidationMessage('Please choose a backup file to import.')
+                            const validationMsg = G.swal.getValidationMessage()
+                            if (validationMsg) {
+                                validationMsg.className = 'mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 border border-red-100 text-center'
+                                validationMsg.style = ''
+                            }
+                            return false
+                        }
+                        return checkedRadio.value
+                    }
+                })
+
+                if (!selectResult.isConfirmed) return
+
+                G.swal.fire({
+                    title: 'Downloading file payload...',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        G.swal.showLoading()
+                    }
+                })
+                await Utils.sleep(200)
+
+                const selectedListId = selectResult.value
+                const loadedInstance = await PatientList.loadFromCloud(selectedListId)
+
+                const lists = G.store.patients.data.lists || []
+                const index = lists.findIndex(l => l.id === patientList.id)
+                if (index === -1) throw new Error('No list to replace.')
+
+                lists[index] = loadedInstance
+                await G.store.patients.update({ lists })
+
+                if (listBtn) {
+                    listBtn.innerText = loadedInstance.name
+                }
+                if (rowWrapper) {
+                    rowWrapper.dataset.listId = loadedInstance.id
+                }
+                this.lastSelectedListId = loadedInstance.id
+                this.myPatientsBtn.click()
+
+                G.swal.fire({
+                    icon: 'success',
+                    title: 'Cloud data loaded successfully!',
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    timer: 1000,
+                    timerProgressBar: true,
+                })
+            } catch (error) {
+                console.error(error)
+                G.swal.fire({
+                    icon: 'error',
+                    title: 'Error loading data',
+                    text: error.message || 'The specified cloud asset could not be recovered or parsed properly.',
                 })
             }
         },
