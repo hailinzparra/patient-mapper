@@ -138,19 +138,21 @@ export const ApiSoediranDriver = {
             try {
                 result.data = await decryptData(result.data, session.rawToken)
             } catch (decryptError) {
-                console.error('Decryption failed:', decryptError)
+                console.warn('Decryption failed:', decryptError)
                 throw new Error('Security Error: Could not decrypt the received data.')
             }
         }
 
         return result
     },
-    async getSession(targetDomain, api) {
+    async getSession(targetDomain, api, store) {
         const matchPattern = `${targetDomain}/*`
         const allTabs = await api.tabs.query({ url: matchPattern })
         const targetTab = allTabs[0]
 
         if (!targetTab || !targetTab.id) throw new Error('Portal tab not found.')
+
+        store.temp.activeTargetTabId = targetTab.id
 
         const injectionResults = await api.scripting.executeScript({
             target: { tabId: targetTab.id },

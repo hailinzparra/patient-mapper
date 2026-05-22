@@ -43,12 +43,14 @@ export const ApiSoehadiDriver = {
 
         return result
     },
-    async getSession(targetDomain, api) {
+    async getSession(targetDomain, api, store) {
         const matchPattern = `${targetDomain}/*`
         const allTabs = await api.tabs.query({ url: matchPattern })
         const targetTab = allTabs[0]
 
         if (!targetTab || !targetTab.id) throw new Error('Portal tab not found.')
+
+        store.temp.activeTargetTabId = targetTab.id
 
         const injectionResults = await api.scripting.executeScript({
             target: { tabId: targetTab.id },
@@ -75,7 +77,7 @@ export const ApiSoehadiDriver = {
         })
 
         const result = injectionResults?.[0]?.result
-        if (!result) throw new Error('Session not found.')
+        if (!result || !result.authToken || !result.userLogin || !result.pegawai) throw new Error('Session not found.')
 
         return {
             authToken: result.authToken,

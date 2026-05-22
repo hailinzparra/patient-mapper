@@ -37,6 +37,9 @@ const G = {
         await this.sidebar.init()
     },
     store: {
+        temp: {
+            activeTargetTabId: null,
+        },
         session: new VaultDriver('session'),
         patients: new VaultDriver('patients', {
             lists: [], // { id: 1, name: 'List #1', patientCount: 12 }
@@ -147,6 +150,7 @@ const G = {
             Utils.DOM.selectOptionByDatasetIndex(this.targetDomainSelect, activeDomainIndexOnLoad)
 
             Events.on('visible', () => this.runLiveEnvSync())
+            Events.on('target_tab_closed', () => this.runLiveEnvSync())
         },
         updateOnToggle() {
             const isSidebarCollapsed = G.store.settings.data.isSidebarCollapsed
@@ -196,14 +200,14 @@ const G = {
 
                 if (!activeDriver) throw new Error('No API driver implementation found.')
 
-                const session = await activeDriver.getSession(activeDomain, api)
+                const session = await activeDriver.getSession(activeDomain, api, G.store)
                 await G.store.session.update({ ...session })
 
                 const userData = await activeDriver.syncUserData(activeDomain, G.store.session.data)
 
                 this.updateSyncUI(true, true, userData)
             } catch (error) {
-                console.error('Pipeline sync failure:', error)
+                console.warn('Pipeline sync failure:', error)
                 if (error.message.includes('tab not found')) {
                     this.updateSyncUI(false, false)
                 } else {
@@ -346,6 +350,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             Events.emit('visible')
+        }
+    })
+    api.tabs.onRemoved.addListener((tabId, removeInfo) => {
+        if (tabId === G.store.temp.activeTargetTabId) {
+            Events.emit('target_tab_closed')
+            G.store.temp.activeTargetTabId = null
         }
     })
     Events.emit('entrypoint')
