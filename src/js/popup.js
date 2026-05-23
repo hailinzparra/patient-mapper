@@ -647,6 +647,7 @@ const G = {
                     G.swal.showLoading()
                 }
             })
+
             await Utils.sleep(200)
 
             try {
@@ -853,6 +854,7 @@ const G = {
                         G.swal.showLoading()
                     }
                 })
+
                 await Utils.sleep(200)
 
                 const selectedListId = selectResult.value
@@ -990,10 +992,44 @@ const G = {
                 Events.emit('patient_lookup_submit', { payload, docGroups, roomGroups, driver })
             })
             Events.on('hospital_change', () => this.onSwitchHospital())
-            Events.on('patient_lookup_submit', ({ payload, docGroups, roomGroups, driver }) => {
-                this.launchPatientLookupTab(payload, docGroups, roomGroups, driver)
+            Events.on('patient_lookup_submit', async ({ payload, docGroups, roomGroups, driver }) => {
+                try {
+                    await this.launchPatientLookupTab(payload, docGroups, roomGroups, driver)
+                }
+                catch (err) {
+                    this.swalFatalError(
+                        err,
+                        'Lookup Failed',
+                        'The application encountered a fatal lookup error:'
+                    )
+                }
             })
             this.onSwitchHospital()
+        },
+        swalFatalError(err, title, preMessage) {
+            console.error(`${title}:`, err)
+            let fullErrorPayload = ''
+            if (err instanceof Error) {
+                fullErrorPayload = err.stack || err.message
+            } else if (typeof err === 'object' && err !== null) {
+                try {
+                    fullErrorPayload = JSON.stringify(err, null, 2)
+                } catch (_) {
+                    fullErrorPayload = String(err)
+                }
+            } else {
+                fullErrorPayload = String(err)
+            }
+            G.swal.fire({
+                icon: 'error',
+                title: title,
+                html: `<p class="mb-3 text-sm font-medium text-slate-700">${preMessage}</p>
+                <div class="w-full max-h-60 overflow-y-auto overflow-x-auto bg-slate-900 text-rose-400 p-3 rounded-md border border-slate-800 font-mono text-[11px] leading-relaxed whitespace-pre">
+                ${Utils.escapeHtml(fullErrorPayload)}</div>`,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showCloseButton: false,
+            })
         },
         onSwitchHospital() {
             const activeHospital = G.getActiveHospital()
@@ -1067,7 +1103,7 @@ const G = {
             const statusDotElements = []
             const labelTextElements = []
             queryList.forEach((q, i) => {
-                const payloadSummary = `[MRN: ${payload.mrn || '*'}] [Name: ${payload.name || '*'}] [Doc: ${q.doc || '*'}] [Room: ${q.room || '*'}]`
+                const payloadSummary = `[MRN: ${payload.mrn || '*'}] [Name: ${payload.name || '*'}] [Doc: ${q.doc || '*'}] [Room: ${q.room || '*'}] [Ward: ${q.ward || '*'}]`
                 const statusDot = c('span', { classes: 'h-1 w-1 rounded-full bg-amber-400 animate-pulse flex-shrink-0' })
                 const nodeLabel = c('span', { classes: 'text-slate-400 font-bold min-w-[55px]', text: `Search ${i + 1}` })
                 const infoLabel = c('span', { classes: 'text-slate-500 truncate', text: `${payloadSummary} · PENDING` })
@@ -1097,6 +1133,8 @@ const G = {
             activeTabManager.addTab(tabId, tabName, [contentPane], false)
             activeTabManager.open(tabId)
 
+            await Utils.sleep(500)
+
             try {
                 const session = G.store.session.data
                 const targetDomain = G.getActiveDomain()
@@ -1106,7 +1144,7 @@ const G = {
                     const targetText = labelTextElements[index]
 
                     const q = queryList[index]
-                    const payloadSummary = `[MRN: ${payload.mrn || '*'}] [Name: ${payload.name || '*'}] [Doc: ${q.doc || '*'}] [Room: ${q.room || '*'}]`
+                    const payloadSummary = `[MRN: ${payload.mrn || '*'}] [Name: ${payload.name || '*'}] [Doc: ${q.doc || '*'}] [Room: ${q.room || '*'}] [Ward: ${q.ward || '*'}]`
 
                     if (status === 'success') {
                         successCount++
@@ -1133,9 +1171,9 @@ const G = {
                 toggleCriteriaSection(false)
 
                 resultTable.classList.remove('flex', 'items-center', 'justify-center')
-                resultTable.innerHTML = JSON.stringify(completeDataset[1])
+                resultTable.innerHTML = JSON.stringify(completeDataset)
             } catch (err) {
-                console.error('Lookup failure: ', err)
+                console.error('Search failed: ', err)
                 statusBanner.className = 'flex flex-col gap-1 p-3 bg-rose-50 text-rose-700 rounded-xl border border-rose-100'
                 pingContainer.style.display = 'none'
                 statusBanner.replaceChildren(
@@ -1224,34 +1262,15 @@ Events.on('entrypoint', async (ev) => {
         scaleMainContainer()
 
         await Utils.sleep(1000)
+
         G.swal.close()
     }
     catch (err) {
-        console.error('Initialization Failed:', err)
-
-        let fullErrorPayload = ''
-        if (err instanceof Error) {
-            fullErrorPayload = err.stack || err.message
-        } else if (typeof err === 'object') {
-            try {
-                fullErrorPayload = JSON.stringify(err, null, 2)
-            } catch (_) {
-                fullErrorPayload = String(err)
-            }
-        } else {
-            fullErrorPayload = String(err)
-        }
-
-        G.swal.fire({
-            icon: 'error',
-            title: 'Initialization Failed',
-            html: `<p class="mb-3 text-sm font-medium text-slate-700">The application encountered a fatal initialization error:</p>
-            <div class="w-full max-h-60 overflow-y-auto overflow-x-auto bg-slate-900 text-rose-400 p-3 rounded-md border border-slate-800 font-mono text-[11px] leading-relaxed whitespace-pre">
-            ${Utils.escapeHtml(fullErrorPayload)}</div>`,
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showCloseButton: false,
-        })
+        G.ui.swalFatalError(
+            err,
+            'Initialization Failed',
+            'The application encountered a fatal initialization error:'
+        )
     }
 
     // Check for browser

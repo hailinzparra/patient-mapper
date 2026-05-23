@@ -177,15 +177,15 @@ export class PatientLookup {
         ])
 
         // Admission Date picker elements
-        this.#nodes.enableDate = c('input', { attrs: { type: 'checkbox', id: 'enable-date' }, classes: 'w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500' })
-        this.#nodes.dateStart = c('input', { attrs: { type: 'datetime-local', id: 'form-date-start', disabled: 'true' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
-        this.#nodes.dateEnd = c('input', { attrs: { type: 'datetime-local', id: 'form-date-end', disabled: 'true' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
+        this.#nodes.enableDate = c('input', { attrs: { type: 'checkbox' }, classes: 'w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500' })
+        this.#nodes.dateStart = c('input', { attrs: { type: 'datetime-local', disabled: 'true', step: '1' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
+        this.#nodes.dateEnd = c('input', { attrs: { type: 'datetime-local', disabled: 'true', step: '1' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
 
         const dateRangeBlock = c('div', { classes: 'bg-slate-50 p-4 rounded-xl border border-slate-200/60' }, [
             c('div', { classes: 'flex items-center justify-between mb-2.5 px-1' }, [
                 c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Admission Date Range' }),
                 c('div', { classes: 'flex items-center gap-2' }, [
-                    c('span', { classes: 'text-[10px] font-semibold text-slate-400 uppercase', text: 'Filter Range' }),
+                    c('span', { classes: 'text-[10px] font-semibold text-slate-400 uppercase', text: 'Enable' }),
                     this.#nodes.enableDate,
                 ]),
             ]),
@@ -585,7 +585,7 @@ export class PatientLookup {
                 c('div', { classes: 'grid grid-cols-2 gap-4' }, [
                     c('div', {}, [
                         c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1', text: 'Status' }),
-                        c('select', { attrs: { id: 'form-status', required: 'true' }, classes: 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 transition-all' }, [
+                        c('select', { attrs: { id: 'lookup-form-status', required: 'true' }, classes: 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 transition-all' }, [
                             c('option', { attrs: { value: '0' }, text: 'Inactive' }),
                             c('option', { attrs: { value: '1', selected: 'true' }, text: 'Active' }),
                             c('option', { attrs: { value: '2' }, text: 'Discharged' }),
@@ -593,7 +593,7 @@ export class PatientLookup {
                     ]),
                     c('div', {}, [
                         c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1', text: 'Limit' }),
-                        c('input', { attrs: { type: 'number', id: 'form-limit', value: '25', min: '1', required: 'true' }, classes: 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 transition-all' }),
+                        c('input', { attrs: { type: 'number', id: 'lookup-form-limit', value: '25', min: '1', required: 'true' }, classes: 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 transition-all' }),
                     ]),
                 ]),
             ])
@@ -603,7 +603,7 @@ export class PatientLookup {
                 c('div', { classes: 'text-[10px] font-extrabold text-slate-400 tracking-wider uppercase border-b border-slate-200 pb-1', text: `${system} Metrics` }),
                 c('div', {}, [
                     c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1', text: 'No Reg' }),
-                    c('input', { attrs: { type: 'text', id: 'form-no-reg', placeholder: 'Ex: 1234567890' }, classes: 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 transition-all' }),
+                    c('input', { attrs: { type: 'text', id: 'lookup-form-no-reg', placeholder: 'Ex: 1234567890' }, classes: 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 transition-all' }),
                 ]),
             ])
             this.#nodes.dynamicInputsContainer.append(node)
@@ -621,6 +621,13 @@ export class PatientLookup {
         })
     }
     previewListOfRequest() {
+        const soediranInputs = {
+            inputStatus: this.#nodes.form.querySelector('#lookup-form-status'),
+            inputLimit: this.#nodes.form.querySelector('#lookup-form-limit'),
+        }
+        const soehadiInputs = {
+            inputNoReg: this.#nodes.form.querySelector('#lookup-form-no-reg'),
+        }
         return {
             mrn: this.#nodes.mrn.value || null,
             name: this.#nodes.name.value || null,
@@ -632,13 +639,12 @@ export class PatientLookup {
                 start: this.#nodes.dateStart.value || null,
                 end: this.#nodes.dateEnd.value || null,
             },
-            [ApiSoediranDriver.SYSTEM_NAME]: this.#nodes.form.querySelector('#form-status') ? {
-                status: this.#nodes.form.querySelector('#form-status').value,
-                limit: this.#nodes.form.querySelector('#form-limit').value,
+            [ApiSoediranDriver.SYSTEM_NAME]: soediranInputs.inputStatus ? {
+                status: soediranInputs.inputStatus.value,
+                limit: soediranInputs.inputLimit.value,
             } : null,
-
-            [ApiSoehadiDriver.SYSTEM_NAME]: this.#nodes.form.querySelector('#form-no-reg') ? {
-                noReg: this.#nodes.form.querySelector('#form-no-reg').value,
+            [ApiSoehadiDriver.SYSTEM_NAME]: soehadiInputs.inputNoReg ? {
+                noReg: soehadiInputs.inputNoReg.value,
             } : null,
         }
     }
