@@ -85,8 +85,14 @@ export const Utils = {
         </svg>`,
         CLOSE_SVG: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
         createElement(tag, { classes = '', attrs = {}, text = '', html = '' } = {}, children = []) {
-            const element = document.createElement(tag)
-            if (classes.length) element.className = classes
+            const svgTags = ['svg', 'path', 'g', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse', 'use', 'defs']
+            const isSvg = svgTags.includes(tag.toLowerCase())
+            const element = isSvg
+                ? document.createElementNS('http://www.w3.org/2000/svg', tag)
+                : document.createElement(tag)
+            if (classes.length) {
+                element.setAttribute('class', classes)
+            }
             for (const [key, val] of Object.entries(attrs)) {
                 element.setAttribute(key, val)
             }
@@ -347,13 +353,25 @@ export class TabManager {
         this.tabs = new Map()
         this.activeTabId = null
 
-        this.container.innerHTML = `<div class="tab-manager-wrapper hidden flex flex-col h-full w-full">
+        this.container.classList.add('hidden')
+        this.container.innerHTML = `<div class="tab-manager-wrapper flex flex-col h-full w-full">
             <div class="tab-headers-container bg-white border-b border-slate-200 flex items-center px-4 gap-1 h-10 flex-shrink-0 overflow-x-auto scrollbar-none"></div>
             <div class="tab-contents-container flex-1 overflow-y-auto"></div></div>`
 
         this.wrapperEl = this.container.querySelector('.tab-manager-wrapper')
         this.headersContainer = this.container.querySelector('.tab-headers-container')
         this.contentsContainer = this.container.querySelector('.tab-contents-container')
+    }
+    getTab(id) {
+        return this.tabs.get(id)
+    }
+    getTabHeaderEl(id) {
+        const tab = this.getTab(id)
+        return tab ? tab.tabHeaderEl : null
+    }
+    getTabContentEl(id) {
+        const tab = this.getTab(id)
+        return tab ? tab.tabContentEl : null
     }
     addTab(id, name, children, isPermanent = false) {
         if (this.tabs.has(id)) {
@@ -401,7 +419,7 @@ export class TabManager {
         }
     }
     open(id = '') {
-        this.wrapperEl.classList.remove('hidden')
+        this.container.classList.remove('hidden')
         if (id) {
             this.switchTab(id)
         } else if (this.activeTabId) {
@@ -409,6 +427,6 @@ export class TabManager {
         }
     }
     close() {
-        this.wrapperEl.classList.add('hidden')
+        this.container.classList.add('hidden')
     }
 }

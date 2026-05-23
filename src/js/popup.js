@@ -1,7 +1,8 @@
 import { Events, Utils, Vault, VaultDriver, Tab, TabManager } from './utils.js'
 import { Patient, PatientList } from './clinical.js'
-import { ApiSoediranDriver } from './api-soediran.js'
-import { ApiSoehadiDriver } from './api-soehadi.js'
+import { PatientLookup } from './ui.js'
+import { SOEDIRAN_DATABASE, ApiSoediranDriver } from './api-soediran.js'
+import { SOEHADI_DATABASE, ApiSoehadiDriver } from './api-soehadi.js'
 
 const api = typeof browser !== 'undefined' ? browser : chrome
 
@@ -39,6 +40,7 @@ const G = {
         }
         await this.nav.init()
         await this.sidebar.init()
+        await this.ui.init()
     },
     store: {
         temp: {
@@ -166,6 +168,7 @@ const G = {
                     activeHospitalId: G.getActiveHospital().ID,
                     activeDomainIndex: 0,
                 })
+                Events.emit('hospital_change')
                 await this.updateDomainDropdown()
             })
             this.targetDomainSelect.addEventListener('change', async () => {
@@ -978,42 +981,75 @@ const G = {
             },
         },
     },
-    getActiveDomain() {
-        return this.sidebar.targetDomainSelect.value
+    ui: {
+        patientLookup: new PatientLookup(),
+        async init() {
+            const allPatientContentPanel = G.nav.tabs.allPatients.getTabContentEl('all-home')
+            this.patientLookup.init(allPatientContentPanel)
+            Events.on('hospital_change', () => this.onSwitchHospital())
+            this.onSwitchHospital()
+        },
+        onSwitchHospital() {
+            const activeHospital = G.getActiveHospital()
+            if (!activeHospital) return
+
+            const config = {
+                apiName: activeHospital.NAME,
+                database: activeHospital.DATABASE,
+                systemName: activeHospital.DRIVER.SYSTEM_NAME,
+                wardOptions: activeHospital.WARD_OPTIONS,
+            }
+
+            this.patientLookup.setApiName(config.apiName)
+            this.patientLookup.setDatabase(config.database, true)
+            this.patientLookup.updateInputs(config.wardOptions)
+            this.patientLookup.addSpecificInputs(config.systemName)
+        },
+    },
+    HOSPITAL: {
+        SOEDIRAN: {
+            ID: 0,
+            NAME: ApiSoediranDriver.NAME,
+            DATABASE: SOEDIRAN_DATABASE,
+            DOMAINS: ApiSoediranDriver.DOMAINS,
+            PATHS: ApiSoediranDriver.PATHS,
+            DRIVER: ApiSoediranDriver,
+            WARD_OPTIONS: SOEDIRAN_DATABASE.wardOptions,
+        },
+        SOEHADI: {
+            ID: 1,
+            NAME: ApiSoehadiDriver.NAME,
+            DATABASE: SOEHADI_DATABASE,
+            DOMAINS: ApiSoehadiDriver.DOMAINS,
+            PATHS: ApiSoehadiDriver.PATHS,
+            DRIVER: ApiSoehadiDriver,
+            WARD_OPTIONS: SOEHADI_DATABASE.wardOptions,
+        },
     },
     getActiveHospital() {
         const selectedHospitalKey = this.sidebar.targetHospitalSelect.value
         return this.HOSPITAL && this.HOSPITAL[selectedHospitalKey] ? this.HOSPITAL[selectedHospitalKey] : null
     },
+    getActiveDomain() {
+        return this.sidebar.targetDomainSelect.value
+    },
+    getActiveHospitalDatabase() {
+        const activeHospital = this.getActiveHospital()
+        return activeHospital ? activeHospital.DATABASE : null
+    },
     getActiveDriver() {
         const activeHospital = this.getActiveHospital()
         return activeHospital ? activeHospital.DRIVER : null
+    },
+    getHospitalById(targetId) {
+        const key = this.getHospitalKeyById(targetId)
+        return key ? G.HOSPITAL[key] : null
     },
     getHospitalKeyById(targetId) {
         const foundEntry = Object.entries(this.HOSPITAL).find(([key, hospital]) => {
             return hospital && hospital.ID !== undefined && String(hospital.ID) === String(targetId)
         })
         return foundEntry ? foundEntry[0] : null
-    },
-    getHospitalById(targetId) {
-        const key = this.getHospitalKeyById(targetId)
-        return key ? G.HOSPITAL[key] : null
-    },
-    HOSPITAL: {
-        SOEDIRAN: {
-            ID: 0,
-            NAME: 'RSUD Soediran',
-            DOMAINS: ApiSoediranDriver.DOMAINS,
-            PATHS: ApiSoediranDriver.PATHS,
-            DRIVER: ApiSoediranDriver,
-        },
-        SOEHADI: {
-            ID: 1,
-            NAME: 'RSUD Soehadi',
-            DOMAINS: ApiSoehadiDriver.DOMAINS,
-            PATHS: ApiSoehadiDriver.PATHS,
-            DRIVER: ApiSoehadiDriver,
-        },
     },
 }
 

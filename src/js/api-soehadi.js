@@ -1,4 +1,38 @@
+export const SOEHADI_DATABASE = {
+    doctorDatabase: [
+        { name: 'dr. Abc, Sp.A', id: '1' },
+        { name: 'dr. Def, Sp.B', id: '2' },
+        { name: 'dr. Ghi, Sp.C', id: '3' },
+    ],
+    roomDatabase: [
+        { name: 'Poli Anak', id: '1' },
+        { name: 'Poli Bedah', id: '2' },
+        { name: 'Poli Cardio', id: '3' },
+    ],
+    templates: [
+        {
+            id: 'igd',
+            name: 'IGD',
+            docs: [],
+            rooms: ['101020101', '101020201', '101020301'],
+        },
+        {
+            id: 'anak',
+            name: 'Anak',
+            docs: ['1', '3'],
+            rooms: [],
+        },
+    ],
+    wardOptions: [
+        { value: '', text: 'All Wards' },
+        { value: 'in', text: 'Inpatient' },
+        { value: 'out', text: 'Outpatient' },
+    ],
+}
+
 export const ApiSoehadiDriver = {
+    NAME: 'RSUD Soehadi',
+    SYSTEM_NAME: 'Soehadi',
     DOMAINS: [
         'https://apirssoehadi.sragenkab.go.id'
     ],
