@@ -1,3 +1,6 @@
+import { Utils } from './utils.js'
+import { PatientLookup } from './ui.js'
+
 export const SOEDIRAN_DATABASE = {
     doctorDatabase: [
         { name: 'dr. Firman, Sp.B', id: '37' },
@@ -399,4 +402,113 @@ export const ApiSoediranDriver = {
             userId: rawUser.ID,
         }
     },
+    async handleFetch(targetDomain, payload, docGroups, roomGroups, session, onProgress) {
+        const results = []
+        const queryList = this.buildFinalQueryList(docGroups, roomGroups, payload.wardType)
+        const payloadManager = new SoediranRequestPayload(payload, this.SYSTEM_NAME)
+        for (let i = 0; i < queryList.length; i++) {
+            const q = queryList[i]
+            payloadManager.reset()
+            payloadManager.update({
+                DPJP: q.doc,
+                RUANGAN: q.room,
+                JENIS_KUNJUNGAN: q.wardType,
+            })
+            const url = Utils.buildUrl(targetDomain, this.PATHS.BASE,
+                '/pendaftaran/kunjungan',
+                payloadManager.toQueryString(),
+            )
+            try {
+                const result = await this.apiRequest(url, session)
+                const items = result.data || []
+                results.push(...items)
+                if (typeof onProgress === 'function') {
+                    onProgress({ index: i, status: 'success', data: items })
+                }
+            } catch (err) {
+                console.warn(`Search ${i + 1} failed:`, err.message)
+                if (typeof onProgress === 'function') {
+                    if (err.message === 'Kunjungan tidak ditemukan') {
+                        onProgress({ index: i, status: 'success', data: [] })
+                    }
+                    else {
+                        onProgress({ index: i, status: 'error', error: err.message })
+                    }
+                }
+            }
+            if (i < queryList.length - 1) {
+                const delay = Utils.randomRange(200, 500)
+                await Utils.sleep(delay)
+            }
+        }
+        return results
+    },
+    buildFinalQueryList(docGroups, roomGroups, wardType) {
+        const baseQueryList = PatientLookup.buildQueryList(docGroups, roomGroups)
+        const wardTypeList = this.getWardTypeList(wardType)
+        return wardTypeList.flatMap(item =>
+            baseQueryList.map(query => ({
+                ...query,
+                wardType: item,
+            }))
+        )
+    },
+    getWardTypeList(wardType) {
+        switch (wardType) {
+            case 'er':
+                return ['2']
+            case 'in':
+                return ['3']
+            case 'out':
+                return ['1']
+            case 'erin':
+                return ['2', '3']
+            case 'erout':
+                return ['2', '1']
+            case 'inout':
+                return ['3', '1']
+            case '':
+            default:
+                return [null]
+        }
+    },
+}
+
+class SoediranRequestPayload {
+    #initialState = {}
+    constructor(p, systemName) {
+        const s = p[systemName]
+        const v = Utils.getValidValue
+        this.raw = {
+            _dc: Date.now(),
+            STATUS: v(s?.status, '1'),
+            REFERENSI: JSON.stringify({ "Ruangan": { "COLUMNS": ["DESKRIPSI", "JENIS_KUNJUNGAN"], "REFERENSI": { "Referensi": true } }, "Pendaftaran": true, "Referensi": true, "RuangKamarTidur": true, "DPJP": true, "Mutasi": true }),
+            RUANGAN: null,
+            JENIS_KUNJUNGAN: null,
+            DPJP: null,
+            NORM: p.mrn || null,
+            NAMA: p.name || null,
+            sort: JSON.stringify([{ "property": "MASUK", "direction": "ASC" }]),
+            MASUK: p.dateFilterEnabled && p.dateRange?.start ? p.dateRange.start.split('T')[0] : null,
+            AKHIR: p.dateFilterEnabled && p.dateRange?.end ? p.dateRange.end.split('T')[0] : null,
+            page: '1',
+            start: '0',
+            limit: v(s?.limit, '25'),
+        }
+        this.#initialState = { ...this.raw }
+    }
+    update(fields = {}) {
+        Object.assign(this.raw, fields)
+        return this
+    }
+    reset() {
+        this.raw = { ...this.#initialState, _dc: Date.now() }
+        return this
+    }
+    toQueryString() {
+        const cleanEntries = Object.entries(this.raw).filter(
+            ([_, val]) => val !== null && val !== undefined && val !== ''
+        )
+        return new URLSearchParams(Object.fromEntries(cleanEntries)).toString()
+    }
 }

@@ -818,7 +818,7 @@ const G = {
                 })
 
                 if (targetedDeletions.length > 0) {
-                    Promise.all(targetedDeletions).catch(err => console.error('Retention purge routine failed:', err))
+                    Promise.all(targetedDeletions).catch(err => console.error('Deletion routine failed:', err))
                 }
 
                 const selectResult = await G.swal.fire({
@@ -982,11 +982,17 @@ const G = {
         },
     },
     ui: {
+        tabCounter: 0,
         patientLookup: new PatientLookup(),
         async init() {
             const allPatientContentPanel = G.nav.tabs.allPatients.getTabContentEl('all-home')
-            this.patientLookup.init(allPatientContentPanel)
+            this.patientLookup.init(allPatientContentPanel, null, null, (payload, docGroups, roomGroups, driver) => {
+                Events.emit('patient_lookup_submit', { payload, docGroups, roomGroups, driver })
+            })
             Events.on('hospital_change', () => this.onSwitchHospital())
+            Events.on('patient_lookup_submit', ({ payload, docGroups, roomGroups, driver }) => {
+                this.launchPatientLookupTab(payload, docGroups, roomGroups, driver)
+            })
             this.onSwitchHospital()
         },
         onSwitchHospital() {
@@ -994,16 +1000,153 @@ const G = {
             if (!activeHospital) return
 
             const config = {
-                apiName: activeHospital.NAME,
+                driver: activeHospital.DRIVER,
                 database: activeHospital.DATABASE,
                 systemName: activeHospital.DRIVER.SYSTEM_NAME,
                 wardOptions: activeHospital.WARD_OPTIONS,
             }
 
-            this.patientLookup.setApiName(config.apiName)
+            this.patientLookup.setDriver(config.driver)
             this.patientLookup.setDatabase(config.database, true)
             this.patientLookup.updateInputs(config.wardOptions)
             this.patientLookup.addSpecificInputs(config.systemName)
+        },
+        async launchPatientLookupTab(payload, docGroups, roomGroups, driver) {
+            this.tabCounter++
+            const tabId = `pat-lookup-${this.tabCounter}`
+            const tabName = `Search-${this.tabCounter}`
+            const c = Utils.DOM.createElement
+
+            let successCount = 0
+            let failCount = 0
+            let totalRecords = 0
+            let isCriteriaOpen = true
+            let isInteractivityEnabled = false
+
+            const pingEffect = c('span', { classes: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75' })
+            const pingCenter = c('span', { classes: 'relative inline-flex rounded-full h-2 w-2 bg-blue-500' })
+            const pingContainer = c('span', { classes: 'relative flex h-2 w-2' }, [pingEffect, pingCenter])
+            const statusText = c('p', { classes: 'text-xs font-semibold tracking-wide', text: 'Searching...' })
+            const statusBanner = c('div', { classes: 'flex items-center gap-3 p-3 bg-blue-50 text-blue-700 rounded-xl border border-blue-100 transition-colors duration-300' }, [
+                pingContainer,
+                statusText,
+            ])
+
+            const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 transform rotate-180' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M19 9l-7 7-7-7' } }),
+            ])
+            const criteriaHeader = c('div', { classes: 'flex items-center justify-between p-1 cursor-not-allowed select-none transition-all duration-200 group text-slate-500 hover:text-blue-600' }, [
+                c('h4', { classes: 'text-[11px] font-bold uppercase tracking-wider', text: 'Search Criteria' }),
+                chevronIcon,
+            ])
+            const criteriaBody = c('div', { classes: 'max-h-[1000px] opacity-100 overflow-hidden transition-all duration-300 ease-in-out font-mono text-[9px]' })
+            const criteriaContainer = c('div', { classes: 'p-2 bg-white rounded-xl border border-slate-200' }, [
+                criteriaHeader,
+                criteriaBody,
+            ])
+            const toggleCriteriaSection = (forceState = null) => {
+                isCriteriaOpen = forceState !== null ? forceState : !isCriteriaOpen
+
+                if (isCriteriaOpen) {
+                    criteriaBody.classList.remove('max-h-0', 'opacity-0')
+                    criteriaBody.classList.add('max-h-[1000px]', 'opacity-100')
+                    chevronIcon.classList.add('rotate-180')
+                } else {
+                    criteriaBody.classList.remove('max-h-[1000px]', 'opacity-100')
+                    criteriaBody.classList.add('max-h-0', 'opacity-0')
+                    chevronIcon.classList.remove('rotate-180')
+                }
+            }
+            criteriaHeader.addEventListener('click', () => {
+                if (!isInteractivityEnabled) return
+                toggleCriteriaSection()
+            })
+
+            const queryList = driver.buildFinalQueryList(docGroups, roomGroups, payload.wardType)
+            const criteriaRowElements = []
+            const statusDotElements = []
+            const labelTextElements = []
+            queryList.forEach((q, i) => {
+                const payloadSummary = `[MRN: ${payload.mrn || '*'}] [Name: ${payload.name || '*'}] [Doc: ${q.doc || '*'}] [Room: ${q.room || '*'}]`
+                const statusDot = c('span', { classes: 'h-1 w-1 rounded-full bg-amber-400 animate-pulse flex-shrink-0' })
+                const nodeLabel = c('span', { classes: 'text-slate-400 font-bold min-w-[55px]', text: `Search ${i + 1}` })
+                const infoLabel = c('span', { classes: 'text-slate-500 truncate', text: `${payloadSummary} · PENDING` })
+                const searchRow = c('div', { classes: 'flex items-center gap-2 py-0.5 px-1.5 rounded hover:bg-slate-50 transition-colors' }, [
+                    statusDot,
+                    nodeLabel,
+                    infoLabel,
+                ])
+                criteriaBody.append(searchRow)
+                criteriaRowElements.push(searchRow)
+                statusDotElements.push(statusDot)
+                labelTextElements.push(infoLabel)
+            })
+
+            const resultStatusText = c('p', { text: 'Awaiting search results...' })
+            const resultTable = c('div', { classes: 'p-4 bg-white border border-slate-200 rounded-xl min-h-24 text-xs text-slate-500 flex items-center justify-center' }, [
+                resultStatusText,
+            ])
+
+            const contentPane = c('div', { classes: 'space-y-3', attrs: { id: `pane-${tabId}` } }, [
+                statusBanner,
+                criteriaContainer,
+                resultTable,
+            ])
+
+            const activeTabManager = G.nav.tabs.allPatients
+            activeTabManager.addTab(tabId, tabName, [contentPane], false)
+            activeTabManager.open(tabId)
+
+            try {
+                const session = G.store.session.data
+                const targetDomain = G.getActiveDomain()
+                const completeDataset = await driver.handleFetch(targetDomain, payload, docGroups, roomGroups, session, (progress) => {
+                    const { index, status, data } = progress
+                    const targetDot = statusDotElements[index]
+                    const targetText = labelTextElements[index]
+
+                    const q = queryList[index]
+                    const payloadSummary = `[MRN: ${payload.mrn || '*'}] [Name: ${payload.name || '*'}] [Doc: ${q.doc || '*'}] [Room: ${q.room || '*'}]`
+
+                    if (status === 'success') {
+                        successCount++
+                        totalRecords += (data ? data.length : 0)
+                        targetDot.className = 'h-1 w-1 rounded-full bg-emerald-500 flex-shrink-0'
+                        targetText.className = 'text-emerald-600 font-medium truncate'
+                        targetText.textContent = `${payloadSummary} · DONE (${data.length} records)`
+                    } else if (status === 'error') {
+                        failCount++
+                        targetDot.className = 'h-1 w-1 rounded-full bg-rose-500 flex-shrink-0'
+                        targetText.className = 'text-rose-600 font-medium truncate'
+                        targetText.textContent = `${payloadSummary} · ERROR`
+                    }
+                    statusText.innerHTML = `<span class="font-bold text-blue-900">${successCount}</span> Search Completed, <span class="font-bold text-rose-900">${failCount}</span> Search Failed...`
+                    resultStatusText.textContent = `${totalRecords} record${totalRecords === 1 ? '' : 's'} found so far...`
+                })
+
+                statusBanner.className = 'flex items-center gap-3 p-3 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100'
+                pingContainer.style.display = 'none'
+                statusText.textContent = `${successCount} Search Completed, ${failCount} Search Failed, ${totalRecords} Records Found`
+                isInteractivityEnabled = true
+                criteriaHeader.classList.replace('cursor-not-allowed', 'cursor-pointer')
+                criteriaHeader.classList.replace('text-slate-500', 'text-slate-700')
+                toggleCriteriaSection(false)
+
+                resultTable.classList.remove('flex', 'items-center', 'justify-center')
+                resultTable.innerHTML = JSON.stringify(completeDataset[1])
+            } catch (err) {
+                console.error('Lookup failure: ', err)
+                statusBanner.className = 'flex flex-col gap-1 p-3 bg-rose-50 text-rose-700 rounded-xl border border-rose-100'
+                pingContainer.style.display = 'none'
+                statusBanner.replaceChildren(
+                    c('div', { classes: 'font-bold text-sm', text: 'Search Failed' }),
+                    c('div', { classes: 'text-xs opacity-90 font-mono whitespace-pre-wrap', text: err.message }),
+                )
+                isInteractivityEnabled = true
+                criteriaHeader.classList.replace('cursor-not-allowed', 'cursor-pointer')
+                criteriaHeader.classList.replace('text-slate-500', 'text-slate-700')
+                toggleCriteriaSection(false)
+            }
         },
     },
     HOSPITAL: {

@@ -43,6 +43,9 @@ export const Utils = {
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms))
     },
+    randomRange(min, max) {
+        return min + Math.floor(Math.random() * (max - min + 1))
+    },
     escapeHtml(str) {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     },
@@ -77,6 +80,23 @@ export const Utils = {
         if (hours > 0 || days > 0) parts.push(`${hours}h`)
         parts.push(`${minutes}m`)
         return parts.join(' ')
+    },
+    getValidValue(val, fallback) {
+        if (val === null || val === undefined) return fallback
+        const cleanStr = String(val).trim()
+        if (cleanStr === '' || cleanStr === 'null' || cleanStr === 'undefined') {
+            return fallback
+        }
+        return val
+    },
+    buildUrl(domain, basePath, detailPath, queryString = '') {
+        const sanitizedPath = `${basePath}/${detailPath}`.replace(/\/{2,}/g, '/')
+        const urlObj = new URL(sanitizedPath, domain)
+        const params = new URLSearchParams(queryString)
+        if (queryString) {
+            params.forEach((value, key) => urlObj.searchParams.append(key, value))
+        }
+        return urlObj.toString()
     },
     DOM: {
         GEAR_SVG: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">

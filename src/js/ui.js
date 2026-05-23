@@ -8,6 +8,8 @@ export class PatientLookup {
     #isMoreOptionsOpen = false
     #templateSelectedIndex = 0
     #apiName = ''
+    #driver = null
+    #onSubmitCallback = null
 
     #db = {
         doctorDatabase: [],
@@ -52,25 +54,31 @@ export class PatientLookup {
 
     constructor() { }
 
-    init(targetContainerSelector, initialDatabase = null) {
-        if (this.#nodes.form) {
-            console.warn('PatientLookup is already initialized.')
-            return this
-        }
+    init(targetContainerSelector, initialDatabase = null, driver = null, onSubmitCallback = null) {
+        if (this.#nodes.form) return this
 
         this.#nodes.container = typeof targetContainerSelector === 'string'
             ? document.querySelector(targetContainerSelector)
             : targetContainerSelector
 
-        if (initialDatabase) {
-            this.setDatabase(initialDatabase, false)
-        }
+        if (driver) this.setDriver(driver)
+        if (onSubmitCallback) this.onSubmit(onSubmitCallback)
+        if (initialDatabase) this.setDatabase(initialDatabase, false)
 
         this.#buildFormDOM()
         this.#setupEventListeners()
         this.renderTemplates()
 
         return this
+    }
+    onSubmit(callback) {
+        if (typeof callback === 'function') {
+            this.#onSubmitCallback = callback
+        }
+    }
+    setDriver(driver) {
+        this.#driver = driver
+        if (driver) this.setApiName(driver.NAME)
     }
     setApiName(name) {
         this.#apiName = name || ''
@@ -170,8 +178,8 @@ export class PatientLookup {
 
         // Admission Date picker elements
         this.#nodes.enableDate = c('input', { attrs: { type: 'checkbox', id: 'enable-date' }, classes: 'w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500' })
-        this.#nodes.dateStart = c('input', { attrs: { type: 'date', id: 'form-date-start', disabled: 'true' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
-        this.#nodes.dateEnd = c('input', { attrs: { type: 'date', id: 'form-date-end', disabled: 'true' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
+        this.#nodes.dateStart = c('input', { attrs: { type: 'datetime-local', id: 'form-date-start', disabled: 'true' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
+        this.#nodes.dateEnd = c('input', { attrs: { type: 'datetime-local', id: 'form-date-end', disabled: 'true' }, classes: 'w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 disabled:opacity-60 transition-all' })
 
         const dateRangeBlock = c('div', { classes: 'bg-slate-50 p-4 rounded-xl border border-slate-200/60' }, [
             c('div', { classes: 'flex items-center justify-between mb-2.5 px-1' }, [
@@ -193,7 +201,7 @@ export class PatientLookup {
 
         const actionRow = c('div', { classes: 'grid grid-cols-2 gap-4' }, [
             c('button', { attrs: { type: 'reset' }, classes: 'w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl transition-all active:scale-[0.98]', text: 'Reset' }),
-            c('button', { attrs: { type: 'submit', id: 'main-fetch-btn' }, classes: 'w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-[0.98]', text: 'Fetch' }),
+            c('button', { attrs: { type: 'submit', id: 'main-fetch-btn' }, classes: 'w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-[0.98]', text: 'Search' }),
         ])
 
         this.#nodes.apiIndicator = c('p', { classes: 'text-xs text-slate-400 font-medium mt-1.5' })
@@ -635,11 +643,38 @@ export class PatientLookup {
         }
     }
     submitForm() {
-        const payload = this.previewListOfRequest()
-        if (typeof window.handleFetch === 'function') {
-            window.handleFetch(payload.serializedDoctors, payload.serializedRooms)
-        } else {
-            console.log('Payload Form Submission:', payload)
+        if (!this.#driver) {
+            console.error('Form submit halted: No active API driver assigned.')
+            return
         }
+
+        const payload = this.previewListOfRequest()
+        const docGroups = this.#parseInputToGroups(payload.serializedDoctors)
+        const roomGroups = this.#parseInputToGroups(payload.serializedRooms)
+
+        if (this.#onSubmitCallback) {
+            this.#onSubmitCallback(payload, docGroups, roomGroups, this.#driver)
+        }
+    }
+    #parseInputToGroups(input) {
+        if (!input || input.trim() === '') return [[null]]
+        return input.split(';').map(group => {
+            const items = group.split(',').map(item => item.trim()).filter(i => i !== '')
+            return items.length > 0 ? items : [null]
+        })
+    }
+    static buildQueryList(docGroups = [], roomGroups = []) {
+        const queryList = []
+        const maxGroups = Math.max(docGroups.length, roomGroups.length)
+        for (let i = 0; i < maxGroups; i++) {
+            const currentDocGroup = docGroups[i] || [null]
+            const currentRoomGroup = roomGroups[i] || [null]
+            currentDocGroup.forEach(d => {
+                currentRoomGroup.forEach(r => {
+                    queryList.push({ doc: d, room: r })
+                })
+            })
+        }
+        return queryList
     }
 }
