@@ -1,25 +1,53 @@
 import { Utils, Vault } from './utils.js'
 
 export class Patient {
-    constructor({ id, name, dob, gender, condition = '' }) {
+    constructor({
+        id,
+        name,
+        dob,
+        gender,
+        dx = '',
+        recId = null,
+        mrn = null,
+        roomId = null,
+        bedName = null,
+        docId = null,
+        admDate = null,
+        disDate = null,
+    } = {}) {
         this.id = id || Utils.ID()
+        this.recId = recId
+        this.mrn = mrn
         this.name = name
         this.dob = dob
         this.gender = gender
-        this.condition = condition
-        this.createdAt = new Date().toISOString()
+        this.dx = dx
+        this.roomId = roomId
+        this.bedName = bedName
+        this.docId = docId
+        this.admDate = admDate
+        this.disDate = disDate
+        this.lastUpdated = Utils.toLocalISOString(new Date())
     }
-    updateDetails(newData) {
+    update(newData) {
         Object.assign(this, newData)
+        this.lastUpdated = Utils.toLocalISOString(new Date())
     }
     toJSON() {
         return {
             id: this.id,
+            recId: this.recId,
+            mrn: this.mrn,
             name: this.name,
             dob: this.dob,
             gender: this.gender,
-            condition: this.condition,
-            createdAt: this.createdAt,
+            dx: this.dx,
+            roomId: this.roomId,
+            bedName: this.bedName,
+            docId: this.docId,
+            admDate: this.admDate,
+            disDate: this.disDate,
+            lastUpdated: this.lastUpdated,
         }
     }
 }
@@ -30,8 +58,17 @@ export class PatientList {
         this.name = name
         this.patients = patients.map(p => p instanceof Patient ? p : new Patient(p))
     }
-    getPatientCount() {
-        return this.patients.length
+    get patientCount() {
+        return (this.patients && this.patients.length) || 0
+    }
+    get lastUpdated() {
+        if (!this.patients || this.patients.length === 0) return null
+        const dates = this.patients
+            .map(p => p.lastUpdated ? new Date(p.lastUpdated) : null)
+            .filter(d => d !== null)
+        if (dates.length === 0) return null
+        const latestDate = new Date(Math.max(...dates))
+        return Utils.toLocalISOString(latestDate)
     }
     addPatient(patientData) {
         const newPatient = patientData instanceof Patient ? patientData : new Patient(patientData)
@@ -48,7 +85,8 @@ export class PatientList {
         return {
             id: this.id,
             name: this.name,
-            patientCount: this.getPatientCount(),
+            patientCount: this.patientCount,
+            lastUpdated: this.lastUpdated,
             patients: this.patients.map(p => p.toJSON())
         }
     }
@@ -68,7 +106,7 @@ export class PatientList {
             try {
                 const exportData = {
                     listData: patientListInstance.toJSON(),
-                    exportDate: new Date().toISOString(),
+                    exportDate: Utils.toLocalISOString(new Date()),
                     version: '1.0',
                 }
 
@@ -80,7 +118,7 @@ export class PatientList {
                 const dateStr = now.toLocaleDateString('en-GB').replace(/\//g, '-')
                 const timeStr = now.toLocaleTimeString('en-GB').replace(/:/g, '-')
                 const listName = patientListInstance.name?.replace(/\s+/g, '_').toLowerCase() || 'list'
-                const totalPatients = patientListInstance.getPatientCount()
+                const totalPatients = patientListInstance.patientCount
 
                 const link = document.createElement('a')
                 link.href = url
@@ -142,7 +180,7 @@ export class PatientList {
         const timestamp = Math.round(Date.now()).toString()
         const exportData = {
             listData: patientListInstance.toJSON(),
-            exportDate: new Date().toISOString(),
+            exportDate: Utils.toLocalISOString(new Date()),
             version: '1.0',
         }
 
@@ -150,7 +188,7 @@ export class PatientList {
         const manifestItem = {
             id: Utils.ID(),
             name: patientListInstance.name,
-            count: patientListInstance.getPatientCount(),
+            count: patientListInstance.patientCount,
         }
 
         await Vault.upload(`previewlist/${timestamp}`, manifestItem)

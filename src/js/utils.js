@@ -81,6 +81,14 @@ export const Utils = {
         parts.push(`${minutes}m`)
         return parts.join(' ')
     },
+    toLocalISOString(date = new Date()) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+            throw new Error('Invalid Date object provided')
+        }
+        const offsetMs = date.getTimezoneOffset() * 60 * 1000
+        const localTime = new Date(date.getTime() - offsetMs)
+        return localTime.toISOString().slice(0, -1)
+    },
     getValidValue(val, fallback) {
         if (val === null || val === undefined) return fallback
         const cleanStr = String(val).trim()

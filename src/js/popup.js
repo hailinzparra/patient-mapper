@@ -462,8 +462,8 @@ const G = {
             return rowWrapper
         },
         async openListDataModal(patientList, listBtn, rowWrapper) {
-            const count = patientList.getPatientCount()
-            const localizedDate = new Date(patientList.createdAt || Date.now()).toLocaleDateString()
+            const count = patientList.patientCount
+            const localizedDate = new Date(patientList.lastUpdated || Date.now()).toLocaleDateString()
             const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0', 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 text-left',
                 'flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 hover:border-slate-300 rounded-md text-xs font-bold bg-white hover:bg-slate-50 active:bg-slate-100 shadow-sm transition cursor-pointer',
                 'class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"',
@@ -474,7 +474,7 @@ const G = {
                 <div class="${cls[0]}"><span class="${cls[1]}">List Name:</span><span class="font-medium text-slate-800">${patientList.name}</span></div>
                 <div class="${cls[0]}"><span class="${cls[1]}">Total Records:</span>
                 <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100">${count} record${count === 1 ? '' : 's'}</span></div>
-                <div class="${cls[0]}"><span class="${cls[1]}">Created At:</span><span class="text-slate-700">${localizedDate}</span></div></div>
+                <div class="${cls[0]}"><span class="${cls[1]}">Last Updated:</span><span class="text-slate-700">${localizedDate}</span></div></div>
                 <div class="w-full mb-3"><label for="swal-input-name" class="${cls[2]}">Rename List</label>
                 <input id="swal-input-name" type="text"
                     class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-800 placeholder-slate-400 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
@@ -569,7 +569,7 @@ const G = {
                     timerProgressBar: true,
                 })
             } else if (result.isDenied) {
-                const count = patientList.getPatientCount()
+                const count = patientList.patientCount
                 const confirmDelete = await G.swal.fire({
                     icon: 'warning',
                     title: 'Are you sure?',
@@ -948,7 +948,7 @@ const G = {
                 },
                 render(listId) {
                     const patientList = G.store.patients.data.lists.find(list => String(list.id) === String(listId))
-                    if (!patientList) return
+                    if (!(patientList instanceof PatientList)) return
 
                     let htmlContent = `
                     <div class="space-y-4">
@@ -962,8 +962,8 @@ const G = {
                     patientList.patients.forEach(patient => {
                         htmlContent += `
                 <li class="p-3 text-xs text-slate-700 flex justify-between items-center hover:bg-slate-50">
-                    <span class="font-medium">${patient}</span>
-                    <button class="text-blue-600 hover:underline font-semibold" onclick="alert('Open nested profile tab for ${patient}')">View Record</button>
+                    <span class="font-medium">${patient.name}</span>
+                    <button class="text-blue-600 hover:underline font-semibold" onclick="alert('Open nested profile tab for ${patient.name}')">View Record</button>
                 </li>`
                     })
 
@@ -971,6 +971,7 @@ const G = {
 
                     const myHomePanel = this.getPanel()
                     if (myHomePanel) {
+                        myHomePanel.innerHTML = ''
                         myHomePanel.innerHTML = htmlContent
                     }
                 },
@@ -1171,7 +1172,7 @@ const G = {
                 toggleCriteriaSection(false)
 
                 resultTable.classList.remove('flex', 'items-center', 'justify-center')
-                resultTable.innerHTML = JSON.stringify(completeDataset)
+                this.renderPatientLookupResultTable(resultTable, completeDataset)
             } catch (err) {
                 console.error('Search failed: ', err)
                 statusBanner.className = 'flex flex-col gap-1 p-3 bg-rose-50 text-rose-700 rounded-xl border border-rose-100'
@@ -1185,6 +1186,10 @@ const G = {
                 criteriaHeader.classList.replace('text-slate-500', 'text-slate-700')
                 toggleCriteriaSection(false)
             }
+        },
+        renderPatientLookupResultTable(resultTable, completeDataset) {
+            console.log(resultTable)
+            console.log(completeDataset)
         },
     },
     HOSPITAL: {

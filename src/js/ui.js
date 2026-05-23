@@ -42,6 +42,7 @@ export class PatientLookup {
         dateStart: null,
         dateEnd: null,
         dynamicInputsContainer: null,
+        resetBtn: null,
     }
 
     #colorSchemes = [
@@ -199,8 +200,10 @@ export class PatientLookup {
 
         this.#nodes.moreOptions.append(templateSection, doctorSection, roomSection, dateRangeBlock, this.#nodes.dynamicInputsContainer)
 
+        this.#nodes.resetBtn = c('button', { attrs: { type: 'reset' }, classes: 'w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl transition-all active:scale-[0.98]', text: 'Reset' })
+
         const actionRow = c('div', { classes: 'grid grid-cols-2 gap-4' }, [
-            c('button', { attrs: { type: 'reset' }, classes: 'w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl transition-all active:scale-[0.98]', text: 'Reset' }),
+            this.#nodes.resetBtn,
             c('button', { attrs: { type: 'submit', id: 'main-fetch-btn' }, classes: 'w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-[0.98]', text: 'Search' }),
         ])
 
@@ -240,6 +243,8 @@ export class PatientLookup {
             e.stopPropagation()
             this.#nodes.templateMenu.classList.toggle('hidden')
             if (!this.#nodes.templateMenu.classList.contains('hidden')) {
+                const val = this.#nodes.templateSearch.value.toLowerCase()
+                this.renderTemplates(val)
                 this.#nodes.templateSearch.focus()
             }
         })
@@ -283,17 +288,9 @@ export class PatientLookup {
             e.preventDefault()
             this.submitForm()
         })
-
-        this.#nodes.form.addEventListener('reset', () => {
-            setTimeout(() => {
-                this.#selectedDocs = []
-                this.#selectedRooms = []
-                this.#nodes.selectedTemplateLabel.textContent = 'Select a template...'
-                this.#nodes.dateStart.disabled = true
-                this.#nodes.dateEnd.disabled = true
-                this.toggleMoreOptions(false)
-                this.updateUI()
-            }, 0)
+        this.#nodes.resetBtn.addEventListener('click', (e) => {
+            e.preventDefault()
+            this.resetInput()
         })
     }
     #bindAutocompleteEngine(input, listNode, type) {
@@ -497,6 +494,8 @@ export class PatientLookup {
             const btn = c('button', { attrs: { type: 'button' }, classes: btnClass, text: template.name })
 
             btn.addEventListener('click', () => {
+                this.resetInput(false)
+
                 this.#selectedDocs = template.docs.map(id => id === ';' ? { type: 'batch' } : { id, type: 'item' })
                 this.#selectedRooms = template.rooms.map(id => id === ';' ? { type: 'batch' } : { id, type: 'item' })
 
@@ -559,8 +558,19 @@ export class PatientLookup {
             this.#nodes.chevronIcon.classList.remove('rotate-180')
         }
     }
-    resetInput() {
+    resetInput(isFullReset = true) {
         this.#nodes.form.reset()
+        if (isFullReset) {
+            setTimeout(() => {
+                this.#selectedDocs = []
+                this.#selectedRooms = []
+                this.#nodes.selectedTemplateLabel.textContent = 'Select a template...'
+                this.#nodes.dateStart.disabled = true
+                this.#nodes.dateEnd.disabled = true
+                this.toggleMoreOptions(false)
+                this.updateUI()
+            }, 0)
+        }
     }
     clearSpecificInputs(clearTagsOnly = false) {
         this.#selectedDocs = []
