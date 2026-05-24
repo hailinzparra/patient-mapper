@@ -21,6 +21,15 @@ body {
     border-radius: 10px;
 }
 
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
 #main-container {
     width: 100%;
     transform-origin: top left;

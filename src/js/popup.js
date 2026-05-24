@@ -98,6 +98,7 @@ const G = {
         allPatientsBtn: null,
         myPatientsBtn: null,
         calculatorBtn: null,
+        checkReleasesBtn: null,
         // Collapsible list / Accordion components
         myPatientsCollapsedBadge: null,
         myPatientsBadge: null,
@@ -106,6 +107,11 @@ const G = {
         myPatientsAccordionContent: null,
         myPatientsAddBtn: null,
         myPatientsListsContainer: null,
+        // Tools / More Accordion components
+        toolsBtn: null,
+        toolsAccordionBtn: null,
+        toolsAccordionArrow: null,
+        toolsAccordionContent: null,
         async init() {
             this.container = document.getElementById('sidebar')
             this.brandText = document.getElementById('sidebar-brand-text')
@@ -124,6 +130,7 @@ const G = {
             this.allPatientsBtn = document.getElementById('sidebar-all-patients')
             this.myPatientsBtn = document.getElementById('sidebar-my-patients')
             this.calculatorBtn = document.getElementById('sidebar-calculator')
+            this.checkReleasesBtn = document.getElementById('sidebar-check-releases')
             this.myPatientsCollapsedBadge = document.getElementById('sidebar-my-patients-collapsed-badge')
             this.myPatientsBadge = document.getElementById('sidebar-my-patients-badge')
             this.myPatientsAccordionBtn = document.getElementById('sidebar-my-patients-accordion-btn')
@@ -131,6 +138,10 @@ const G = {
             this.myPatientsAccordionContent = document.getElementById('sidebar-my-patients-accordion-content')
             this.myPatientsAddBtn = document.getElementById('sidebar-my-patients-add-btn')
             this.myPatientsListsContainer = document.getElementById('sidebar-my-patients-lists-container')
+            this.toolsBtn = document.getElementById('sidebar-tools')
+            this.toolsAccordionBtn = document.getElementById('sidebar-tools-accordion-btn')
+            this.toolsAccordionArrow = document.getElementById('sidebar-tools-accordion-arrow')
+            this.toolsAccordionContent = document.getElementById('sidebar-tools-accordion-content')
 
             await G.store.patients.load()
 
@@ -158,6 +169,24 @@ const G = {
                 if (G.store.settings.data.isSidebarCollapsed) return
                 G.store.settings.update({ isAccordionOpen: !G.store.settings.data.isAccordionOpen })
                 this.updateOnToggleAccordion()
+            })
+
+            this.toolsBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                if (G.store.settings.data.isSidebarCollapsed) {
+                    this.toggleBtn.click()
+                    return
+                }
+                this.toggleToolsAccordion()
+            })
+
+            this.toolsAccordionBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                if (G.store.settings.data.isSidebarCollapsed) {
+                    this.toggleBtn.click()
+                    return
+                }
+                this.toggleToolsAccordion()
             })
 
             this.targetHospitalSelect.innerHTML = Object.keys(G.HOSPITAL)
@@ -249,6 +278,10 @@ const G = {
                 })
             })
 
+            this.checkReleasesBtn.addEventListener('click', () => {
+                window.open('https://github.com/hailinzparra/patient-mapper/releases', '_blank', 'noopener,noreferrer')
+            })
+
             this.myPatientsListsContainer.addEventListener('click', (e) => {
                 const subListBtn = e.target.closest('.sidebar-sub-list-btn')
                 if (!subListBtn) return
@@ -323,7 +356,8 @@ const G = {
                 this.container.classList.replace('w-56', 'w-16')
                 this.toggleIcon.classList.add('rotate-180')
                 this.brandText.classList.add('opacity-0', 'hidden')
-                this.myPatientsAccordionContent.style.maxHeight = '0px'
+                this.myPatientsAccordionContent.classList.remove('max-h-[1000px]')
+                this.myPatientsAccordionContent.classList.add('max-h-0')
 
                 sidebarTexts.forEach(el => el.classList.add('opacity-0', 'hidden'))
                 navTexts.forEach(el => el.classList.add('opacity-0', 'hidden'))
@@ -337,7 +371,10 @@ const G = {
 
                 sidebarTexts.forEach(el => el.classList.remove('opacity-0', 'hidden'))
                 navTexts.forEach(el => el.classList.remove('opacity-0', 'hidden'))
-                if (isAccordionOpen) this.myPatientsAccordionContent.style.maxHeight = '500px'
+                if (isAccordionOpen) {
+                    this.myPatientsAccordionContent.classList.remove('max-h-0')
+                    this.myPatientsAccordionContent.classList.add('max-h-[1000px]')
+                }
 
                 this.myPatientsCollapsedBadge.classList.add('hidden')
                 this.myPatientsBadge.classList.remove('hidden')
@@ -347,10 +384,39 @@ const G = {
         },
         updateOnToggleAccordion() {
             const isAccordionOpen = G.store.settings.data.isAccordionOpen
-            if (!G.store.settings.data.isSidebarCollapsed) {
-                this.myPatientsAccordionContent.style.maxHeight = isAccordionOpen ? '500px' : '0px'
+            const isCollapsed = G.store.settings.data.isSidebarCollapsed
+            if (!isCollapsed) {
+                if (isAccordionOpen) {
+                    this.myPatientsAccordionContent.classList.remove('max-h-0')
+                    this.myPatientsAccordionContent.classList.add('max-h-[1000px]')
+                } else {
+                    this.myPatientsAccordionContent.classList.remove('max-h-[1000px]')
+                    this.myPatientsAccordionContent.classList.add('max-h-0')
+                }
             }
-            this.myPatientsAccordionArrow.style.transform = isAccordionOpen ? 'rotate(0deg)' : 'rotate(-90deg)'
+            if (isAccordionOpen) {
+                this.myPatientsAccordionArrow.classList.remove('-rotate-90')
+                this.myPatientsAccordionArrow.classList.add('rotate-0')
+            } else {
+                this.myPatientsAccordionArrow.classList.remove('rotate-0')
+                this.myPatientsAccordionArrow.classList.add('-rotate-90')
+            }
+        },
+        toggleToolsAccordion() {
+            const content = this.toolsAccordionContent
+            const arrow = this.toolsAccordionArrow
+            const isClosed = content.classList.contains('max-h-0')
+            if (isClosed) {
+                content.classList.remove('max-h-0')
+                content.classList.add('max-h-[1000px]')
+                arrow.classList.remove('-rotate-90')
+                arrow.classList.add('rotate-0')
+            } else {
+                content.classList.remove('max-h-[1000px]')
+                content.classList.add('max-h-0')
+                arrow.classList.remove('rotate-0')
+                arrow.classList.add('-rotate-90')
+            }
         },
         async updateDomainDropdown() {
             const selectedHospitalKey = this.targetHospitalSelect.value
@@ -560,14 +626,7 @@ const G = {
             })
             if (result.isConfirmed && result.value?.action === 'rename') {
                 await this.renamePatientList(patientList.id, result.value.value, listBtn)
-                G.swal.fire({
-                    icon: 'success',
-                    title: 'Saved successfully!',
-                    showCloseButton: false,
-                    showConfirmButton: false,
-                    timer: 1000,
-                    timerProgressBar: true,
-                })
+                G.ui.swalSuccessShort('Saved successfully!')
             } else if (result.isDenied) {
                 const count = patientList.patientCount
                 const confirmDelete = await G.swal.fire({
@@ -582,14 +641,7 @@ const G = {
                 })
                 if (confirmDelete.isDenied) {
                     await this.removePatientList(patientList.id, rowWrapper)
-                    G.swal.fire({
-                        icon: 'success',
-                        title: 'Deleted successfully!',
-                        showCloseButton: false,
-                        showConfirmButton: false,
-                        timer: 1000,
-                        timerProgressBar: true,
-                    })
+                    G.ui.swalSuccessShort('Deleted successfully!')
                     if (G.store.patients.data.lists.length > 0) {
                         const firstListId = G.store.patients.data.lists[0].id
                         this.lastSelectedListId = firstListId
@@ -617,14 +669,7 @@ const G = {
 
             try {
                 await PatientList.saveToDevice(patientList)
-                G.swal.fire({
-                    icon: 'success',
-                    title: 'Backup saved to device!',
-                    showCloseButton: false,
-                    showConfirmButton: false,
-                    timer: 1000,
-                    timerProgressBar: true,
-                })
+                G.ui.swalSuccessShort('Backup saved to device!')
             } catch (error) {
                 console.error(error)
                 G.swal.fire({
@@ -669,14 +714,7 @@ const G = {
                 this.lastSelectedListId = loadedInstance.id
                 this.myPatientsBtn.click()
 
-                G.swal.fire({
-                    icon: 'success',
-                    title: 'Data loaded successfully!',
-                    showCloseButton: false,
-                    showConfirmButton: false,
-                    timer: 1000,
-                    timerProgressBar: true,
-                })
+                G.ui.swalSuccessShort('Data loaded successfully!')
             } catch (error) {
                 console.error(error)
                 if (error.message === 'File selection cancelled') {
@@ -706,14 +744,7 @@ const G = {
 
             try {
                 await PatientList.saveToCloud(patientList)
-                G.swal.fire({
-                    icon: 'success',
-                    title: 'Backup saved to cloud!',
-                    showCloseButton: false,
-                    showConfirmButton: false,
-                    timer: 1000,
-                    timerProgressBar: true,
-                })
+                G.ui.swalSuccessShort('Backup saved to cloud!')
             } catch (error) {
                 console.error(error)
                 G.swal.fire({
@@ -876,14 +907,7 @@ const G = {
                 this.lastSelectedListId = loadedInstance.id
                 this.myPatientsBtn.click()
 
-                G.swal.fire({
-                    icon: 'success',
-                    title: 'Cloud data loaded successfully!',
-                    showCloseButton: false,
-                    showConfirmButton: false,
-                    timer: 1000,
-                    timerProgressBar: true,
-                })
+                G.ui.swalSuccessShort('Cloud data loaded successfully!')
             } catch (error) {
                 console.error(error)
                 G.swal.fire({
@@ -947,19 +971,16 @@ const G = {
                     return document.querySelector('.tab-contents-container div[data-tab-id="my-home"]')
                 },
                 render(listId) {
-                    const myHomePanel = this.getPanel();
-                    if (!myHomePanel) return;
+                    const myHomePanel = this.getPanel()
+                    if (!myHomePanel) return
+                    myHomePanel.innerHTML = ''
 
-                    // Clean out old elements before constructing the fresh node layout stack
-                    myHomePanel.innerHTML = '';
+                    const rawListData = G.store.patients.data.lists.find(list => String(list.id) === String(listId))
+                    if (!rawListData) return
 
-                    const rawListData = G.store.patients.data.lists.find(list => String(list.id) === String(listId));
-                    if (!rawListData) return;
+                    const patientList = rawListData instanceof PatientList ? rawListData : PatientList.fromJSON(rawListData)
 
-                    // Defensively guarantee instance hydration to gain access to instance methods
-                    const patientList = rawListData instanceof PatientList ? rawListData : PatientList.fromJSON(rawListData);
-
-                    const c = Utils.DOM.createElement;
+                    const c = Utils.DOM.createElement
 
                     // 1. Title Header Sub-Structure
                     const headerBlock = c('div', {}, [
@@ -980,7 +1001,7 @@ const G = {
                             headerBlock,
                             c('div', {
                                 classes: 'p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200',
-                                text: 'This list is empty. Add patients from the Lookup screen.'
+                                text: 'This list is empty. Add patients using Patient Lookup in the All Patients screen.'
                             })
                         ]);
                         myHomePanel.appendChild(emptyStateNode);
@@ -1066,15 +1087,9 @@ const G = {
                                 // Trigger a re-render to refresh the list view
                                 this.render(listId);
 
-                                G.swal.fire({
-                                    title: 'Removed!',
-                                    text: 'Patient successfully dropped from list storage.',
-                                    icon: 'success',
-                                    timer: 1500,
-                                    showConfirmButton: false
-                                });
+                                G.ui.swalSuccessShort('Removed successfully!')
                             } catch (err) {
-                                G.swalFatalError(err, 'Removal Failed', 'Could not delete record safely from storage:');
+                                G.ui.swalFatalError(err, 'Removal Failed', 'Could not delete record safely from storage:');
                             }
                         });
 
@@ -1106,7 +1121,8 @@ const G = {
                 reset() {
                     const myHomePanel = this.getPanel()
                     if (myHomePanel) {
-                        myHomePanel.innerHTML = ''
+                        myHomePanel.innerHTML = `<div class="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                        No lists found. Click the '+ Add New List' button in the sidebar to create your first patient list!</div>`
                     }
                 },
             },
@@ -1134,6 +1150,16 @@ const G = {
                 }
             })
             this.onSwitchHospital()
+        },
+        swalSuccessShort(title = 'Success!') {
+            G.swal.fire({
+                icon: 'success',
+                title: title,
+                showCloseButton: false,
+                showConfirmButton: false,
+                timer: 1000,
+                timerProgressBar: true,
+            })
         },
         swalFatalError(err, title, preMessage) {
             console.error(`${title}:`, err)
@@ -1204,7 +1230,7 @@ const G = {
                 c('h4', { classes: 'text-[11px] font-bold uppercase tracking-wider', text: 'Search Criteria' }),
                 chevronIcon,
             ])
-            const criteriaBody = c('div', { classes: 'max-h-[1000px] opacity-100 overflow-hidden transition-all duration-300 ease-in-out font-mono text-[9px]' })
+            const criteriaBody = c('div', { classes: 'max-h-[1000px] opacity-100 overflow-y-auto no-scrollbar transition-all duration-300 ease-in-out font-mono text-[9px]' })
             const criteriaContainer = c('div', { classes: 'p-2 bg-white rounded-xl border border-slate-200' }, [
                 criteriaHeader,
                 criteriaBody,
@@ -1495,8 +1521,7 @@ const G = {
                             })
 
                             btnAdd.addEventListener('click', async () => {
-                                console.log('adding patient...')
-                                // await this.promptAndAddPatientToList(p)
+                                await this.promptAndAddPatientToList(p)
                             })
 
                             return c('div', { classes: 'compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors' }, [
@@ -1542,14 +1567,18 @@ const G = {
         },
         generateRoomGroupCopyText(roomGroup) {
             const lines = []
-            lines.push(roomGroup.primaryName)
+            const totalPrimaryPatients = Object.values(roomGroup.subGroups).reduce((sum, docSub) => {
+                return sum + (Array.isArray(docSub.patients) ? docSub.patients.length : 0)
+            }, 0)
+            lines.push(`*${roomGroup.primaryName} (${totalPrimaryPatients})*`)
             lines.push('')
 
             const sortedDocs = Object.values(roomGroup.subGroups).sort((a, b) =>
                 a.secondaryName.localeCompare(b.secondaryName)
             )
             sortedDocs.forEach(docSubGroup => {
-                lines.push(docSubGroup.secondaryName)
+                const subGroupCount = Array.isArray(docSubGroup.patients) ? docSubGroup.patients.length : 0
+                lines.push(`${docSubGroup.secondaryName} (${subGroupCount})`)
                 const sortedPatients = docSubGroup.patients.sort((a, b) =>
                     (a.bedName || '').localeCompare(b.bedName || '')
                 )
@@ -1564,14 +1593,18 @@ const G = {
         },
         generateDoctorGroupCopyText(docGroup) {
             const lines = []
-            lines.push(docGroup.primaryName)
+            const totalPrimaryPatients = Object.values(docGroup.subGroups).reduce((sum, roomSub) => {
+                return sum + (Array.isArray(roomSub.patients) ? roomSub.patients.length : 0)
+            }, 0)
+            lines.push(`*${docGroup.primaryName} (${totalPrimaryPatients})*`)
             lines.push('')
 
             const sortedRooms = Object.values(docGroup.subGroups).sort((a, b) =>
                 a.secondaryName.localeCompare(b.secondaryName)
             )
             sortedRooms.forEach(roomSubGroup => {
-                lines.push(roomSubGroup.secondaryName)
+                const subGroupCount = Array.isArray(roomSubGroup.patients) ? roomSubGroup.patients.length : 0
+                lines.push(`${roomSubGroup.secondaryName} (${subGroupCount})`)
                 const sortedPatients = roomSubGroup.patients.sort((a, b) =>
                     (a.bedName || '').localeCompare(b.bedName || '')
                 )
@@ -1589,7 +1622,7 @@ const G = {
                 return mode === 'ROOM'
                     ? this.generateRoomGroupCopyText(group)
                     : this.generateDoctorGroupCopyText(group)
-            }).join('\n\n')
+            }).join('\n\n\n')
         },
         async executeNativeClipboardCopy(textToCopy, feedbackEl, copiedText = 'Copied!') {
             if (!textToCopy) return
@@ -1618,87 +1651,83 @@ const G = {
             }
         },
         async promptAndAddPatientToList(rawPatient) {
-            // 1. Defensively verify list existence within your storage engine
-            const listArray = G.store.patients?.data?.lists;
+            const listArray = G.store.patients?.data?.lists
 
             if (!Array.isArray(listArray) || listArray.length === 0) {
                 G.swal.fire({
+                    icon: 'warning',
                     title: 'No Lists Found',
                     text: 'Create a list first!',
-                    icon: 'warning',
-                    confirmButtonColor: '#3b82f6' // Tailwind blue-500
-                });
-                return;
+                })
+                return
             }
 
             try {
-                // 2. Ensure we have a true, clean instance of the Patient model class
-                const targetPatient = rawPatient instanceof Patient ? rawPatient : new Patient(rawPatient);
+                const targetPatient = rawPatient instanceof Patient ? rawPatient : new Patient(rawPatient)
+                const patientDisplayName = targetPatient.processName(targetPatient.name) || 'this patient'
+                const validOptionsHtml = []
 
-                // 3. Build a key-value dictionary option map for SweetAlert ({ "listId": "ListName" })
-                const selectOptions = {};
                 listArray.forEach(listData => {
-                    // Support both raw JSON items or hydrated PatientList class objects safely
-                    const id = listData.id;
-                    const name = listData.name || 'Unnamed List';
-                    const count = Array.isArray(listData.patients) ? listData.patients.length : 0;
+                    const id = listData.id
+                    const name = Utils.getValidValue(listData.name, 'Unnamed List')
+                    const count = Array.isArray(listData.patients) ? listData.patients.length : 0
+                    const recordsHtml = `<span class="text-blue-700">${count} patient${count === 1 ? '' : 's'}</span>`
 
-                    selectOptions[id] = `${name} (${count} patients)`;
-                });
+                    validOptionsHtml.push(`
+                    <label class="flex items-center justify-between p-2.5 border border-slate-200 bg-white hover:bg-slate-50 rounded-md shadow-sm cursor-pointer transition active:scale-[0.99] overflow-x-hidden">
+                        <div class="text-left flex items-center gap-3">
+                            <input type="radio" name="swal-patient-list-select" value="${id}" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                            <div>
+                                <div class="font-bold text-[11px] text-slate-700 max-w-[200px] line-clamp-2">${name}</div>
+                                <div class="text-[9px] text-slate-400">Current Total: ${recordsHtml}</div>
+                            </div>
+                        </div>
+                    </label>`)
+                })
 
-                // 4. Render the selection drop-down option picker modal frame
-                const { value: selectedListId } = await G.swal.fire({
+                const selectResult = await G.swal.fire({
                     title: 'Select Destination List',
-                    text: `Choose where to add ${targetPatient.processName(targetPatient.name) || 'this patient'}:`,
-                    input: 'select',
-                    inputOptions: selectOptions,
-                    inputPlaceholder: '-- Choose a Patient List --',
+                    html: `
+                        <div class="text-xs text-slate-500 text-left mb-3">Choose where to add <strong>${patientDisplayName}</strong>:</div>
+                        <div class="space-y-2 max-h-[280px] overflow-x-hidden overflow-y-auto px-1 py-1">${validOptionsHtml.join('')}</div>
+                    `,
                     showCancelButton: true,
                     confirmButtonText: 'Add Patient',
-                    confirmButtonColor: '#10b981', // Tailwind emerald-500
-                    cancelButtonColor: '#64748b',  // Tailwind slate-500
-                    inputValidator: (value) => {
-                        if (!value) {
-                            return 'You must select a destination list!';
+                    preConfirm() {
+                        const checkedRadio = document.querySelector('input[name="swal-patient-list-select"]:checked')
+                        if (!checkedRadio) {
+                            G.swal.showValidationMessage('You must select a destination list!')
+                            const validationMsg = G.swal.getValidationMessage()
+                            if (validationMsg) {
+                                validationMsg.className = 'mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 border border-red-100 text-center'
+                                validationMsg.style = ''
+                            }
+                            return false
                         }
+                        return checkedRadio.value
                     }
-                });
+                })
 
-                // If user cancelled or closed out the modal view option line
-                if (!selectedListId) return;
+                if (!selectResult.isConfirmed) return
 
-                // 5. Hydrate, mutate, and save back down into the persistent storage stack
-                const targetListIndex = listArray.findIndex(l => l.id === selectedListId);
-                if (targetListIndex === -1) throw new Error('Selected list could not be resolved in matching memory storage references.');
+                const selectedListId = selectResult.value
+                const targetListIndex = listArray.findIndex(l => l.id === selectedListId)
 
-                // Reconstruct as a proper structural instance to gain native prototype logic rules access
-                const targetList = PatientList.fromJSON(listArray[targetListIndex]);
+                if (targetListIndex === -1) throw new Error('Selected list could not be resolved in matching memory storage references.')
 
-                // Use your class's native logic to append the new instance
-                targetList.addPatient(targetPatient);
+                const targetList = PatientList.fromJSON(listArray[targetListIndex])
+                targetList.addPatient(targetPatient)
 
-                // Splice the serialized payload format layout right back down into the primary dataset array
-                G.store.patients.data.lists[targetListIndex] = targetList.toJSON();
+                G.store.patients.data.lists[targetListIndex] = targetList.toJSON()
+                await G.store.patients.save()
 
-                // Commit data across the VaultDriver layer using the asynchronous storage handler save method
-                await G.store.patients.save();
-
-                // 6. Notify operator of explicit database transaction structural success
-                G.swal.fire({
-                    title: 'Success!',
-                    text: `Successfully added to "${targetList.name}"`,
-                    icon: 'success',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-
+                G.ui.swalSuccessShort('Added successfully!')
             } catch (err) {
-                // Intercept internal data mutation breakdowns safely across the fatal notification framework
-                G.swalFatalError(
+                G.ui.swalFatalError(
                     err,
-                    'Save Action Failed',
+                    'Add Failed',
                     'The application encountered a fatal error while trying to append the patient record:',
-                );
+                )
             }
         },
     },
@@ -1821,4 +1850,4 @@ document.addEventListener('DOMContentLoaded', () => {
     Events.emit('entrypoint')
 })
 
-// window.G = G
+window.G = G

@@ -136,7 +136,7 @@ export class PatientLookup {
             this.#nodes.chevronIcon,
         ])
 
-        this.#nodes.moreOptions = c('div', { attrs: { id: 'advanced-options' }, classes: 'max-h-0 opacity-0 mb-0 overflow-hidden transition-all duration-300 ease-in-out space-y-5' })
+        this.#nodes.moreOptions = c('div', { attrs: { id: 'advanced-options' }, classes: 'max-h-0 opacity-0 mb-0 overflow-y-auto no-scrollbar transition-all duration-300 ease-in-out space-y-5' })
 
         this.#nodes.selectedTemplateLabel = c('span', { attrs: { id: 'selected-template-label' }, text: 'Select a template...' })
         this.#nodes.templateSearch = c('input', { attrs: { type: 'text', id: 'template-search', placeholder: 'Search templates...' }, classes: 'w-full px-3 py-1.5 text-[11px] border border-slate-200 rounded-md outline-none focus:border-blue-500' })
