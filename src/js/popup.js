@@ -1120,7 +1120,7 @@ const G = {
             })
 
             const resultStatusText = c('p', { text: 'Awaiting search results...' })
-            const resultTable = c('div', { classes: 'p-4 bg-white border border-slate-200 rounded-xl min-h-24 text-xs text-slate-500 flex items-center justify-center' }, [
+            const resultTable = c('div', { classes: 'p-4 bg-white border border-slate-200 rounded-xl text-xs text-slate-500 flex items-center justify-center' }, [
                 resultStatusText,
             ])
 
@@ -1137,9 +1137,10 @@ const G = {
             await Utils.sleep(500)
 
             try {
+                const hid = Utils.getValidValue(G.getActiveHospital()?.ID, -1)
                 const session = G.store.session.data
                 const targetDomain = G.getActiveDomain()
-                const completeDataset = await driver.handleFetch(targetDomain, payload, docGroups, roomGroups, session, (progress) => {
+                const completeDataset = await driver.handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, (progress) => {
                     const { index, status, data } = progress
                     const targetDot = statusDotElements[index]
                     const targetText = labelTextElements[index]
@@ -1159,21 +1160,23 @@ const G = {
                         targetText.className = 'text-rose-600 font-medium truncate'
                         targetText.textContent = `${payloadSummary} · ERROR`
                     }
-                    statusText.innerHTML = `<span class="font-bold text-blue-900">${successCount}</span> Search Completed, <span class="font-bold text-rose-900">${failCount}</span> Search Failed...`
+                    statusText.innerHTML = `<span class="font-bold text-blue-900">${successCount}</span> Search${successCount === 1 ? '' : 'es'} Completed, <span class="font-bold text-rose-900">${failCount}</span> Search${failCount === 1 ? '' : 'es'} Failed...`
                     resultStatusText.textContent = `${totalRecords} record${totalRecords === 1 ? '' : 's'} found so far...`
                 })
 
                 statusBanner.className = 'flex items-center gap-3 p-3 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100'
                 pingContainer.style.display = 'none'
-                statusText.textContent = `${successCount} Search Completed, ${failCount} Search Failed, ${totalRecords} Records Found`
+                statusText.textContent = `${successCount} Search${successCount === 1 ? '' : 'es'} Completed, ${failCount} Search${failCount === 1 ? '' : 'es'} Failed, ${totalRecords} Record${totalRecords === 1 ? '' : 's'} Found`
                 isInteractivityEnabled = true
                 criteriaHeader.classList.replace('cursor-not-allowed', 'cursor-pointer')
                 criteriaHeader.classList.replace('text-slate-500', 'text-slate-700')
                 toggleCriteriaSection(false)
 
                 resultTable.classList.remove('flex', 'items-center', 'justify-center')
+                resultTable.innerHTML = ''
                 this.renderPatientLookupResultTable(resultTable, completeDataset)
-            } catch (err) {
+            }
+            catch (err) {
                 console.error('Search failed: ', err)
                 statusBanner.className = 'flex flex-col gap-1 p-3 bg-rose-50 text-rose-700 rounded-xl border border-rose-100'
                 pingContainer.style.display = 'none'
@@ -1187,9 +1190,218 @@ const G = {
                 toggleCriteriaSection(false)
             }
         },
-        renderPatientLookupResultTable(resultTable, completeDataset) {
-            console.log(resultTable)
-            console.log(completeDataset)
+        renderPatientLookupResultTable(resultTable, completeDataset, currentGroupingMode = 'ROOM') {
+            const c = Utils.DOM.createElement
+
+            resultTable.textContent = ''
+
+            const originalCount = completeDataset ? completeDataset.length : 0
+            const uniqueDataset = PatientList.filterDuplicates(completeDataset)
+            const uniqueCount = uniqueDataset.length
+
+            if (uniqueCount === 0) {
+                const noDataRow = c('div', {
+                    classes: 'px-3 py-4 text-xs font-medium text-slate-400 text-center bg-slate-50 border border-dashed border-slate-200 rounded',
+                    text: 'No patient records discovered.',
+                })
+                resultTable.append(noDataRow)
+                return
+            }
+
+            const btnCopyAll = c('button', {
+                classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+                text: 'Copy All Patients',
+            })
+
+            const btnAddAll = c('button', {
+                classes: 'flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+                text: 'Add All Patients',
+            })
+
+            const getTabClass = (isActive, colorClass = 'text-blue-600') => isActive
+                ? `toggle-view flex-1 px-3 py-1 text-[10px] font-bold rounded bg-white ${colorClass} shadow-sm`
+                : 'toggle-view flex-1 px-3 py-1 text-[10px] font-bold rounded text-slate-500 hover:text-slate-700'
+
+            const viewControls = c('div', { classes: 'flex items-center justify-end bg-white border border-slate-200 p-2 rounded-lg shadow-sm' }, [
+                c('div', { classes: 'flex-1 flex gap-1 bg-slate-100 p-1 rounded-md' }, [
+                    c('button', { classes: getTabClass(currentGroupingMode === 'ROOM'), attrs: { 'data-mode': 'ROOM' }, text: 'BY ROOM' }),
+                    c('button', { classes: getTabClass(currentGroupingMode === 'DOCTOR', 'text-emerald-600'), attrs: { 'data-mode': 'DOCTOR' }, text: 'BY DOCTOR' })
+                ]),
+                // c('div', { classes: 'flex gap-1 bg-slate-100 p-1 rounded-md' }, [
+                //     c('button', { classes: getTabClass(false), attrs: { 'data-sort': 'QUERY' }, text: 'QUERY ORDER' }),
+                //     c('button', { classes: getTabClass(true), attrs: { 'data-sort': 'BED' }, text: 'BED SORT' })
+                // ]),
+            ])
+
+            const dataSummaryStrip = c('div', { classes: 'px-3 py-1.5 text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-md text-center italic' }, [
+                c('span', { text: `Showing a total of ` }),
+                c('span', { classes: 'font-bold text-slate-800', text: `${uniqueCount} unique record${uniqueCount === 1 ? '' : 's'}` }),
+                c('span', { text: ` from ${originalCount} record${originalCount === 1 ? '' : 's'} found.` }),
+            ])
+
+            const headerLayoutWrapper = c('div', { classes: 'sticky top-0 z-30 pt-2 -mt-1 bg-white space-y-2 mb-4 rounded-b-lg shadow-lg' }, [
+                c('div', { classes: 'flex gap-2' }, [btnCopyAll, btnAddAll]),
+                viewControls,
+                dataSummaryStrip,
+            ])
+
+            resultTable.append(headerLayoutWrapper)
+
+            btnCopyAll.addEventListener('click', () => console.log('Mockup Call: Copy All Patients triggers...'))
+            btnAddAll.addEventListener('click', () => console.log('Mockup Call: Add All Patients to localStorage hook triggers...'))
+
+            const groupedData = uniqueDataset.reduce((acc, current) => {
+                const p = current.toJSON ? current.toJSON() : current
+
+                const roomName = p.roomId ? this.getResolvedNameFromDatabase(p.hid, 'room', p.roomId) : 'UNKNOWN ROOM'
+                const docName = p.docId ? this.getResolvedNameFromDatabase(p.hid, 'doctor', p.docId) : 'NO DOCTOR ASSIGNED'
+
+                const primaryId = currentGroupingMode === 'ROOM' ? p.roomId : p.docId
+                const secondaryId = currentGroupingMode === 'ROOM' ? p.docId : p.roomId
+
+                const primaryLabel = currentGroupingMode === 'ROOM' ? roomName : docName
+                const secondaryLabel = currentGroupingMode === 'ROOM' ? docName : roomName
+
+                if (!acc[primaryId]) {
+                    acc[primaryId] = { primaryName: primaryLabel, subPatientsTotal: 0, subGroups: {} }
+                }
+                if (!acc[primaryId].subGroups[secondaryId]) {
+                    acc[primaryId].subGroups[secondaryId] = { secondaryName: secondaryLabel, patients: [] }
+                }
+
+                acc[primaryId].subGroups[secondaryId].patients.push(p)
+                acc[primaryId].subPatientsTotal += 1
+
+                return acc
+            }, {})
+
+            const sortedPrimaryGroups = Object.values(groupedData).sort((a, b) =>
+                a.primaryName.localeCompare(b.primaryName)
+            )
+
+            const uiThemes = {
+                ROOM: { bg: 'bg-blue-600', btn: 'bg-blue-500 hover:bg-blue-400', badge: 'bg-blue-700', label: 'COPY ROOM' },
+                DOCTOR: { bg: 'bg-emerald-600', btn: 'bg-emerald-500 hover:bg-emerald-400', badge: 'bg-emerald-700', label: 'COPY DOCTOR' },
+            }
+
+            const currentTheme = uiThemes[currentGroupingMode]
+
+            sortedPrimaryGroups.forEach(primaryGroup => {
+                const btnCopyGroup = c('button', {
+                    classes: `btn-copy-group text-[9px] ${currentTheme.btn} text-white font-bold px-2 py-0.5 rounded transition-colors`,
+                    attrs: { 'data-group': primaryGroup.primaryName },
+                    text: currentTheme.label,
+                })
+                const totalBadge = c('span', {
+                    classes: `${currentTheme.badge} text-white text-center text-[9px] font-bold px-2 py-0.5 rounded-full`,
+                    text: `${primaryGroup.subPatientsTotal} PATIENT${primaryGroup.subPatientsTotal !== 1 ? 'S' : ''}`,
+                })
+                const cardHeader = c('div', { classes: `${currentTheme.bg} px-3 py-1.5 flex justify-between items-center` }, [
+                    c('span', { classes: 'text-[11px] font-black text-white uppercase tracking-widest', text: primaryGroup.primaryName }),
+                    c('div', { classes: 'flex items-center gap-2' }, [btnCopyGroup, totalBadge]),
+                ])
+
+                btnCopyGroup.addEventListener('click', (e) => console.log(`Mockup Call: ${currentTheme.label} for target:`, e.target.dataset.group))
+
+                const sortedSubGroups = Object.values(primaryGroup.subGroups).sort((a, b) =>
+                    a.secondaryName.localeCompare(b.secondaryName)
+                )
+                const innerSubContainers = sortedSubGroups.map(subGroup => {
+                    const subTitleBar = c('div', { classes: 'px-3 py-1 border-b border-slate-100 flex justify-between items-center' }, [
+                        c('span', { classes: 'text-[10px] font-bold text-slate-500 uppercase tracking-tight italic', text: subGroup.secondaryName }),
+                        c('span', { classes: 'text-[9px] text-slate-400 font-bold', text: subGroup.patients.length.toString() }),
+                    ])
+
+                    const patientRowNodes = subGroup.patients
+                        .sort((a, b) => (a.bedName || '').localeCompare(b.bedName || ''))
+                        .map(patientInstance => {
+                            const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
+                            const ui = p.getUIDisplayData()
+                            let genderColorClass = 'text-slate-400'
+                            if (p.gender === Patient.MALE) {
+                                genderColorClass = 'text-blue-500 font-bold'
+                            } else if (p.gender === Patient.FEMALE) {
+                                genderColorClass = 'text-rose-500 font-bold'
+                            }
+                            const losBadgeClasses = ui.los.isFresh
+                                ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-100 text-amber-800 border-amber-200 tracking-tighter ml-1'
+                                : 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter ml-1'
+                            const dataContainer = c('div', { classes: 'text-xs font-medium text-slate-700 leading-relaxed patient-data' }, [
+                                c('span', { classes: 'font-bold text-slate-400', text: ui.bedName }),
+                                c('span', { text: '/' }),
+                                c('span', { classes: `font-bold ${genderColorClass}`, text: ui.gender }),
+                                c('span', { text: '/' }),
+                                c('span', { classes: 'font-bold text-slate-900', text: ui.name }),
+                                c('span', { text: '/' }),
+                                c('span', { classes: 'text-slate-500', text: ui.mrn }),
+                                c('span', { text: '/' }),
+                                c('span', { classes: 'text-slate-500', text: ui.age }),
+                                c('span', { text: '/' }),
+                                c('span', { classes: 'text-blue-600 font-semibold', text: ui.dx }),
+                                ui.los.text !== '??' ? c('span', {
+                                    classes: losBadgeClasses,
+                                    text: ui.los.text
+                                }) : null
+                            ])
+                            const btnCopy = c('button', {
+                                classes: 'btn-copy text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 border border-blue-200 transition-colors',
+                                text: 'Copy'
+                            })
+                            const btnAdd = c('button', {
+                                classes: 'btn-more text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 border border-emerald-200 transition-colors',
+                                text: 'Add',
+                            })
+
+                            btnCopy.addEventListener('click', () => {
+                                const copyValue = p.toClipboardString()
+                                console.log('Copy action fired. Target payload string stringified:', copyValue)
+                                // navigator.clipboard.writeText(copyValue)
+                            })
+
+                            btnAdd.addEventListener('click', () => {
+                                console.log('Mockup Call: Add single item to current PatientList instance...', p)
+                            })
+
+                            return c('div', { classes: 'compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors' }, [
+                                dataContainer,
+                                c('div', { classes: 'actions flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity items-end sm:items-center' }, [
+                                    btnCopy,
+                                    btnAdd,
+                                ]),
+                            ])
+                        })
+
+                    return c('div', { classes: 'bg-slate-50/50' }, [
+                        subTitleBar,
+                        c('div', { classes: 'divide-y divide-slate-50' }, patientRowNodes),
+                    ])
+                })
+
+                const groupPanelCard = c('div', { classes: 'bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden mb-4' }, [
+                    cardHeader,
+                    c('div', { classes: 'divide-y divide-slate-100' }, innerSubContainers),
+                ])
+
+                resultTable.append(groupPanelCard)
+            })
+
+            viewControls.querySelectorAll('button[data-mode]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const selectedMode = e.target.getAttribute('data-mode')
+                    if (selectedMode !== currentGroupingMode) {
+                        this.renderPatientLookupResultTable(resultTable, completeDataset, selectedMode)
+                    }
+                })
+            })
+        },
+        getResolvedNameFromDatabase(hid, type, idToFind) {
+            // work: find a faster way
+            const database = G.getHospitalDatabaseById(hid)
+            if (!database) return idToFind
+            const arrayKey = type === 'room' ? 'roomDatabase' : 'doctorDatabase'
+            const dataset = database[arrayKey] || []
+            const foundEntry = dataset.find(item => String(item.id) === String(idToFind))
+            return foundEntry ? foundEntry.name : idToFind
         },
     },
     HOSPITAL: {
@@ -1236,6 +1448,10 @@ const G = {
             return hospital && hospital.ID !== undefined && String(hospital.ID) === String(targetId)
         })
         return foundEntry ? foundEntry[0] : null
+    },
+    getHospitalDatabaseById(targetId) {
+        const hospital = this.getHospitalById(targetId)
+        return hospital ? hospital.DATABASE : null
     },
 }
 
@@ -1306,3 +1522,5 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     Events.emit('entrypoint')
 })
+
+// window.G = G

@@ -1,14 +1,22 @@
 import { Utils, Vault } from './utils.js'
 
 export class Patient {
+    static GENDER_MAP = {
+        0: { long: 'Female', short: 'F' },
+        1: { long: 'Male', short: 'M' },
+    }
+    static FEMALE = 0
+    static MALE = 1
+
     constructor({
         id,
-        name,
-        dob,
-        gender,
-        dx = '',
+        hid = null,
         recId = null,
         mrn = null,
+        name = null,
+        dob = null,
+        gender = null,
+        dx = null,
         roomId = null,
         bedName = null,
         docId = null,
@@ -16,6 +24,7 @@ export class Patient {
         disDate = null,
     } = {}) {
         this.id = id || Utils.ID()
+        this.hid = hid
         this.recId = recId
         this.mrn = mrn
         this.name = name
@@ -36,6 +45,7 @@ export class Patient {
     toJSON() {
         return {
             id: this.id,
+            hid: this.hid,
             recId: this.recId,
             mrn: this.mrn,
             name: this.name,
@@ -49,6 +59,113 @@ export class Patient {
             disDate: this.disDate,
             lastUpdated: this.lastUpdated,
         }
+    }
+    get ageMetrics() {
+        if (!this.dob) return null
+        try {
+            const birthDate = new Date(this.dob)
+            const today = new Date()
+            if (isNaN(birthDate.getTime())) return null
+
+            let years = today.getFullYear() - birthDate.getFullYear()
+            let months = today.getMonth() - birthDate.getMonth()
+            let days = today.getDate() - birthDate.getDate()
+
+            if (days < 0) {
+                const prevMonth = new Date(today.getFullYear(), today.getMonth(), 0)
+                days += prevMonth.getDate()
+                months--
+            }
+            if (months < 0) {
+                months += 12
+                years--
+            }
+
+            return { y: Math.max(0, years), m: Math.max(0, months), d: Math.max(0, days) }
+        } catch (e) {
+            return null
+        }
+    }
+    get losMetrics() {
+        if (!this.admDate) return null
+        try {
+            const start = new Date(this.admDate)
+            const end = this.disDate ? new Date(this.disDate) : new Date()
+
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return null
+
+            const totalMilliseconds = end - start
+            if (totalMilliseconds < 0) return { d: 0, h: 0 }
+
+            const totalHours = Math.floor(totalMilliseconds / (1000 * 60 * 60))
+            const days = Math.floor(totalHours / 24)
+            const hours = totalHours % 24
+
+            return { d: days, h: hours }
+        } catch (e) {
+            return null
+        }
+    }
+    processName(rawName) {
+        if (!rawName || typeof rawName !== 'string' || !rawName.trim().length) return null
+        return rawName
+            .toLowerCase()
+            .replace(/(?:^|[\s\-\'])\S/g, (match) => match.toUpperCase())
+    }
+    getGenderText() {
+        const validGenderIdx = Utils.getValidValue(this.gender, null)
+        if (validGenderIdx !== null && Patient.GENDER_MAP[validGenderIdx] !== undefined) {
+            return Patient.GENDER_MAP[validGenderIdx]
+        }
+        return { long: 'Tidak Diketahui', short: '?' }
+    }
+    getUIDisplayData() {
+        const v = Utils.getValidValue
+        const mrn = v(this.mrn, '??')
+        const bedName = v(this.bedName, '??')
+        const cleanName = v(this.name, null)
+        const name = cleanName ? this.processName(cleanName) : '??'
+        const dx = v(this.dx, '??')
+        const gender = this.getGenderText().short
+
+        let age = '??'
+        const ageObj = this.ageMetrics
+        if (ageObj) {
+            age = `${ageObj.y}y, ${ageObj.m}m, ${ageObj.d}d`
+        }
+
+        let los = { text: '??', isFresh: false }
+        const losObj = this.losMetrics
+        if (losObj) {
+            const text = `${losObj.d}d ${losObj.h}h`
+            const isFresh = ((losObj.d * 24) + losObj.h) < 24
+            los = { text, isFresh }
+        }
+
+        return { mrn, bedName, name, age, dx, los, gender }
+    }
+    toClipboardString() {
+        const ui = this.getUIDisplayData()
+        return `${ui.bedName}/${ui.gender}/${ui.name}/${ui.mrn}/${ui.age}/${ui.dx} [LOS: ${ui.los.text}]`
+    }
+    static isSimilar(p1, p2) {
+        if (!p1 || !p2) return false
+        const d1 = p1.toJSON ? p1.toJSON() : p1
+        const d2 = p2.toJSON ? p2.toJSON() : p2
+        const clean = (val) => String(val ?? '').trim().toLowerCase()
+        return (
+            clean(d1.hid) === clean(d2.hid) &&
+            clean(d1.recId) === clean(d2.recId) &&
+            clean(d1.mrn) === clean(d2.mrn) &&
+            clean(d1.name) === clean(d2.name) &&
+            clean(d1.dob) === clean(d2.dob) &&
+            clean(d1.gender) === clean(d2.gender) &&
+            clean(d1.roomId) === clean(d2.roomId) &&
+            clean(d1.bedName) === clean(d2.bedName) &&
+            clean(d1.docId) === clean(d2.docId) &&
+            clean(d1.admDate) === clean(d2.admDate) &&
+            clean(d1.disDate) === clean(d2.disDate)
+        )
     }
 }
 
@@ -96,6 +213,22 @@ export class PatientList {
             name: data.name,
             patients: data.patients || []
         })
+    }
+    static filterDuplicates(patients) {
+        if (!Array.isArray(patients)) return []
+        const uniquePatients = []
+        patients.forEach(currentPatient => {
+            const targetPatient = currentPatient instanceof Patient
+                ? currentPatient
+                : new Patient(currentPatient)
+            const isDuplicate = uniquePatients.some(existingPatient =>
+                Patient.isSimilar(existingPatient, targetPatient)
+            )
+            if (!isDuplicate) {
+                uniquePatients.push(targetPatient)
+            }
+        })
+        return uniquePatients
     }
     static saveToDevice(patientListInstance) {
         return new Promise((resolve, reject) => {

@@ -1,4 +1,5 @@
 import { Utils } from './utils.js'
+import { Patient } from './clinical.js'
 import { PatientLookup } from './ui.js'
 
 export const SOEDIRAN_DATABASE = {
@@ -327,7 +328,7 @@ export const ApiSoediranDriver = {
             userId: rawUser.ID,
         }
     },
-    async handleFetch(targetDomain, payload, docGroups, roomGroups, session, onProgress) {
+    async handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, onProgress) {
         const results = []
         const queryList = this.buildFinalQueryList(docGroups, roomGroups, payload.wardType)
         const payloadManager = new SoediranRequestPayload(payload, this.SYSTEM_NAME)
@@ -346,9 +347,10 @@ export const ApiSoediranDriver = {
             try {
                 const result = await this.apiRequest(url, session)
                 const data = result.data || []
-                results.push(...data)
+                const newPatients = data.map(item => this.createPatientFromApiItem(item, hid))
+                results.push(...newPatients)
                 if (typeof onProgress === 'function') {
-                    onProgress({ index: i, status: 'success', data })
+                    onProgress({ index: i, status: 'success', data: newPatients })
                 }
             } catch (err) {
                 console.warn(`Search ${i + 1} failed:`, err.message)
@@ -396,6 +398,31 @@ export const ApiSoediranDriver = {
             default:
                 return [null]
         }
+    },
+    createPatientFromApiItem(item, hid) {
+        const a = item?.REFERENSI
+        const b = a?.PENDAFTARAN
+        const c = b?.REFERENSI?.PASIEN
+        const d = b?.DIAGNOSAMASUK?.REFERENSI?.DIAGNOSA
+        const g = c?.JENIS_KELAMIN == '2'
+            ? Patient.FEMALE
+            : c?.JENIS_KELAMIN == '1' ? Patient.MALE : null
+        const v = Utils.getValidValue
+
+        return new Patient({
+            hid: hid,
+            recId: v(item?.NOMOR, null),
+            mrn: v(c?.NORM, null),
+            name: v(c?.NAMA, null),
+            dob: v(c?.TANGGAL_LAHIR, null),
+            gender: v(g, null),
+            dx: d ? `${v(d.CODE, '??')} - ${v(d.STR, '??')}` : null,
+            roomId: v(item?.RUANGAN, null),
+            bedName: v(a?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR, null),
+            docId: v(a?.DPJP?.ID, null),
+            admDate: v(item?.MASUK, null),
+            disDate: v(item?.KELUAR, null),
+        })
     },
 }
 

@@ -92,10 +92,17 @@ export const Utils = {
     getValidValue(val, fallback) {
         if (val === null || val === undefined) return fallback
         const cleanStr = String(val).trim()
-        if (cleanStr === '' || cleanStr === 'null' || cleanStr === 'undefined') {
+        const lowerStr = cleanStr.toLowerCase()
+        if (
+            lowerStr === '' ||
+            lowerStr === 'null' ||
+            lowerStr === 'undefined' ||
+            lowerStr === '-' ||
+            lowerStr === '??'
+        ) {
             return fallback
         }
-        return val
+        return typeof val === 'number' ? val : cleanStr
     },
     buildUrl(domain, basePath, detailPath, queryString = '') {
         const sanitizedPath = `${basePath}/${detailPath}`.replace(/\/{2,}/g, '/')

@@ -1,4 +1,5 @@
 import { Utils } from './utils.js'
+import { Patient } from './clinical.js'
 import { PatientLookup } from './ui.js'
 
 export const SOEHADI_DATABASE = {
@@ -289,7 +290,8 @@ export const ApiSoehadiDriver = {
     NAME: 'RSUD Soehadi',
     SYSTEM_NAME: 'Soehadi',
     DOMAINS: [
-        'https://apirssoehadi.sragenkab.go.id'
+        'https://apirssoehadi.sragenkab.go.id',
+        'http://172.166.182.12',
     ],
     PATHS: {
         HOME: '/app/',
@@ -381,7 +383,7 @@ export const ApiSoehadiDriver = {
         if (!session.userData) throw new Error('Not Authenticated')
         return session.userData
     },
-    async handleFetch(targetDomain, payload, docGroups, roomGroups, session, onProgress) {
+    async handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, onProgress) {
         const results = []
         const queryList = this.buildFinalQueryList(docGroups, roomGroups, payload.wardType)
         const payloadManager = new SoehadiRequestPayload(payload, this.SYSTEM_NAME)
@@ -408,9 +410,10 @@ export const ApiSoehadiDriver = {
             try {
                 const result = await this.apiRequest(url, session)
                 const data = result || []
-                results.push(...data)
+                const newPatients = data.map(item => this.createPatientFromApiItem(item, hid))
+                results.push(...newPatients)
                 if (typeof onProgress === 'function') {
-                    onProgress({ index: i, status: 'success', data })
+                    onProgress({ index: i, status: 'success', data: newPatients })
                 }
             } catch (err) {
                 console.warn(`Search ${i + 1} failed:`, err.message)
@@ -456,6 +459,26 @@ export const ApiSoehadiDriver = {
             default:
                 return inPath
         }
+    },
+    createPatientFromApiItem(item, hid) {
+        const g = item?.jeniskelamin === 'PEREMPUAN'
+            ? Patient.FEMALE
+            : item?.jeniskelamin === 'LAKI-LAKI' ? Patient.MALE : null
+        const v = Utils.getValidValue
+        return new Patient({
+            hid: hid,
+            recId: v(item?.nocmfk, null), // idk yet
+            mrn: v(item?.nocm, null),
+            name: v(item?.namapasien, null),
+            dob: v(item?.tgllahir, null),
+            gender: v(g, null),
+            dx: v(item?.ketklinis, null),
+            roomId: v(item?.objectruanganfk, null),
+            bedName: v(item?.namabed, null),
+            docId: v(item?.objectpegawaifk, null),
+            admDate: v(item?.tglregistrasi, null),
+            disDate: v(item?.tglselesaiperiksa, null),
+        })
     },
 }
 
