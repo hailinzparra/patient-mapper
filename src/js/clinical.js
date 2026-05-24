@@ -202,8 +202,6 @@ export class PatientList {
         return {
             id: this.id,
             name: this.name,
-            patientCount: this.patientCount,
-            lastUpdated: this.lastUpdated,
             patients: this.patients.map(p => p.toJSON())
         }
     }

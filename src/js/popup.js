@@ -947,33 +947,161 @@ const G = {
                     return document.querySelector('.tab-contents-container div[data-tab-id="my-home"]')
                 },
                 render(listId) {
-                    const patientList = G.store.patients.data.lists.find(list => String(list.id) === String(listId))
-                    if (!(patientList instanceof PatientList)) return
+                    const myHomePanel = this.getPanel();
+                    if (!myHomePanel) return;
 
-                    let htmlContent = `
-                    <div class="space-y-4">
-                    <div>
-                        <h2 class="my-home-title text-lg font-bold text-slate-800" data-list-id="${listId}">${patientList.name}</h2>
-                        <p class="text-xs text-slate-400">Showing patients assigned to this list context</p>
-                    </div>
-                    <ul class="divide-y divide-slate-100 bg-white rounded-lg border border-slate-200">
-                `
+                    // Clean out old elements before constructing the fresh node layout stack
+                    myHomePanel.innerHTML = '';
 
-                    patientList.patients.forEach(patient => {
-                        htmlContent += `
-                <li class="p-3 text-xs text-slate-700 flex justify-between items-center hover:bg-slate-50">
-                    <span class="font-medium">${patient.name}</span>
-                    <button class="text-blue-600 hover:underline font-semibold" onclick="alert('Open nested profile tab for ${patient.name}')">View Record</button>
-                </li>`
-                    })
+                    const rawListData = G.store.patients.data.lists.find(list => String(list.id) === String(listId));
+                    if (!rawListData) return;
 
-                    htmlContent += `</ul></div>`
+                    // Defensively guarantee instance hydration to gain access to instance methods
+                    const patientList = rawListData instanceof PatientList ? rawListData : PatientList.fromJSON(rawListData);
 
-                    const myHomePanel = this.getPanel()
-                    if (myHomePanel) {
-                        myHomePanel.innerHTML = ''
-                        myHomePanel.innerHTML = htmlContent
+                    const c = Utils.DOM.createElement;
+
+                    // 1. Title Header Sub-Structure
+                    const headerBlock = c('div', {}, [
+                        c('h2', {
+                            classes: 'my-home-title text-lg font-bold text-slate-800',
+                            attrs: { 'data-list-id': listId },
+                            text: patientList.name
+                        }),
+                        c('p', {
+                            classes: 'text-xs text-slate-400',
+                            text: 'Showing patients assigned to this list context'
+                        })
+                    ]);
+
+                    // 2. Empty State Validation Catch
+                    if (patientList.patientCount === 0) {
+                        const emptyStateNode = c('div', { classes: 'space-y-4' }, [
+                            headerBlock,
+                            c('div', {
+                                classes: 'p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200',
+                                text: 'This list is empty. Add patients from the Lookup screen.'
+                            })
+                        ]);
+                        myHomePanel.appendChild(emptyStateNode);
+                        return;
                     }
+
+                    // 3. Populate List Rows Dynamic Array
+                    const patientRowNodes = patientList.patients.map(patientInstance => {
+                        // Ensure child items match class expectations
+                        const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance);
+                        const ui = p.getUIDisplayData();
+
+                        // Set up gender-specific typography
+                        let genderColorClass = "text-slate-400";
+                        if (p.gender === Patient.MALE) genderColorClass = "text-blue-500 font-bold";
+                        if (p.gender === Patient.FEMALE) genderColorClass = "text-rose-500 font-bold";
+
+                        // Length of Stay badge color processing
+                        const losBadgeClasses = ui.los.isFresh
+                            ? "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-100 text-amber-800 border-amber-200 tracking-tighter ml-1"
+                            : "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter ml-1";
+
+                        // Structured Left Column text readout representation
+                        const infoContainer = c('div', { classes: 'text-xs font-medium text-slate-700 leading-relaxed' }, [
+                            c('span', { classes: 'font-bold text-slate-400', text: ui.bedName }),
+                            c('span', { text: '/' }),
+                            c('span', { classes: 'font-bold text-slate-900', text: ui.name }),
+                            c('span', { text: ' ' }),
+                            c('span', { classes: `text-[10px] uppercase ${genderColorClass}`, text: `(${ui.gender})` }),
+                            c('span', { text: '/' }),
+                            c('span', { classes: 'text-slate-500', text: ui.mrn }),
+                            c('span', { text: '/' }),
+                            c('span', { classes: 'text-slate-500', text: ui.age }),
+                            c('span', { text: '/' }),
+                            c('span', { classes: 'text-blue-600 font-semibold', text: ui.dx }),
+                            ui.los.text !== '??' ? c('span', { classes: losBadgeClasses, text: ui.los.text }) : null
+                        ]);
+
+                        // Interactive action trigger control nodes
+                        const btnView = c('button', {
+                            classes: 'text-blue-600 hover:underline font-semibold text-xs',
+                            text: 'View Record'
+                        });
+                        btnView.addEventListener('click', () => alert(`Open nested profile tab for ${ui.name}`));
+
+                        const btnCopy = c('button', {
+                            classes: 'text-slate-500 hover:text-slate-800 font-medium text-xs',
+                            text: 'Copy'
+                        });
+                        btnCopy.addEventListener('click', (e) => {
+                            executeNativeClipboardCopy(p.toClipboardString(), e.currentTarget);
+                        });
+
+                        const btnRemove = c('button', {
+                            classes: 'text-rose-500 hover:text-rose-700 font-medium text-xs',
+                            text: 'Remove'
+                        });
+                        btnRemove.addEventListener('click', async () => {
+                            const confirmRes = await G.swal.fire({
+                                title: 'Remove Patient?',
+                                text: `Are you sure you want to remove ${ui.name} from this list?`,
+                                icon: 'warning',
+                                showCancelButton: true,
+                                confirmButtonText: 'Yes, remove',
+                                confirmButtonColor: '#ef4444',
+                                cancelButtonColor: '#64748b'
+                            });
+
+                            if (!confirmRes.isConfirmed) return;
+
+                            try {
+                                // Pull record through internal tracking collections
+                                patientList.removePatient(p.id);
+
+                                // Map updated serial structures cleanly over primary reference pointers
+                                const masterLists = G.store.patients.data.lists;
+                                const index = masterLists.findIndex(l => String(l.id) === String(listId));
+                                if (index !== -1) {
+                                    G.store.patients.data.lists[index] = patientList.toJSON();
+                                    await G.store.patients.save();
+                                }
+
+                                // Trigger a re-render to refresh the list view
+                                this.render(listId);
+
+                                G.swal.fire({
+                                    title: 'Removed!',
+                                    text: 'Patient successfully dropped from list storage.',
+                                    icon: 'success',
+                                    timer: 1500,
+                                    showConfirmButton: false
+                                });
+                            } catch (err) {
+                                G.swalFatalError(err, 'Removal Failed', 'Could not delete record safely from storage:');
+                            }
+                        });
+
+                        // Action wrapper layout row item
+                        const actionsContainer = c('div', { classes: 'flex items-center gap-3' }, [
+                            btnView,
+                            btnCopy,
+                            btnRemove
+                        ]);
+
+                        return c('li', {
+                            classes: 'p-3 flex justify-between items-center hover:bg-slate-50 transition-colors'
+                        }, [infoContainer, actionsContainer]);
+                    });
+
+                    // 4. Assemble the Consolidated Dom Wrapper Container Template Tree
+                    const listWrapperNode = c('ul', {
+                        classes: 'divide-y divide-slate-100 bg-white rounded-lg border border-slate-200 shadow-sm'
+                    }, patientRowNodes);
+
+                    const pageLayoutWrapper = c('div', { classes: 'space-y-4' }, [
+                        headerBlock,
+                        listWrapperNode
+                    ]);
+
+                    // Inject compiled nodes into the DOM tree
+                    myHomePanel.appendChild(pageLayoutWrapper);
                 },
                 reset() {
                     const myHomePanel = this.getPanel()
@@ -1366,8 +1494,9 @@ const G = {
                                 await this.executeNativeClipboardCopy(singleTextPayload, e.currentTarget)
                             })
 
-                            btnAdd.addEventListener('click', () => {
-                                console.log('Mockup Call: Add single item to current PatientList instance...', p)
+                            btnAdd.addEventListener('click', async () => {
+                                console.log('adding patient...')
+                                // await this.promptAndAddPatientToList(p)
                             })
 
                             return c('div', { classes: 'compact-row flex items-center justify-between px-3 py-2 hover:bg-white group transition-colors' }, [
@@ -1486,6 +1615,90 @@ const G = {
                         feedbackEl.innerText = originalText
                     }, 1000)
                 }
+            }
+        },
+        async promptAndAddPatientToList(rawPatient) {
+            // 1. Defensively verify list existence within your storage engine
+            const listArray = G.store.patients?.data?.lists;
+
+            if (!Array.isArray(listArray) || listArray.length === 0) {
+                G.swal.fire({
+                    title: 'No Lists Found',
+                    text: 'Create a list first!',
+                    icon: 'warning',
+                    confirmButtonColor: '#3b82f6' // Tailwind blue-500
+                });
+                return;
+            }
+
+            try {
+                // 2. Ensure we have a true, clean instance of the Patient model class
+                const targetPatient = rawPatient instanceof Patient ? rawPatient : new Patient(rawPatient);
+
+                // 3. Build a key-value dictionary option map for SweetAlert ({ "listId": "ListName" })
+                const selectOptions = {};
+                listArray.forEach(listData => {
+                    // Support both raw JSON items or hydrated PatientList class objects safely
+                    const id = listData.id;
+                    const name = listData.name || 'Unnamed List';
+                    const count = Array.isArray(listData.patients) ? listData.patients.length : 0;
+
+                    selectOptions[id] = `${name} (${count} patients)`;
+                });
+
+                // 4. Render the selection drop-down option picker modal frame
+                const { value: selectedListId } = await G.swal.fire({
+                    title: 'Select Destination List',
+                    text: `Choose where to add ${targetPatient.processName(targetPatient.name) || 'this patient'}:`,
+                    input: 'select',
+                    inputOptions: selectOptions,
+                    inputPlaceholder: '-- Choose a Patient List --',
+                    showCancelButton: true,
+                    confirmButtonText: 'Add Patient',
+                    confirmButtonColor: '#10b981', // Tailwind emerald-500
+                    cancelButtonColor: '#64748b',  // Tailwind slate-500
+                    inputValidator: (value) => {
+                        if (!value) {
+                            return 'You must select a destination list!';
+                        }
+                    }
+                });
+
+                // If user cancelled or closed out the modal view option line
+                if (!selectedListId) return;
+
+                // 5. Hydrate, mutate, and save back down into the persistent storage stack
+                const targetListIndex = listArray.findIndex(l => l.id === selectedListId);
+                if (targetListIndex === -1) throw new Error('Selected list could not be resolved in matching memory storage references.');
+
+                // Reconstruct as a proper structural instance to gain native prototype logic rules access
+                const targetList = PatientList.fromJSON(listArray[targetListIndex]);
+
+                // Use your class's native logic to append the new instance
+                targetList.addPatient(targetPatient);
+
+                // Splice the serialized payload format layout right back down into the primary dataset array
+                G.store.patients.data.lists[targetListIndex] = targetList.toJSON();
+
+                // Commit data across the VaultDriver layer using the asynchronous storage handler save method
+                await G.store.patients.save();
+
+                // 6. Notify operator of explicit database transaction structural success
+                G.swal.fire({
+                    title: 'Success!',
+                    text: `Successfully added to "${targetList.name}"`,
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+
+            } catch (err) {
+                // Intercept internal data mutation breakdowns safely across the fatal notification framework
+                G.swalFatalError(
+                    err,
+                    'Save Action Failed',
+                    'The application encountered a fatal error while trying to append the patient record:',
+                );
             }
         },
     },
