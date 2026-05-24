@@ -175,12 +175,10 @@ export class PatientList {
         this.name = name
         this.patients = patients.map(p => p instanceof Patient ? p : new Patient(p))
     }
-    get patientCount() {
-        return (this.patients && this.patients.length) || 0
-    }
-    get lastUpdated() {
-        if (!this.patients || this.patients.length === 0) return null
-        const dates = this.patients
+    static getLastUpdated(patientList) {
+        const n = patientList
+        if (!n.patients || n.patients.length === 0) return null
+        const dates = n.patients
             .map(p => p.lastUpdated ? new Date(p.lastUpdated) : null)
             .filter(d => d !== null)
         if (dates.length === 0) return null
@@ -197,6 +195,13 @@ export class PatientList {
     }
     getPatient(patientId) {
         return this.patients.find(p => p.id === patientId)
+    }
+    findDuplicate(patientData) {
+        if (!Array.isArray(this.patients)) return undefined
+        const targetPatient = patientData instanceof Patient ? patientData : new Patient(patientData)
+        return this.patients.find(existingPatient =>
+            Patient.isSimilar(existingPatient, targetPatient)
+        )
     }
     toJSON() {
         return {
@@ -228,43 +233,46 @@ export class PatientList {
         })
         return uniquePatients
     }
-    static saveToDevice(patientListInstance) {
-        return new Promise((resolve, reject) => {
-            if (!(patientListInstance instanceof PatientList)) {
-                return reject(new Error('Provided object is not an instance of PatientList'))
-            }
+    static async saveToDevice(inputData) {
+        let listData
+        let listName = 'list'
+        let totalPatients = 0
 
-            try {
-                const exportData = {
-                    listData: patientListInstance.toJSON(),
-                    exportDate: Utils.toLocalISOString(new Date()),
-                    version: '1.0',
-                }
+        if (inputData instanceof PatientList) {
+            listData = inputData.toJSON()
+            listName = inputData.name || 'list'
+            totalPatients = inputData.patients.length || 0
+        } else if (inputData && typeof inputData === 'object') {
+            listData = inputData
+            listName = inputData.name || 'list'
+            totalPatients = inputData.patients.length || (Array.isArray(inputData) ? inputData.length : 0)
+        } else {
+            throw new Error('Provided data must be an instance of PatientList or a valid JSON object')
+        }
 
-                const encryptedString = PatientList.#spondylosis(JSON.stringify(exportData))
-                const blob = new Blob([encryptedString], { type: 'text/plain' })
-                const url = URL.createObjectURL(blob)
+        const exportData = {
+            listData: listData,
+            exportDate: Utils.toLocalISOString(new Date()),
+            version: '1.0',
+        }
 
-                const now = new Date()
-                const dateStr = now.toLocaleDateString('en-GB').replace(/\//g, '-')
-                const timeStr = now.toLocaleTimeString('en-GB').replace(/:/g, '-')
-                const listName = patientListInstance.name?.replace(/\s+/g, '_').toLowerCase() || 'list'
-                const totalPatients = patientListInstance.patientCount
+        const encryptedString = PatientList.#spondylosis(JSON.stringify(exportData))
+        const blob = new Blob([encryptedString], { type: 'text/plain' })
+        const url = URL.createObjectURL(blob)
 
-                const link = document.createElement('a')
-                link.href = url
-                link.download = `${listName}_${totalPatients}_patients_${dateStr}_${timeStr}.txt`
+        const now = new Date()
+        const dateStr = now.toLocaleDateString('en-GB').replace(/\//g, '-')
+        const timeStr = now.toLocaleTimeString('en-GB').replace(/:/g, '-')
+        const safeListName = listName.replace(/\s+/g, '_').toLowerCase()
 
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-                URL.revokeObjectURL(url)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${safeListName}_${totalPatients}_patients_${dateStr}_${timeStr}.txt`
 
-                resolve()
-            } catch (error) {
-                reject(error)
-            }
-        })
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
     }
     static loadFromDevice() {
         return new Promise((resolve, reject) => {
@@ -303,14 +311,26 @@ export class PatientList {
             fileInput.click()
         })
     }
-    static async saveToCloud(patientListInstance) {
-        if (!(patientListInstance instanceof PatientList)) {
-            throw new Error('Provided object is not an instance of PatientList')
+    static async saveToCloud(inputData) {
+        let listData
+        let listName = 'list'
+        let totalPatients = 0
+
+        if (inputData instanceof PatientList) {
+            listData = inputData.toJSON()
+            listName = inputData.name || 'list'
+            totalPatients = inputData.patients.length || 0
+        } else if (inputData && typeof inputData === 'object') {
+            listData = inputData
+            listName = inputData.name || 'list'
+            totalPatients = inputData.patients.length || (Array.isArray(inputData) ? inputData.length : 0)
+        } else {
+            throw new Error('Provided data must be an instance of PatientList or a valid JSON object')
         }
 
         const timestamp = Math.round(Date.now()).toString()
         const exportData = {
-            listData: patientListInstance.toJSON(),
+            listData: listData,
             exportDate: Utils.toLocalISOString(new Date()),
             version: '1.0',
         }
@@ -318,8 +338,8 @@ export class PatientList {
         const encryptedString = PatientList.#spondylosis(JSON.stringify(exportData))
         const manifestItem = {
             id: Utils.ID(),
-            name: patientListInstance.name,
-            count: patientListInstance.patientCount,
+            name: listName,
+            count: totalPatients,
         }
 
         await Vault.upload(`previewlist/${timestamp}`, manifestItem)

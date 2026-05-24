@@ -48,7 +48,7 @@ const G = {
         },
         session: new VaultDriver('session'),
         patients: new VaultDriver('patients', {
-            lists: [], // { id: 1, name: 'List #1', patientCount: 12 }
+            lists: [],
         }),
         settings: new VaultDriver('settings', {
             devMode: false,
@@ -528,8 +528,8 @@ const G = {
             return rowWrapper
         },
         async openListDataModal(patientList, listBtn, rowWrapper) {
-            const count = patientList.patientCount
-            const localizedDate = new Date(patientList.lastUpdated || Date.now()).toLocaleDateString()
+            const count = patientList.patients.length
+            const localizedDate = new Date(PatientList.getLastUpdated(patientList) || Date.now()).toLocaleDateString()
             const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0', 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 text-left',
                 'flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 hover:border-slate-300 rounded-md text-xs font-bold bg-white hover:bg-slate-50 active:bg-slate-100 shadow-sm transition cursor-pointer',
                 'class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"',
@@ -628,7 +628,7 @@ const G = {
                 await this.renamePatientList(patientList.id, result.value.value, listBtn)
                 G.ui.swalSuccessShort('Saved successfully!')
             } else if (result.isDenied) {
-                const count = patientList.patientCount
+                const count = patientList.patients.length
                 const confirmDelete = await G.swal.fire({
                     icon: 'warning',
                     title: 'Are you sure?',
@@ -996,7 +996,7 @@ const G = {
                     ]);
 
                     // 2. Empty State Validation Catch
-                    if (patientList.patientCount === 0) {
+                    if (patientList.patients.length === 0) {
                         const emptyStateNode = c('div', { classes: 'space-y-4' }, [
                             headerBlock,
                             c('div', {
@@ -1052,7 +1052,7 @@ const G = {
                             text: 'Copy'
                         });
                         btnCopy.addEventListener('click', (e) => {
-                            executeNativeClipboardCopy(p.toClipboardString(), e.currentTarget);
+                            // executeNativeClipboardCopy(p.toClipboardString(), e.currentTarget);
                         });
 
                         const btnRemove = c('button', {
@@ -1406,7 +1406,9 @@ const G = {
                 await this.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
             })
 
-            btnAddAll.addEventListener('click', () => console.log('Mockup Call: Add All Patients to localStorage hook triggers...'))
+            btnAddAll.addEventListener('click', () => {
+                this.promptAndAddPatientToList(uniqueDataset)
+            })
 
             const groupedData = uniqueDataset.reduce((acc, current) => {
                 const p = current.toJSON ? current.toJSON() : current
@@ -1650,27 +1652,47 @@ const G = {
                 }
             }
         },
-        async promptAndAddPatientToList(rawPatient) {
+        async promptAndAddPatientToList(rawInput) {
             const listArray = G.store.patients?.data?.lists
 
             if (!Array.isArray(listArray) || listArray.length === 0) {
                 G.swal.fire({
                     icon: 'warning',
                     title: 'No Lists Found',
-                    text: 'Create a list first!',
+                    text: 'Please create a list first.',
                 })
                 return
             }
 
             try {
-                const targetPatient = rawPatient instanceof Patient ? rawPatient : new Patient(rawPatient)
-                const patientDisplayName = targetPatient.processName(targetPatient.name) || 'this patient'
-                const validOptionsHtml = []
+                const isBulk = Array.isArray(rawInput)
+                const incomingPatients = isBulk
+                    ? rawInput.map(p => p instanceof Patient ? p : new Patient(p))
+                    : [rawInput instanceof Patient ? rawInput : new Patient(rawInput)]
 
+                const descriptionText = isBulk
+                    ? `Choose where to add <strong>${incomingPatients.length} patient${incomingPatients.length === 1 ? '' : 's'}</strong>:`
+                    : `Choose where to add <strong>${incomingPatients[0].processName(incomingPatients[0].name) || 'this patient'}</strong>:`;
+
+                const validOptionsHtml = []
                 listArray.forEach(listData => {
                     const id = listData.id
                     const name = Utils.getValidValue(listData.name, 'Unnamed List')
-                    const count = Array.isArray(listData.patients) ? listData.patients.length : 0
+                    const currentPatients = Array.isArray(listData.patients) ? listData.patients : []
+                    const count = currentPatients.length
+
+                    const tempListInstance = PatientList.fromJSON(listData)
+                    const duplicateCount = incomingPatients.filter(p =>
+                        tempListInstance.findDuplicate(p) !== undefined
+                    ).length
+
+                    let duplicateBadgeHtml = ''
+                    if (duplicateCount > 0) {
+                        duplicateBadgeHtml = isBulk && duplicateCount === incomingPatients.length
+                            ? `<span class="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded bg-red-50 text-red-500 border border-red-100 whitespace-nowrap shrink-0">All items exist</span>`
+                            : `<span class="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap shrink-0">${isBulk ? `${duplicateCount} ` : ''}already exist${duplicateCount === 1 ? 's' : ''}</span>`
+                    }
+
                     const recordsHtml = `<span class="text-blue-700">${count} patient${count === 1 ? '' : 's'}</span>`
 
                     validOptionsHtml.push(`
@@ -1678,21 +1700,22 @@ const G = {
                         <div class="text-left flex items-center gap-3">
                             <input type="radio" name="swal-patient-list-select" value="${id}" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
                             <div>
-                                <div class="font-bold text-[11px] text-slate-700 max-w-[200px] line-clamp-2">${name}</div>
+                                <div class="font-bold text-[11px] text-slate-700 max-w-[180px] line-clamp-2">${name}</div>
                                 <div class="text-[9px] text-slate-400">Current Total: ${recordsHtml}</div>
                             </div>
                         </div>
+                        ${duplicateBadgeHtml}
                     </label>`)
                 })
 
                 const selectResult = await G.swal.fire({
                     title: 'Select Destination List',
                     html: `
-                        <div class="text-xs text-slate-500 text-left mb-3">Choose where to add <strong>${patientDisplayName}</strong>:</div>
+                        <div class="text-xs text-slate-500 text-left mb-3">${descriptionText}</div>
                         <div class="space-y-2 max-h-[280px] overflow-x-hidden overflow-y-auto px-1 py-1">${validOptionsHtml.join('')}</div>
                     `,
                     showCancelButton: true,
-                    confirmButtonText: 'Add Patient',
+                    confirmButtonText: isBulk ? 'Add All Patients' : 'Add Patient',
                     preConfirm() {
                         const checkedRadio = document.querySelector('input[name="swal-patient-list-select"]:checked')
                         if (!checkedRadio) {
@@ -1716,17 +1739,46 @@ const G = {
                 if (targetListIndex === -1) throw new Error('Selected list could not be resolved in matching memory storage references.')
 
                 const targetList = PatientList.fromJSON(listArray[targetListIndex])
-                targetList.addPatient(targetPatient)
+
+                let addedCount = 0
+                let updatedCount = 0
+
+                incomingPatients.forEach(patient => {
+                    const existingPatient = targetList.findDuplicate(patient)
+
+                    if (existingPatient) {
+                        const idx = targetList.patients.findIndex(p => p === existingPatient)
+                        if (idx !== -1) {
+                            targetList.patients[idx] = patient
+                            updatedCount++
+                        }
+                    } else {
+                        targetList.addPatient(patient)
+                        addedCount++
+                    }
+                })
 
                 G.store.patients.data.lists[targetListIndex] = targetList.toJSON()
                 await G.store.patients.save()
 
-                G.ui.swalSuccessShort('Added successfully!')
+                if (isBulk) {
+                    G.swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        html: `Added <strong>${addedCount}</strong> and updated <strong>${updatedCount}</strong> records in "${targetList.name}".`,
+                    })
+                } else {
+                    if (updatedCount > 0) {
+                        G.ui.swalSuccessShort('Updated successfully!')
+                    } else {
+                        G.ui.swalSuccessShort('Added successfully!')
+                    }
+                }
             } catch (err) {
                 G.ui.swalFatalError(
                     err,
-                    'Add Failed',
-                    'The application encountered a fatal error while trying to append the patient record:',
+                    'Save Action Failed',
+                    'The application encountered a fatal error while trying to append the patient records:',
                 )
             }
         },
@@ -1850,4 +1902,4 @@ document.addEventListener('DOMContentLoaded', () => {
     Events.emit('entrypoint')
 })
 
-window.G = G
+// window.G = G
