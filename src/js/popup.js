@@ -1001,7 +1001,7 @@ const G = {
                     this.swalFatalError(
                         err,
                         'Lookup Failed',
-                        'The application encountered a fatal lookup error:'
+                        'The application encountered a fatal lookup error:',
                     )
                 }
             })
@@ -1247,7 +1247,11 @@ const G = {
 
             resultTable.append(headerLayoutWrapper)
 
-            btnCopyAll.addEventListener('click', () => console.log('Mockup Call: Copy All Patients triggers...'))
+            btnCopyAll.addEventListener('click', async (e) => {
+                const fullTextPayload = this.generateAllPatientsCopyText(sortedPrimaryGroups, currentGroupingMode)
+                await this.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
+            })
+
             btnAddAll.addEventListener('click', () => console.log('Mockup Call: Add All Patients to localStorage hook triggers...'))
 
             const groupedData = uniqueDataset.reduce((acc, current) => {
@@ -1301,7 +1305,12 @@ const G = {
                     c('div', { classes: 'flex items-center gap-2' }, [btnCopyGroup, totalBadge]),
                 ])
 
-                btnCopyGroup.addEventListener('click', (e) => console.log(`Mockup Call: ${currentTheme.label} for target:`, e.target.dataset.group))
+                btnCopyGroup.addEventListener('click', async (e) => {
+                    const cardTextPayload = currentGroupingMode === 'ROOM'
+                        ? this.generateRoomGroupCopyText(primaryGroup)
+                        : this.generateDoctorGroupCopyText(primaryGroup)
+                    await this.executeNativeClipboardCopy(cardTextPayload, e.currentTarget, 'COPIED!')
+                })
 
                 const sortedSubGroups = Object.values(primaryGroup.subGroups).sort((a, b) =>
                     a.secondaryName.localeCompare(b.secondaryName)
@@ -1352,10 +1361,9 @@ const G = {
                                 text: 'Add',
                             })
 
-                            btnCopy.addEventListener('click', () => {
-                                const copyValue = p.toClipboardString()
-                                console.log('Copy action fired. Target payload string stringified:', copyValue)
-                                // navigator.clipboard.writeText(copyValue)
+                            btnCopy.addEventListener('click', async (e) => {
+                                const singleTextPayload = p.toClipboardString()
+                                await this.executeNativeClipboardCopy(singleTextPayload, e.currentTarget)
                             })
 
                             btnAdd.addEventListener('click', () => {
@@ -1402,6 +1410,83 @@ const G = {
             const dataset = database[arrayKey] || []
             const foundEntry = dataset.find(item => String(item.id) === String(idToFind))
             return foundEntry ? foundEntry.name : idToFind
+        },
+        generateRoomGroupCopyText(roomGroup) {
+            const lines = []
+            lines.push(roomGroup.primaryName)
+            lines.push('')
+
+            const sortedDocs = Object.values(roomGroup.subGroups).sort((a, b) =>
+                a.secondaryName.localeCompare(b.secondaryName)
+            )
+            sortedDocs.forEach(docSubGroup => {
+                lines.push(docSubGroup.secondaryName)
+                const sortedPatients = docSubGroup.patients.sort((a, b) =>
+                    (a.bedName || '').localeCompare(b.bedName || '')
+                )
+                sortedPatients.forEach(patientData => {
+                    const p = patientData instanceof Patient ? patientData : new Patient(patientData)
+                    lines.push(`- ${p.toClipboardString()}`)
+                })
+                lines.push('')
+            })
+
+            return lines.join('\n').trim()
+        },
+        generateDoctorGroupCopyText(docGroup) {
+            const lines = []
+            lines.push(docGroup.primaryName)
+            lines.push('')
+
+            const sortedRooms = Object.values(docGroup.subGroups).sort((a, b) =>
+                a.secondaryName.localeCompare(b.secondaryName)
+            )
+            sortedRooms.forEach(roomSubGroup => {
+                lines.push(roomSubGroup.secondaryName)
+                const sortedPatients = roomSubGroup.patients.sort((a, b) =>
+                    (a.bedName || '').localeCompare(b.bedName || '')
+                )
+                sortedPatients.forEach(patientData => {
+                    const p = patientData instanceof Patient ? patientData : new Patient(patientData)
+                    lines.push(`- ${p.toClipboardString()}`)
+                })
+                lines.push('')
+            })
+
+            return lines.join('\n').trim()
+        },
+        generateAllPatientsCopyText(sortedPrimaryGroups, mode) {
+            return sortedPrimaryGroups.map(group => {
+                return mode === 'ROOM'
+                    ? this.generateRoomGroupCopyText(group)
+                    : this.generateDoctorGroupCopyText(group)
+            }).join('\n\n')
+        },
+        async executeNativeClipboardCopy(textToCopy, feedbackEl, copiedText = 'Copied!') {
+            if (!textToCopy) return
+            try {
+                await navigator.clipboard.writeText(textToCopy)
+                if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
+                    const originalText = feedbackEl.innerText
+                    feedbackEl.innerText = copiedText
+                    setTimeout(() => {
+                        feedbackEl.innerText = originalText
+                    }, 1000)
+                }
+            } catch (err) {
+                this.swalFatalError(
+                    err,
+                    'Copy Failed',
+                    'The application encountered a fatal copy error:',
+                )
+                if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
+                    const originalText = feedbackEl.innerText
+                    feedbackEl.innerText = 'Error'
+                    setTimeout(() => {
+                        feedbackEl.innerText = originalText
+                    }, 1000)
+                }
+            }
         },
     },
     HOSPITAL: {
@@ -1490,7 +1575,7 @@ Events.on('entrypoint', async (ev) => {
         G.ui.swalFatalError(
             err,
             'Initialization Failed',
-            'The application encountered a fatal initialization error:'
+            'The application encountered a fatal initialization error:',
         )
     }
 

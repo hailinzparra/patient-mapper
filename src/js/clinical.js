@@ -146,7 +146,7 @@ export class Patient {
     }
     toClipboardString() {
         const ui = this.getUIDisplayData()
-        return `${ui.bedName}/${ui.gender}/${ui.name}/${ui.mrn}/${ui.age}/${ui.dx} [LOS: ${ui.los.text}]`
+        return `${ui.bedName}/${ui.gender}/${ui.name}/${ui.mrn}/${ui.age}/${ui.dx} [${ui.los.text}]`
     }
     static isSimilar(p1, p2) {
         if (!p1 || !p2) return false
