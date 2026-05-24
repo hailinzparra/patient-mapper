@@ -1758,8 +1758,8 @@ const G = {
                     }
                 })
 
-                G.store.patients.data.lists[targetListIndex] = targetList.toJSON()
-                await G.store.patients.save()
+                listArray[targetListIndex] = targetList
+                await G.store.patients.update({ lists: listArray })
 
                 if (isBulk) {
                     G.swal.fire({
