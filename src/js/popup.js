@@ -98,6 +98,8 @@ const G = {
         allPatientsBtn: null,
         myPatientsBtn: null,
         calculatorBtn: null,
+        templatesBtn: null,
+        devModeBtn: null,
         checkReleasesBtn: null,
         // Collapsible list / Accordion components
         myPatientsCollapsedBadge: null,
@@ -130,6 +132,8 @@ const G = {
             this.allPatientsBtn = document.getElementById('sidebar-all-patients')
             this.myPatientsBtn = document.getElementById('sidebar-my-patients')
             this.calculatorBtn = document.getElementById('sidebar-calculator')
+            this.templatesBtn = document.getElementById('sidebar-templates')
+            this.devModeBtn = document.getElementById('sidebar-dev-mode')
             this.checkReleasesBtn = document.getElementById('sidebar-check-releases')
             this.myPatientsCollapsedBadge = document.getElementById('sidebar-my-patients-collapsed-badge')
             this.myPatientsBadge = document.getElementById('sidebar-my-patients-badge')
@@ -276,6 +280,44 @@ const G = {
                     showConfirmButton: false,
                     focusConfirm: false,
                 })
+            })
+
+            this.templatesBtn.addEventListener('click', () => {
+                G.swal.fire({
+                    title: 'Templates',
+                    html: `Work in progress`,
+                })
+            })
+
+            this.devModeBtn.addEventListener('click', async () => {
+                const isDevModeActive = G.store.settings.data.devMode
+                const nextState = isDevModeActive ? 'off' : 'on'
+                const confirmText = `Turn ${nextState} developer mode?`
+                const dialogResult = await G.swal.fire({
+                    title: confirmText,
+                    html: `<div id="dev-mode-beacon-container" class="max-h-96 text-start"></div>`,
+                    showCancelButton: true,
+                    confirmButtonText: `Turn ${nextState}`,
+                    didOpen() {
+                        const targetEl = document.getElementById('dev-mode-beacon-container')
+                        if (!targetEl) return
+                        if (isDevModeActive) {
+                            Beacon.render(targetEl)
+                        }
+                        else {
+                            targetEl.className = 'max-h-96 bg-[#1e1e1e] text-gray-400 font-mono text-xs py-5 px-2.5 text-center rounded'
+                            targetEl.innerHTML = '<div>Turning on developer mode will display session logs here.</div>'
+                        }
+                    },
+                })
+                if (dialogResult.isConfirmed) {
+                    G.store.settings.update({ devMode: !isDevModeActive })
+                    G.ui.swalSuccessShort(`Developer mode turned ${nextState}`)
+                    const updatedDevMode = G.store.settings.data.devMode
+                    if (updatedDevMode && !Beacon.isActive) {
+                        Beacon.init()
+                    }
+                }
             })
 
             this.checkReleasesBtn.addEventListener('click', () => {

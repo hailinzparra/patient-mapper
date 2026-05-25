@@ -1,7 +1,12 @@
 const Beacon = {
+    isActive: false,
     maxLogs: 500,
     logs: [],
     init() {
+        if (this.isActive) {
+            return
+        }
+        this.isActive = true;
         ['log', 'error', 'warn'].forEach(type => {
             const originalMethod = console[type]
             console[type] = (...args) => {
@@ -10,8 +15,30 @@ const Beacon = {
                     type: type,
                     message: args.map(arg => {
                         try {
-                            let str = typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-                            return str.length > 1000 ? str.substring(0, 1000) + '...' : str
+                            let fullErrorPayload = ''
+                            if (arg instanceof Error) {
+                                fullErrorPayload = arg.stack || arg.message
+                                const customKeys = Object.getOwnPropertyNames(arg).filter(
+                                    key => !['name', 'message', 'stack'].includes(key)
+                                )
+                                if (customKeys.length > 0) {
+                                    const extraDetails = {}
+                                    customKeys.forEach(key => {
+                                        extraDetails[key] = arg[key]
+                                    })
+                                    try {
+                                        fullErrorPayload += `\n\n[Additional Payload]:\n${JSON.stringify(extraDetails, null, 2)}`
+                                    } catch (_) { }
+                                }
+                                return fullErrorPayload
+                            } else if (typeof arg === 'object' && arg !== null) {
+                                fullErrorPayload = JSON.stringify(arg, null, 2)
+                            } else {
+                                fullErrorPayload = String(arg)
+                            }
+                            return fullErrorPayload.length > 1000
+                                ? fullErrorPayload.substring(0, 1000) + '...'
+                                : fullErrorPayload
                         } catch (e) {
                             return '[Unserializable Object]'
                         }
