@@ -1,4 +1,5 @@
-import { Utils } from './utils.js'
+import { Utils, VaultDriver } from './utils.js'
+import { Patient, PatientList } from './clinical.js'
 import { ApiSoediranDriver } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
 
@@ -221,6 +222,7 @@ export class PatientLookup {
         this.#nodes.form.append(primaryGrid, wardContainer, this.#nodes.toggleBtn, this.#nodes.moreOptions, actionRow)
 
         if (this.#nodes.container) {
+            cardFrame.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_forwards]')
             this.#nodes.container.append(cardFrame)
         }
     }
@@ -692,5 +694,736 @@ export class PatientLookup {
             })
         }
         return queryList
+    }
+}
+
+export class MyPatientsRenderer {
+    static FILTERS = {
+        ROLE_ALL: 'ALL',
+        ROLE_MINE: 'MINE',
+        ROLE_DOCTORS: 'DOCTORS',
+    }
+
+    static DAYS = {
+        TODAY: 'TODAY',
+        YESTERDAY: 'YESTERDAY',
+    }
+
+    static VIEWS = {
+        FULL: 'FULL',
+        COMPACT: 'COMPACT',
+    }
+
+    parentNode = document.createElement('div')
+    patientList = new PatientList({})
+    #settingsStore = null
+    // #roomLookup = {}
+    // #docLookup = {}
+
+    #activeHospitalId = 0
+    #notesFilterRole = MyPatientsRenderer.FILTERS.ROLE_MINE
+    #notesFilterDay = MyPatientsRenderer.DAYS.TODAY
+    #viewMode = MyPatientsRenderer.VIEWS.FULL
+
+    patientUiMeta = []
+    #patientRoomMap = new Map()
+    #patientDocMap = new Map()
+    emptyRooms = {}
+
+    #nodes = {
+        container: null,
+
+        header: null,
+        headerTitle: null,
+        headerCounter: null,
+
+        settings: null,
+
+        listContainer: null,
+        filledRoomsContainer: null,
+        emptyRoomsContainer: null,
+    }
+
+    async init(parentNode, patientList, settingsStore, roomLookup, docLookup) {
+        if (!roomLookup || !docLookup || !(patientList instanceof PatientList) || !(parentNode instanceof HTMLElement)) {
+            console.warn('Initialization failed: Invalid roomLookup, patientList, or parentNode.')
+            return
+        }
+
+        this.parentNode = parentNode
+        this.patientList = patientList
+        this.#settingsStore = settingsStore
+        // this.#roomLookup = roomLookup
+        // this.#docLookup = docLookup
+
+        this.reloadSettingsData()
+
+        const filledRoomKeys = new Set()
+        this.patientUiMeta = []
+
+        for (const p of this.patientList.patients) {
+            const roomKey = `${p.hid}_${p.roomId}`
+            const roomMatch = roomLookup[roomKey]
+            const roomName = (roomMatch && roomMatch.room) ? roomMatch.room.name : `Room ${p.roomId}`
+            const docKey = `${p.hid}_${p.docId}`
+            const docMatch = docLookup[docKey]
+            const docName = (docMatch && docMatch.doc) ? docMatch.doc.name : `Doctor ${p.docId}`
+
+            this.patientUiMeta.push({
+                id: p.id,
+                roomName: roomName,
+                docName: docName,
+            })
+
+            if (roomMatch) {
+                filledRoomKeys.add(roomKey)
+            }
+        }
+
+        this.#patientRoomMap = new Map(this.patientUiMeta.map(m => [m.id, m.roomName]))
+        this.#patientDocMap = new Map(this.patientUiMeta.map(m => [m.id, m.docName]))
+
+        this.emptyRooms = Object.keys(roomLookup)
+            .filter(key => (!filledRoomKeys.has(key) && roomLookup[key].hid === this.#activeHospitalId))
+            .map(key => roomLookup[key])
+        this.emptyRooms.sort((a, b) => a.room.name.localeCompare(b.room.name))
+    }
+    async saveSettingsData(newData = {}) {
+        const store = this.#settingsStore
+        if (!(store instanceof VaultDriver)) return
+        await store.update(newData)
+    }
+    getSettingsData() {
+        const store = this.#settingsStore
+        if (!(store instanceof VaultDriver)) return {}
+        return store.data
+    }
+    reloadSettingsData() {
+        const data = this.getSettingsData()
+        this.#activeHospitalId = data.activeHospitalId || this.#activeHospitalId || 0
+        this.#notesFilterRole = data.noteDefaultRole || this.#notesFilterRole || MyPatientsRenderer.FILTERS.ROLE_MINE
+        this.#notesFilterDay = data.noteDefaultDay || this.#notesFilterDay || MyPatientsRenderer.DAYS.TODAY
+        this.#viewMode = data.myPatientsViewMode || this.#viewMode || MyPatientsRenderer.VIEWS.FULL
+    }
+    async buildAndRender() {
+        const c = Utils.DOM.createElement
+
+        this.buildHeaderDOM()
+        this.buildSettingsDOM()
+        this.buildListContainerDOM()
+
+        this.#nodes.header.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_forwards]')
+        this.#nodes.settings.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_100ms_forwards]')
+        this.#nodes.listContainer.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_200ms_forwards]')
+
+        this.#nodes.container = c('div', { classes: 'space-y-3' }, [
+            this.#nodes.header,
+            this.#nodes.settings,
+            this.#nodes.listContainer,
+        ])
+
+        this.parentNode.innerHTML = ''
+        this.parentNode.append(this.#nodes.container)
+    }
+    buildHeaderDOM() {
+        const c = Utils.DOM.createElement
+        const titleText = `${this.patientList.name}`
+        const totalPatients = this.patientList.patients.length || 0
+        const patientCounterText = `${totalPatients} record${totalPatients === 1 ? '' : 's'}`
+
+        this.#nodes.headerCounter = c('div', { classes: 'my-patients-counter bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100', text: patientCounterText })
+        this.#nodes.headerTitle = c('div', { classes: 'my-patients-title text-[13px] font-bold tracking-wide mb-1 break-all line-clamp-3', attrs: { 'data-list-id': this.patientList.id }, text: titleText })
+        this.#nodes.header = c('div', { classes: 'p-3 text-center bg-white text-slate-500 rounded-xl border border-slate-200 overflow-hidden' }, [
+            this.#nodes.headerTitle,
+            this.#nodes.headerCounter,
+        ])
+    }
+    buildSettingsDOM() {
+        let isSettingsOpen = false
+        const c = Utils.DOM.createElement
+
+        const getTabClass = (isActive, colorClass = 'text-blue-600') => isActive
+            ? `toggle-view flex-1 px-2 py-1 text-[10px] font-bold rounded bg-white ${colorClass} shadow-sm transition-all text-center`
+            : 'toggle-view flex-1 px-2 py-1 text-[10px] font-bold rounded text-slate-500 hover:text-slate-700 text-center'
+
+        const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 transform' }, [
+            c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M19 9l-7 7-7-7' } }),
+        ])
+
+        const settingsHeader = c('div', { classes: 'flex items-center justify-between p-1 cursor-pointer select-none transition-all duration-200 group text-slate-700 hover:text-blue-600' }, [
+            c('h4', { classes: 'text-[11px] font-bold uppercase tracking-wider', text: 'Settings' }),
+            chevronIcon,
+        ])
+
+        const settingsBody = c('div', { classes: 'max-h-0 opacity-0 overflow-y-auto no-scrollbar transition-all duration-300 ease-in-out' })
+
+        this.#nodes.settings = c('div', { classes: 'p-2 bg-white rounded-xl border border-slate-200' }, [
+            settingsHeader,
+            settingsBody,
+        ])
+
+        const toggleSettingsSection = (forceState = null) => {
+            isSettingsOpen = forceState !== null ? forceState : !isSettingsOpen
+
+            if (isSettingsOpen) {
+                settingsBody.classList.remove('max-h-0', 'opacity-0')
+                settingsBody.classList.add('max-h-[1000px]', 'opacity-100')
+                chevronIcon.classList.add('rotate-180')
+            } else {
+                settingsBody.classList.remove('max-h-[1000px]', 'opacity-100')
+                settingsBody.classList.add('max-h-0', 'opacity-0')
+                chevronIcon.classList.remove('rotate-180')
+            }
+        }
+
+        settingsHeader.addEventListener('click', () => {
+            toggleSettingsSection()
+        })
+
+        // ==========================================
+        // BATCH OPERATIONS SECTION
+        // ==========================================
+        const batchOperationsLabel = c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1.5 ml-1', text: 'Batch Operations' })
+
+        const btnBatchRefresh = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors group' }, [
+            c('span', { classes: 'flex flex-col items-start leading-tight' }, [
+                c('span', { text: 'Batch Refresh' }),
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Refresh all patients' })
+            ]),
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4 group-active:rotate-180 transition-transform duration-500' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } })
+            ])
+        ])
+
+        const btnBatchNotes = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors' }, [
+            c('span', { classes: 'flex flex-col items-start leading-tight' }, [
+                c('span', { text: 'Batch Open Notes' }),
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: "Open all patients' notes" })
+            ]),
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' } })
+            ])
+        ])
+
+        const batchButtonsGrid = c('div', { classes: 'grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4' }, [
+            btnBatchRefresh,
+            btnBatchNotes
+        ])
+
+        const batchOperationsWrapper = c('div', { classes: 'relative' }, [
+            batchOperationsLabel,
+            batchButtonsGrid
+        ])
+
+        // ==========================================
+        // GLOBAL SETTINGS SECTION
+        // ==========================================
+        const globalSettingsLabel = c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1', text: 'Global Settings' })
+
+        const btnRoleAll = c('button', { classes: getTabClass(this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_ALL, 'text-slate-600'), attrs: { 'data-role': MyPatientsRenderer.FILTERS.ROLE_ALL }, text: 'ALL' })
+        const btnRoleMine = c('button', { classes: getTabClass(this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_MINE), attrs: { 'data-role': MyPatientsRenderer.FILTERS.ROLE_MINE }, text: 'MINE' })
+        const btnRoleDocs = c('button', { classes: getTabClass(this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_DOCTORS), attrs: { 'data-role': MyPatientsRenderer.FILTERS.ROLE_DOCTORS }, text: 'DOCTORS' })
+
+        const roleFilterGroup = c('div', { classes: 'flex-1' }, [
+            c('div', { classes: 'text-[9px] font-semibold text-slate-400 mb-1 ml-1' }, [c('span', { text: 'Default Role Filter on Notes' })]),
+            c('div', { classes: 'flex gap-1 bg-slate-100 p-1 rounded-md' }, [btnRoleAll, btnRoleMine, btnRoleDocs])
+        ])
+
+        const btnDayToday = c('button', { classes: getTabClass(this.#notesFilterDay === MyPatientsRenderer.DAYS.TODAY), attrs: { 'data-day': MyPatientsRenderer.DAYS.TODAY }, text: '★ TODAY' })
+        const btnDayYest = c('button', { classes: getTabClass(this.#notesFilterDay === MyPatientsRenderer.DAYS.YESTERDAY, 'text-slate-600'), attrs: { 'data-day': MyPatientsRenderer.DAYS.YESTERDAY }, text: 'YESTERDAY' })
+
+        const dayFilterGroup = c('div', { classes: 'flex-1' }, [
+            c('div', { classes: 'text-[9px] font-semibold text-slate-400 mb-1 ml-1' }, [c('span', { text: 'Default Day Filter on Notes' })]),
+            c('div', { classes: 'flex gap-1 bg-slate-100 p-1 rounded-md' }, [btnDayToday, btnDayYest])
+        ])
+
+        const filtersGridContainer = c('div', { classes: 'grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4' }, [
+            roleFilterGroup,
+            dayFilterGroup,
+        ])
+
+        const globalSettingsWrapper = c('div', { classes: 'relative' }, [
+            globalSettingsLabel,
+            filtersGridContainer,
+        ])
+
+        settingsBody.append(batchOperationsWrapper)
+        settingsBody.append(globalSettingsWrapper)
+
+        // ==========================================
+        // EVENT LISTENERS
+        // ==========================================
+        btnBatchRefresh.addEventListener('click', () => {
+        })
+
+        btnBatchNotes.addEventListener('click', () => {
+        })
+
+        roleFilterGroup.querySelectorAll('button[data-role]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const selectedRole = e.currentTarget.getAttribute('data-role')
+                if (selectedRole !== this.#notesFilterRole) {
+                    this.#notesFilterRole = selectedRole
+                    btnRoleAll.className = getTabClass(this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_ALL, 'text-slate-600')
+                    btnRoleMine.className = getTabClass(this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_MINE)
+                    btnRoleDocs.className = getTabClass(this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_DOCTORS)
+                    this.saveSettingsData({ noteDefaultRole: selectedRole })
+                }
+            })
+        })
+
+        dayFilterGroup.querySelectorAll('button[data-day]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const selectedDay = e.currentTarget.getAttribute('data-day')
+                if (selectedDay !== this.#notesFilterDay) {
+                    this.#notesFilterDay = selectedDay
+                    btnDayToday.className = getTabClass(this.#notesFilterDay === MyPatientsRenderer.DAYS.TODAY)
+                    btnDayYest.className = getTabClass(this.#notesFilterDay === MyPatientsRenderer.DAYS.YESTERDAY, 'text-slate-600')
+                    this.saveSettingsData({ noteDefaultDay: selectedDay })
+                }
+            })
+        })
+    }
+    buildListContainerDOM() {
+        const c = Utils.DOM.createElement
+        const currentViewMode = this.#viewMode
+
+        const totalPatients = this.patientList.patients.length || 0
+
+        if (!this.#nodes.listContainer) {
+            this.#nodes.listContainer = c('div', { classes: 'p-4 bg-white border border-slate-200 rounded-xl text-xs text-slate-500' })
+        }
+
+        this.#nodes.listContainer.innerHTML = ''
+
+        // ==========================================
+        // NO PATIENTS
+        // ==========================================
+        if (totalPatients === 0) {
+            const noDataRow = c('div', {
+                classes: 'px-3 py-4 text-xs font-medium text-slate-400 text-center bg-slate-50 border border-dashed border-slate-200 rounded',
+                text: 'No patient records.',
+            })
+            this.#nodes.listContainer.append(noDataRow)
+            return
+        }
+
+        // ==========================================
+        // HEADER LAYOUT
+        // ==========================================
+        const btnCopyNotes = c('button', {
+            classes: 'flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+            text: 'Copy All Notes*',
+        })
+
+        const btnCopyPatients = c('button', {
+            classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+            text: 'Copy All Patients',
+        })
+
+        const getTabClass = (isActive, colorClass = 'text-blue-600') => isActive
+            ? `toggle-view flex-1 px-3 py-1 text-[10px] font-bold rounded bg-white ${colorClass} shadow-sm`
+            : 'toggle-view flex-1 px-3 py-1 text-[10px] font-bold rounded text-slate-500 hover:text-slate-700'
+
+        const viewControls = c('div', { classes: 'flex items-center justify-end bg-white border border-slate-200 p-2 rounded-lg shadow-sm' }, [
+            c('div', { classes: 'flex-1 flex gap-1 bg-slate-100 p-1 rounded-md' }, [
+                c('button', { classes: getTabClass(currentViewMode === MyPatientsRenderer.VIEWS.FULL), attrs: { 'data-view-mode': MyPatientsRenderer.VIEWS.FULL }, text: 'FULL' }),
+                c('button', { classes: getTabClass(currentViewMode === MyPatientsRenderer.VIEWS.COMPACT, 'text-slate-600'), attrs: { 'data-view-mode': MyPatientsRenderer.VIEWS.COMPACT }, text: 'COMPACT' })
+            ]),
+        ])
+
+        const helperStrip = c('div', { classes: 'px-3 py-1.5 text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-md text-center italic' }, [
+            c('span', { html: `*To copy a note: <strong>Open it</strong> and use filters to ensure it appears as the <strong>first item</strong>. Leave notes closed to exclude them.` }),
+        ])
+
+        const headerLayoutWrapper = c('div', { classes: 'sticky top-0 z-30 pt-2 -mt-1 bg-white space-y-2 mb-4 rounded-b-lg shadow-lg overflow-hidden' }, [
+            c('div', { classes: 'flex gap-2' }, [btnCopyNotes, btnCopyPatients]),
+            viewControls,
+            helperStrip,
+        ])
+
+        // ==========================================
+        // DATA LAYOUT
+        // ==========================================
+        const filledRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[1000px] opacity-100 overflow-y-auto transition-all duration-300 ease-in-out mt-2' })
+        const emptyRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[1000px] opacity-100 overflow-y-auto transition-all duration-300 ease-in-out mt-2' })
+
+        const instantiatedRoomCards = {}
+
+        const orderedPatientList = this.patientList.patients
+        for (const p of orderedPatientList) {
+            const roomName = this.#patientRoomMap.get(p.id)
+            const docName = this.#patientDocMap.get(p.id)
+            if (!roomName) continue
+            if (!instantiatedRoomCards[p.roomId]) {
+                const patientCount = 0 // find a way
+                const roomCard = this.createRoomCard(p.roomId, roomName, patientCount)
+                instantiatedRoomCards[p.roomId] = roomCard
+                filledRoomsBody.append(roomCard)
+            }
+            const patientCard = this.createPatientCard(p, docName)
+            instantiatedRoomCards[p.roomId].patientSlotsContainer.append(patientCard)
+        }
+
+        if (this.emptyRooms && this.emptyRooms.length > 0) {
+            for (const emptyRoom of this.emptyRooms) {
+                const emptyRoomCard = this.createRoomCard(emptyRoom.room.id, emptyRoom.room.name, 0)
+                emptyRoomCard.patientSlotsContainer.append(
+                    c('p', { classes: 'text-[10px] italic text-slate-400 text-center', text: 'No patients assigned' }),
+                )
+                emptyRoomsBody.append(emptyRoomCard)
+            }
+        }
+
+        const totalOccupiedRooms = Object.keys(instantiatedRoomCards).length
+        const totalOccupiedPatients = this.patientList.patients.length
+
+        const totalEmptyRooms = this.emptyRooms ? this.emptyRooms.length : 0
+        const totalEmptyPatients = 0
+
+        this.#nodes.filledRoomsContainer = this.createCollapsibleSection(
+            'Occupied Rooms',
+            totalOccupiedRooms,
+            totalOccupiedPatients,
+            'emerald',
+            filledRoomsBody,
+        )
+
+        this.#nodes.emptyRoomsContainer = this.createCollapsibleSection(
+            'Empty Rooms',
+            totalEmptyRooms,
+            totalEmptyPatients,
+            'slate',
+            emptyRoomsBody,
+            true,
+        )
+
+        this.#nodes.emptyRoomsContainer.classList.remove('mb-4')
+
+        this.#nodes.filledRoomsContainer.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_forwards]')
+        this.#nodes.emptyRoomsContainer.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_100ms_forwards]')
+
+        const dataLayoutWrapper = c('div', { classes: 'space-y-4' }, [
+            this.#nodes.filledRoomsContainer,
+            this.#nodes.emptyRoomsContainer,
+        ])
+
+        this.#nodes.listContainer.append(headerLayoutWrapper)
+        this.#nodes.listContainer.append(dataLayoutWrapper)
+
+        // ==========================================
+        // EVENT LISTENERS
+        // ==========================================
+        btnCopyNotes.addEventListener('click', () => {
+            // this.promptAndAddPatientToList(uniqueDataset)
+        })
+
+        btnCopyPatients.addEventListener('click', async (e) => {
+            // const fullTextPayload = this.generateAllPatientsCopyText(sortedPrimaryGroups, currentGroupingMode)
+            // await this.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
+        })
+
+        viewControls.querySelectorAll('button[data-view-mode]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const selectedMode = e.target.getAttribute('data-view-mode')
+                if (selectedMode !== currentViewMode) {
+                    this.#viewMode = selectedMode
+                    this.saveSettingsData({ myPatientsViewMode: selectedMode })
+                    this.buildListContainerDOM()
+                }
+            })
+        })
+    }
+    createCollapsibleSection(titleText, roomCount, patientCount, theme, bodyContentNode, isClosed = false) {
+        const c = Utils.DOM.createElement
+        let isOpen = true
+
+        const badgeColorClass = theme === 'emerald' ? 'bg-emerald-500' : 'bg-slate-400'
+        const textColorClass = theme === 'emerald' ? 'text-emerald-600' : 'text-slate-500'
+        const patientSubtitle = `${patientCount} record${patientCount === 1 ? '' : 's'}`
+
+        const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 transform rotate-180' }, [
+            c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M19 9l-7 7-7-7' } }),
+        ])
+
+        const titleRow = c('div', { classes: 'flex items-center gap-1.5' }, [
+            c('span', { classes: `w-2 h-2 rounded-full flex-shrink-0 ${badgeColorClass}` }),
+            c('h4', {
+                classes: `text-[11px] font-bold uppercase tracking-wider transition-colors duration-200 group-hover:text-blue-600 ${textColorClass}`,
+                text: `${titleText} (${roomCount})`,
+            }),
+        ])
+
+        const textStack = c('div', { classes: 'flex flex-col gap-0.5' }, [
+            titleRow,
+            c('span', {
+                classes: 'text-[10px] text-slate-400 font-normal uppercase group-hover:text-blue-500 transition-colors pl-3.5',
+                text: patientSubtitle,
+            }),
+        ])
+
+        const header = c('div', { classes: 'flex items-center justify-between p-1 cursor-pointer select-none transition-all duration-200 group text-slate-700' }, [
+            textStack,
+            chevronIcon,
+        ])
+
+        header.addEventListener('click', () => {
+            isOpen = !isOpen
+            if (isOpen) {
+                bodyContentNode.classList.remove('max-h-0', 'opacity-0')
+                bodyContentNode.classList.add('max-h-[1000px]', 'opacity-100', 'mt-2')
+                chevronIcon.classList.add('rotate-180')
+            } else {
+                bodyContentNode.classList.remove('max-h-[1000px]', 'opacity-100', 'mt-2')
+                bodyContentNode.classList.add('max-h-0', 'opacity-0')
+                chevronIcon.classList.remove('rotate-180')
+            }
+        })
+
+        if (isClosed) header.click()
+
+        return c('div', { classes: 'rooms-container mb-4' }, [header, bodyContentNode])
+    }
+    createRoomCard(roomId, roomName, patientCount = 0) {
+        const c = Utils.DOM.createElement
+
+        const btnUp = c('button', { classes: 'move-room-up p-0.5 hover:bg-slate-200 rounded text-slate-400' }, [
+            c('svg', { attrs: { class: 'w-3 h-3', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
+                c('path', { attrs: { d: 'M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z' } }),
+            ]),
+        ])
+        const btnDown = c('button', { classes: 'move-room-down p-0.5 hover:bg-slate-200 rounded text-slate-400' }, [
+            c('svg', { attrs: { class: 'w-3 h-3', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
+                c('path', { attrs: { d: 'M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' } }),
+            ]),
+        ])
+
+        const btnCopy = c('button', { classes: 'copy-room-data p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all mr-1' }, [
+            c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-all', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
+            ]),
+        ])
+        const btnToggle = c('button', { classes: 'toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all' }, [
+            c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-transform', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { d: 'M19 9l-7 7-7-7', 'stroke-width': '2.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } }),
+            ]),
+        ])
+
+        const patientSlots = c('div', { classes: 'patient-list p-2 space-y-2' })
+
+        const cardWrapper = c('div', {
+            classes: 'room-group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-2 self-start w-full',
+            attrs: { 'data-room-id': roomId },
+        }, [
+            // Header
+            c('div', { classes: 'room-header flex items-center justify-between p-3 bg-slate-50/50 border-b border-slate-100' }, [
+                c('div', { classes: 'flex items-center gap-3' }, [
+                    c('div', { classes: 'flex flex-col gap-0.5' }, [btnUp, btnDown]), // Reorder block
+                    c('div', {}, [
+                        c('h4', { classes: 'text-[11px] font-black text-slate-700 uppercase leading-none mb-1', text: roomName }),
+                        c('span', {
+                            classes: 'room-count text-[9px] font-bold text-blue-500 uppercase tracking-tight',
+                            text: patientCount === 1 ? '1 Patient' : `${patientCount} Patients`
+                        })
+                    ])
+                ]),
+                c('div', { classes: 'flex items-center gap-1' }, [btnCopy, btnToggle])
+            ]),
+            // Body
+            patientSlots,
+        ])
+
+        cardWrapper.patientSlotsContainer = patientSlots
+
+        return cardWrapper
+    }
+    createPatientCard(patientInstance, docName) {
+        const c = Utils.DOM.createElement
+        const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
+        const ui = p.getUIDisplayData() || {}
+
+        // Shared action buttons (Open Details, Notes, Delete)
+        const btnOpenDetails = c('button', { classes: 'patient-open-details-btn p-2 bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white rounded-lg transition-all' }, [
+            c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' } }),
+            ]),
+        ])
+        const btnNotes = c('button', { classes: 'patient-notes-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all' }, [
+            c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' } }),
+            ]),
+        ])
+        const btnDelete = c('button', { classes: 'patient-delete-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all' }, [
+            c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' } }),
+            ]),
+        ])
+
+        // Bind events
+        btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
+        btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p.id))
+        btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id))
+
+        let genderColorClass = 'text-slate-400'
+        if (p.gender === Patient.MALE) genderColorClass = 'text-blue-500 font-bold'
+        if (p.gender === Patient.FEMALE) genderColorClass = 'text-rose-500 font-bold'
+
+        // ==========================================
+        // BRANCH A: COMPACT VIEW
+        // ==========================================
+        if (this.#viewMode === MyPatientsRenderer.VIEWS.COMPACT) {
+            const losBadgeClasses = ui.los?.isFresh
+                ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-100 text-amber-800 border-amber-200 tracking-tighter ml-1'
+                : 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter ml-1'
+
+            const dataContainer = c('div', { classes: 'text-xs font-medium text-slate-700 leading-relaxed patient-data truncate flex-1 pr-2' }, [
+                c('span', { classes: 'font-bold text-slate-400', text: ui.bedName }),
+                c('span', { text: '/' }),
+                c('span', { classes: genderColorClass, text: ui.gender }),
+                c('span', { text: '/' }),
+                c('span', { classes: 'font-bold text-slate-900', text: ui.name }),
+                c('span', { text: '/' }),
+                c('span', { classes: 'text-slate-500 font-mono', text: ui.mrn }),
+                c('span', { text: '/' }),
+                c('span', { classes: 'text-slate-500', text: ui.age }),
+                // c('span', { text: '/' }),
+                // c('span', { classes: 'text-blue-600 font-semibold', text: ui.dx }),
+                ui.los.text !== '??' ? c('span', { classes: losBadgeClasses, text: ui.los.text }) : null
+            ])
+
+            const compactActions = c('div', { classes: 'actions flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity' }, [
+                btnOpenDetails,
+                btnNotes,
+                btnDelete,
+            ])
+
+            return c('div', {
+                classes: 'compact-row flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 border-b border-slate-100/60 group transition-colors',
+                attrs: { 'data-id': p.id },
+            }, [
+                dataContainer,
+                compactActions,
+            ])
+        }
+
+        // ==========================================
+        // BRANCH B: FULL VIEW
+        // ==========================================
+        const bedBlock = c('div', { classes: 'bed-info flex flex-col items-center justify-center min-w-[55px] px-1 py-2 bg-slate-100 border-slate-200 rounded-lg border transition-colors duration-500' }, [
+            c('span', { classes: 'text-[8px] font-black text-slate-400 uppercase leading-none mb-1', text: 'Bed' }),
+            c('span', { classes: 'text-[11px] font-black text-blue-700 max-w-[50px] truncate', text: ui.bedName }),
+            c('div', { classes: 'mt-1.5 pt-1 border-t border-black/5 w-full flex justify-center' }, [
+                c('span', {
+                    classes: 'los-text text-[9px] font-bold text-slate-500 leading-none',
+                    text: ui.los.text,
+                }),
+            ]),
+        ])
+
+        const infoBlock = c('div', { classes: 'flex-1 min-w-0' }, [
+            c('h5', {
+                classes: 'text-[11px] font-black text-slate-800 truncate uppercase leading-tight',
+                html: `<span class=${genderColorClass}>${ui.gender}</span><span class="text-slate-400"> | </span>${ui.name}`,
+            }),
+            c('p', { classes: 'text-[9px] text-slate-500 font-mono mb-1 truncate', text: `${ui.mrn} • ${ui.age} • ${ui.recId}` }),
+            c('p', { classes: 'text-[9px] font-medium text-slate-500 truncate italic', text: ui.dx }),
+            c('p', { classes: 'text-[9px] font-bold text-blue-500 truncate', text: docName }),
+        ])
+
+        const actionBlock = c('div', { classes: 'flex items-center gap-1' }, [
+            btnOpenDetails,
+            btnNotes,
+            btnDelete,
+            c('div', { classes: 'flex flex-col gap-0.5 ml-1' }, [
+                c('button', { classes: 'move-p-up p-1 text-slate-300 hover:text-blue-500 transition-colors' }, [
+                    c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
+                        c('path', { attrs: { d: 'M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z' } }),
+                    ]),
+                ]),
+                c('button', { classes: 'move-p-down p-1 text-slate-300 hover:text-blue-500 transition-colors' }, [
+                    c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
+                        c('path', { attrs: { d: 'M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' } }),
+                    ]),
+                ]),
+            ]),
+        ])
+
+        const metadataBlock = c('div', { classes: 'flex items-center justify-between mt-1' }, [
+            c('div', { classes: 'flex items-center gap-2 overflow-x-auto no-scrollbar' }, [
+                c('div', { classes: 'flex items-center bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full js-status-pill' }, [
+                    c('div', { classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 js-status-dot animate-pulse' }),
+                    c('span', { classes: 'text-[8px] font-black tracking-tight text-emerald-600 js-status-label', text: ui.status })
+                ]),
+                c('div', { classes: 'flex items-center bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full' }, [
+                    c('span', { classes: 'text-[8px] font-black text-blue-400 mr-1 tracking-tighter', text: 'In:' }),
+                    c('span', { classes: 'text-[8px] font-bold text-blue-700 whitespace-nowrap js-adm-date', text: ui.admText })
+                ]),
+                c('div', { classes: 'flex items-center bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full' }, [
+                    c('span', { classes: 'text-[8px] font-black text-slate-400 mr-1 tracking-tighter', text: 'Out:' }),
+                    c('span', { classes: 'text-[8px] font-bold text-slate-600 whitespace-nowrap js-dis-date', text: ui.disText })
+                ]),
+            ]),
+            c('button', { classes: 'refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group' }, [
+                c('svg', { attrs: { class: 'w-2.5 h-2.5 transition-transform duration-500', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                    c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } }),
+                ]),
+            ]),
+        ])
+
+        const syncBlock = c('div', { classes: 'mt-1 pt-1.5 border-t border-slate-50 flex items-center justify-between' }, [
+            c('div', { classes: 'flex items-center gap-1.5 text-slate-400' }, [
+                c('svg', { attrs: { class: 'w-2 h-2 opacity-60', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                    c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' } }),
+                ]),
+                c('div', { classes: 'flex items-baseline gap-1' }, [
+                    c('span', { classes: 'text-[6.5px] font-bold uppercase tracking-wider', text: 'Last Sync' }),
+                    c('span', { classes: 'text-[8px] font-mono font-medium leading-none js-last-sync', text: ui.lastUp }),
+                ]),
+            ]),
+            c('span', { classes: 'flex h-1.5 w-1.5 rounded-full bg-slate-200' })
+        ])
+
+        const notesContainer = c('div', { classes: 'patient-notes-container hidden bg-slate-50 border border-slate-200 border-t-0 -mt-2 rounded-b-xl shadow-sm overflow-hidden transition-all duration-300' }, [
+            c('div', { classes: 'notes-header px-3 py-1.5 border-b border-slate-200 flex justify-between items-center bg-white/50' }, [
+                c('div', { classes: 'flex items-center gap-2' }, [
+                    c('div', { classes: 'flex bg-slate-200 p-0.5 rounded-md text-[8px] font-bold' }, [
+                        c('button', { classes: 'filter-notes-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all', text: 'ALL' }),
+                        c('button', { classes: 'filter-notes-mine px-2 py-0.5 rounded text-slate-500 transition-all', text: 'MINE' }),
+                        c('button', { classes: 'filter-notes-docs px-2 py-0.5 rounded text-slate-500 transition-all', text: 'DOCTORS' }),
+                    ]),
+                ]),
+                c('button', { classes: 'notes-close-inner text-slate-400 hover:text-red-500 text-[12px] font-black px-1', text: '✕' })
+            ]),
+            c('div', { classes: 'date-pagination flex gap-1 px-3 py-1.5 bg-slate-100/50 border-b border-slate-200 overflow-x-auto no-scrollbar' }),
+            c('div', { classes: 'notes-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto' }),
+        ])
+
+        return c('div', {
+            classes: 'patient-wrapper flex flex-col gap-2 w-full',
+            attrs: { 'data-id': p.id },
+        }, [
+            c('div', { classes: 'patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all' }, [
+                c('div', { classes: 'flex items-center gap-3' }, [bedBlock, infoBlock, actionBlock]),
+                metadataBlock,
+                metadataBlock,
+                syncBlock,
+            ]),
+            notesContainer,
+        ])
+    }
+    openPatientWorkspaceTab(p) {
+        console.log('open in new tabb', p)
+    }
+    toggleNotesSlideOut(patientId) {
+        console.log('toggle notes', patientId)
+        if (this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_MINE) {
+            // Trigger the logic/click to select "Mine" inside the DOM
+        }
+        if (this.#notesFilterDay === MyPatientsRenderer.DAYS.TODAY) {
+            // Trigger the logic/click to select "Today" inside the DOM
+        }
+    }
+    promptDeletePatient(patientId) {
+        console.log('deleting', patientId)
     }
 }

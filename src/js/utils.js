@@ -43,6 +43,13 @@ export const Utils = {
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms))
     },
+    debounce(func, delay) {
+        let timer
+        return function (...args) {
+            clearTimeout(timer)
+            timer = setTimeout(() => func.apply(this, args), delay)
+        }
+    },
     randomRange(min, max) {
         return min + Math.floor(Math.random() * (max - min + 1))
     },
@@ -80,6 +87,34 @@ export const Utils = {
         if (hours > 0 || days > 0) parts.push(`${hours}h`)
         parts.push(`${minutes}m`)
         return parts.join(' ')
+    },
+    formatShortDate(dateInput) {
+        if (dateInput === null || dateInput === undefined || dateInput === '') {
+            throw new Error('Invalid date: Input cannot be null, undefined, or empty')
+        }
+        const date = dateInput instanceof Date ? dateInput : new Date(dateInput)
+        if (isNaN(date.getTime())) {
+            throw new Error("Invalid date provided to formatShortDate")
+        }
+        const weekday = date.toLocaleDateString('en-GB', { weekday: 'short' })
+        const day = date.toLocaleDateString('en-GB', { day: 'numeric' })
+        const month = date.toLocaleDateString('en-GB', { month: 'short' })
+        return `${weekday}, ${day} ${month}`
+    },
+    formatFullTimestamp(ms) {
+        if (!ms) return '--'
+        const d = typeof ms === 'number' ? new Date(ms) : new Date(ms)
+        if (isNaN(d.getTime())) return '--'
+        return new Intl.DateTimeFormat('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            fractionalSecondDigits: 3,
+            hour12: false,
+        }).format(d).replace(',', '')
     },
     toLocalISOString(date = new Date()) {
         if (!(date instanceof Date) || isNaN(date.getTime())) {

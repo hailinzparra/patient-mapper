@@ -36,11 +36,11 @@ export class Patient {
         this.docId = docId
         this.admDate = admDate
         this.disDate = disDate
-        this.lastUpdated = Utils.toLocalISOString(new Date())
+        this.lastUpdated = Date.now()
     }
     update(newData) {
         Object.assign(this, newData)
-        this.lastUpdated = Utils.toLocalISOString(new Date())
+        this.lastUpdated = Date.now()
     }
     toJSON() {
         return {
@@ -119,16 +119,30 @@ export class Patient {
         }
         return { long: 'Tidak Diketahui', short: '?' }
     }
+    getDateText(date) {
+        let text = ''
+        try {
+            text = Utils.formatShortDate(date)
+        } catch {
+            text = ''
+        }
+        return text || '--'
+    }
     getUIDisplayData() {
         const v = Utils.getValidValue
+        const recId = v(this.recId, '??')
         const mrn = v(this.mrn, '??')
         const bedName = v(this.bedName, '??')
         const cleanName = v(this.name, null)
         const name = cleanName ? this.processName(cleanName) : '??'
         const dx = v(this.dx, '??')
         const gender = this.getGenderText().short
+        const admText = this.getDateText(this.admDate)
+        const disText = this.getDateText(this.disDate)
+        const status = this.disDate ? 'Finished' : 'Active'
+        const lastUp = Utils.formatFullTimestamp(this.lastUpdated)
 
-        let age = '??'
+        let age = '??y'
         const ageObj = this.ageMetrics
         if (ageObj) {
             age = `${ageObj.y}y, ${ageObj.m}m, ${ageObj.d}d`
@@ -142,7 +156,20 @@ export class Patient {
             los = { text, isFresh }
         }
 
-        return { mrn, bedName, name, age, dx, los, gender }
+        return {
+            recId,
+            mrn,
+            bedName,
+            name,
+            age,
+            dx,
+            los,
+            gender,
+            admText,
+            disText,
+            status,
+            lastUp,
+        }
     }
     toClipboardString() {
         const ui = this.getUIDisplayData()
@@ -170,28 +197,66 @@ export class Patient {
 }
 
 export class PatientList {
-    constructor({ id, name, patients = [] }) {
+    constructor({ id, name, patients = [], roomOrder = [], patientOrderMap = {} }) {
         this.id = id || Utils.ID()
         this.name = name
         this.patients = patients.map(p => p instanceof Patient ? p : new Patient(p))
+        this.roomOrder = roomOrder
+        this.patientOrderMap = patientOrderMap
+        this.cleanUpMetadata()
     }
-    static getLastUpdated(patientList) {
-        const n = patientList
-        if (!n.patients || n.patients.length === 0) return null
-        const dates = n.patients
-            .map(p => p.lastUpdated ? new Date(p.lastUpdated) : null)
-            .filter(d => d !== null)
-        if (dates.length === 0) return null
-        const latestDate = new Date(Math.max(...dates))
-        return Utils.toLocalISOString(latestDate)
+    // Call this whenever patients are added, removed, or changed rooms to keep metadata clean
+    cleanUpMetadata() {
+        const activeRoomIds = new Set()
+        const activePatientIds = new Set(this.patients.map(p => p.id))
+        // 1. Group active patient IDs by their current roomId
+        const currentGroupings = {}
+        this.patients.forEach(p => {
+            if (!p.roomId) return // Ignore patients with no room assigned
+            activeRoomIds.add(p.roomId)
+            if (!currentGroupings[p.roomId]) currentGroupings[p.roomId] = []
+            currentGroupings[p.roomId].push(p.id)
+        })
+        // 2. Fix roomOrder: Add new rooms, remove deleted rooms
+        this.roomOrder = this.roomOrder.filter(roomId => activeRoomIds.has(roomId))
+        activeRoomIds.forEach(roomId => {
+            if (!this.roomOrder.includes(roomId)) {
+                this.roomOrder.push(roomId) // Append new rooms to the bottom
+            }
+        })
+        // 3. Fix patientOrderMap: Filter out deleted patients, append new patients
+        const newOrderMap = {}
+        this.roomOrder.forEach(roomId => {
+            const existingOrder = this.patientOrderMap[roomId] || []
+            const activeRoomPatients = currentGroupings[roomId] || []
+            // Keep existing order but filter out anyone who was deleted/moved out
+            let updatedOrder = existingOrder.filter(id => activeRoomPatients.includes(id) && activePatientIds.has(id))
+            // Find anyone newly added to this room and append them
+            const newAdditions = activeRoomPatients.filter(id => !updatedOrder.includes(id))
+            newOrderMap[roomId] = [...updatedOrder, ...newAdditions]
+        })
+        this.patientOrderMap = newOrderMap
+    }
+    reorderRooms(fromIndex, toIndex) {
+        const [movedRoomId] = this.roomOrder.splice(fromIndex, 1)
+        this.roomOrder.splice(toIndex, 0, movedRoomId)
+        // Trigger save after this
+    }
+    reorderPatientsInRoom(roomId, fromIndex, toIndex) {
+        const order = this.patientOrderMap[roomId]
+        if (!order) return
+        const [movedPatientId] = order.splice(fromIndex, 1)
+        order.splice(toIndex, 0, movedPatientId)
     }
     addPatient(patientData) {
         const newPatient = patientData instanceof Patient ? patientData : new Patient(patientData)
         this.patients.push(newPatient)
+        this.cleanUpMetadata()
         return newPatient
     }
     removePatient(patientId) {
         this.patients = this.patients.filter(p => p.id !== patientId)
+        this.cleanUpMetadata()
     }
     getPatient(patientId) {
         return this.patients.find(p => p.id === patientId)
@@ -207,15 +272,29 @@ export class PatientList {
         return {
             id: this.id,
             name: this.name,
-            patients: this.patients.map(p => p.toJSON())
+            patients: this.patients.map(p => p.toJSON()),
+            roomOrder: this.roomOrder,
+            patientOrderMap: this.patientOrderMap,
         }
     }
     static fromJSON(data) {
         return new PatientList({
             id: data.id,
             name: data.name,
-            patients: data.patients || []
+            patients: data.patients || [],
+            roomOrder: data.roomOrder || [],
+            patientOrderMap: data.patientOrderMap || {},
         })
+    }
+    static getLastUpdated(patientList) {
+        const patients = patientList?.patients
+        if (!patients || patients.length === 0) return null
+        const timestamps = patients
+            .map(p => Number(p.lastUpdated))
+            .filter(t => !isNaN(t) && t > 0)
+        if (timestamps.length === 0) return null
+        const latestTimestamp = Math.max(...timestamps)
+        return Utils.formatFullTimestamp(latestTimestamp)
     }
     static filterDuplicates(patients) {
         if (!Array.isArray(patients)) return []

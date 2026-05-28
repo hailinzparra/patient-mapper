@@ -1,6 +1,6 @@
 import { Events, Utils, Vault, VaultDriver, Tab, TabManager } from './utils.js'
 import { Patient, PatientList } from './clinical.js'
-import { PatientLookup } from './ui.js'
+import { PatientLookup, MyPatientsRenderer } from './ui.js'
 import { SOEDIRAN_DATABASE, ApiSoediranDriver } from './api-soediran.js'
 import { SOEHADI_DATABASE, ApiSoehadiDriver } from './api-soehadi.js'
 
@@ -11,6 +11,7 @@ const G = {
     targetWidth: 360,
     mainContainer: null,
     preInit() {
+        this.hospitalManager.init()
         Vault.init('patient-mapper', [
             'eyJhcGlLZXkiOiJBSXphU3lEODMzdGtLSEk3S1hXRFdKNTlSWVJ6TXY0aGN5TGQ5cmsiLCJhdXRoRG9tYWluIjoibHVtaWZpbGxldC5maXJlYmFzZW',
             'FwcC5jb20iLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vbHVtaWZpbGxldC1kZWZhdWx0LXJ0ZGIuYXNpYS1zb3V0aGVhc3QxLmZpcmViYXNlZGF0YWJh',
@@ -56,6 +57,9 @@ const G = {
             activeDomainIndex: 0,
             isSidebarCollapsed: false,
             isAccordionOpen: true,
+            noteDefaultRole: MyPatientsRenderer.FILTERS.ROLE_MINE,
+            noteDefaultDay: MyPatientsRenderer.DAYS.TODAY,
+            myPatientsViewMode: MyPatientsRenderer.VIEWS.FULL,
         }),
         getPatientListById(listId) {
             const lists = this.patients.data.lists || []
@@ -969,7 +973,7 @@ const G = {
             if (listBtn) {
                 listBtn.innerText = listToRename.name
             }
-            const activeTitle = document.querySelector(`h2.my-home-title[data-list-id="${listId}"]`)
+            const activeTitle = document.querySelector(`.my-patients-title[data-list-id="${listId}"]`)
             if (activeTitle) {
                 activeTitle.innerText = listToRename.name
             }
@@ -1012,158 +1016,56 @@ const G = {
                 getPanel() {
                     return document.querySelector('.tab-contents-container div[data-tab-id="my-home"]')
                 },
-                render(listId) {
-                    const myHomePanel = this.getPanel()
-                    if (!myHomePanel) return
-                    myHomePanel.innerHTML = ''
-
-                    const rawListData = G.store.patients.data.lists.find(list => String(list.id) === String(listId))
-                    if (!rawListData) return
-
-                    const patientList = rawListData instanceof PatientList ? rawListData : PatientList.fromJSON(rawListData)
-
-                    const c = Utils.DOM.createElement
-
-                    // 1. Title Header Sub-Structure
-                    const headerBlock = c('div', {}, [
-                        c('h2', {
-                            classes: 'my-home-title text-lg font-bold text-slate-800',
-                            attrs: { 'data-list-id': listId },
-                            text: patientList.name
-                        }),
-                        c('p', {
-                            classes: 'text-xs text-slate-400',
-                            text: 'Showing patients assigned to this list context'
-                        })
-                    ]);
-
-                    // 2. Empty State Validation Catch
-                    if (patientList.patients.length === 0) {
-                        const emptyStateNode = c('div', { classes: 'space-y-4' }, [
-                            headerBlock,
-                            c('div', {
-                                classes: 'p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200',
-                                text: 'This list is empty. Add patients using Patient Lookup in the All Patients screen.'
-                            })
-                        ]);
-                        myHomePanel.appendChild(emptyStateNode);
-                        return;
-                    }
-
-                    // 3. Populate List Rows Dynamic Array
-                    const patientRowNodes = patientList.patients.map(patientInstance => {
-                        // Ensure child items match class expectations
-                        const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance);
-                        const ui = p.getUIDisplayData();
-
-                        // Set up gender-specific typography
-                        let genderColorClass = "text-slate-400";
-                        if (p.gender === Patient.MALE) genderColorClass = "text-blue-500 font-bold";
-                        if (p.gender === Patient.FEMALE) genderColorClass = "text-rose-500 font-bold";
-
-                        // Length of Stay badge color processing
-                        const losBadgeClasses = ui.los.isFresh
-                            ? "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-100 text-amber-800 border-amber-200 tracking-tighter ml-1"
-                            : "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter ml-1";
-
-                        // Structured Left Column text readout representation
-                        const infoContainer = c('div', { classes: 'text-xs font-medium text-slate-700 leading-relaxed' }, [
-                            c('span', { classes: 'font-bold text-slate-400', text: ui.bedName }),
-                            c('span', { text: '/' }),
-                            c('span', { classes: 'font-bold text-slate-900', text: ui.name }),
-                            c('span', { text: ' ' }),
-                            c('span', { classes: `text-[10px] uppercase ${genderColorClass}`, text: `(${ui.gender})` }),
-                            c('span', { text: '/' }),
-                            c('span', { classes: 'text-slate-500', text: ui.mrn }),
-                            c('span', { text: '/' }),
-                            c('span', { classes: 'text-slate-500', text: ui.age }),
-                            c('span', { text: '/' }),
-                            c('span', { classes: 'text-blue-600 font-semibold', text: ui.dx }),
-                            ui.los.text !== '??' ? c('span', { classes: losBadgeClasses, text: ui.los.text }) : null
-                        ]);
-
-                        // Interactive action trigger control nodes
-                        const btnView = c('button', {
-                            classes: 'text-blue-600 hover:underline font-semibold text-xs',
-                            text: 'View Record'
-                        });
-                        btnView.addEventListener('click', () => alert(`Open nested profile tab for ${ui.name}`));
-
-                        const btnCopy = c('button', {
-                            classes: 'text-slate-500 hover:text-slate-800 font-medium text-xs',
-                            text: 'Copy'
-                        });
-                        btnCopy.addEventListener('click', (e) => {
-                            // executeNativeClipboardCopy(p.toClipboardString(), e.currentTarget);
-                        });
-
-                        const btnRemove = c('button', {
-                            classes: 'text-rose-500 hover:text-rose-700 font-medium text-xs',
-                            text: 'Remove'
-                        });
-                        btnRemove.addEventListener('click', async () => {
-                            const confirmRes = await G.swal.fire({
-                                title: 'Remove Patient?',
-                                text: `Are you sure you want to remove ${ui.name} from this list?`,
-                                icon: 'warning',
-                                showCancelButton: true,
-                                confirmButtonText: 'Yes, remove',
-                                confirmButtonColor: '#ef4444',
-                                cancelButtonColor: '#64748b'
-                            });
-
-                            if (!confirmRes.isConfirmed) return;
-
-                            try {
-                                // Pull record through internal tracking collections
-                                patientList.removePatient(p.id);
-
-                                // Map updated serial structures cleanly over primary reference pointers
-                                const masterLists = G.store.patients.data.lists;
-                                const index = masterLists.findIndex(l => String(l.id) === String(listId));
-                                if (index !== -1) {
-                                    G.store.patients.data.lists[index] = patientList.toJSON();
-                                    await G.store.patients.save();
-                                }
-
-                                // Trigger a re-render to refresh the list view
-                                this.render(listId);
-
-                                G.ui.swalSuccessShort('Removed successfully!')
-                            } catch (err) {
-                                G.ui.swalFatalError(err, 'Removal Failed', 'Could not delete record safely from storage:');
+                async render(listId) {
+                    try {
+                        G.swal.fire({
+                            title: 'Generating view...',
+                            text: 'Processing data, please wait.',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            showCloseButton: false,
+                            showConfirmButton: false,
+                            didOpen: () => {
+                                G.swal.showLoading()
                             }
-                        });
+                        })
 
-                        // Action wrapper layout row item
-                        const actionsContainer = c('div', { classes: 'flex items-center gap-3' }, [
-                            btnView,
-                            btnCopy,
-                            btnRemove
-                        ]);
+                        const myHomePanel = this.getPanel()
+                        if (!myHomePanel) return
+                        myHomePanel.innerHTML = ''
 
-                        return c('li', {
-                            classes: 'p-3 flex justify-between items-center hover:bg-slate-50 transition-colors'
-                        }, [infoContainer, actionsContainer]);
-                    });
+                        await Utils.sleep(500)
 
-                    // 4. Assemble the Consolidated Dom Wrapper Container Template Tree
-                    const listWrapperNode = c('ul', {
-                        classes: 'divide-y divide-slate-100 bg-white rounded-lg border border-slate-200 shadow-sm'
-                    }, patientRowNodes);
+                        const rawListData = G.store.patients.data.lists.find(list => String(list.id) === String(listId))
+                        if (!rawListData) return
 
-                    const pageLayoutWrapper = c('div', { classes: 'space-y-4' }, [
-                        headerBlock,
-                        listWrapperNode
-                    ]);
+                        const patientList = rawListData instanceof PatientList ? rawListData : PatientList.fromJSON(rawListData)
 
-                    // Inject compiled nodes into the DOM tree
-                    myHomePanel.appendChild(pageLayoutWrapper);
+                        const myPatientsRenderer = new MyPatientsRenderer()
+                        await myPatientsRenderer.init(
+                            myHomePanel,
+                            patientList,
+                            G.store.settings,
+                            G.hospitalManager.roomLookup,
+                            G.hospitalManager.docLookup,
+                        )
+                        await myPatientsRenderer.buildAndRender()
+
+                        G.swal.close()
+                    }
+                    catch (err) {
+                        G.ui.swalFatalError(
+                            err,
+                            'Render Failed',
+                            'The application encountered a fatal render error:',
+                        )
+                    }
                 },
                 reset() {
                     const myHomePanel = this.getPanel()
                     if (myHomePanel) {
-                        myHomePanel.innerHTML = `<div class="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                        myHomePanel.innerHTML = `
+                        <div class="opacity-0 animate-[fadeInUp_0.2s_ease-out_forwards] p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                         No lists found. Click the '+ Add New List' button in the sidebar to create your first patient list!</div>`
                     }
                 },
@@ -1320,6 +1222,10 @@ const G = {
                 resultStatusText,
             ])
 
+            statusBanner.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_forwards]')
+            criteriaContainer.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_100ms_forwards]')
+            resultTable.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_200ms_forwards]')
+
             const contentPane = c('div', { classes: 'space-y-3', attrs: { id: `pane-${tabId}` } }, [
                 statusBanner,
                 criteriaContainer,
@@ -1385,6 +1291,11 @@ const G = {
                 criteriaHeader.classList.replace('text-slate-500', 'text-slate-700')
                 toggleCriteriaSection(false)
             }
+            finally {
+                statusBanner.classList.remove('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_forwards]')
+                criteriaContainer.classList.remove('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_100ms_forwards]')
+                resultTable.classList.remove('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_200ms_forwards]')
+            }
         },
         renderPatientLookupResultTable(resultTable, completeDataset, currentGroupingMode = 'ROOM') {
             const c = Utils.DOM.createElement
@@ -1435,7 +1346,7 @@ const G = {
                 c('span', { text: ` from ${originalCount} record${originalCount === 1 ? '' : 's'} found.` }),
             ])
 
-            const headerLayoutWrapper = c('div', { classes: 'sticky top-0 z-30 pt-2 -mt-1 bg-white space-y-2 mb-4 rounded-b-lg shadow-lg' }, [
+            const headerLayoutWrapper = c('div', { classes: 'sticky top-0 z-30 pt-2 -mt-1 bg-white space-y-2 mb-4 rounded-b-lg shadow-lg overflow-hidden' }, [
                 c('div', { classes: 'flex gap-2' }, [btnCopyAll, btnAddAll]),
                 viewControls,
                 dataSummaryStrip,
@@ -1714,7 +1625,7 @@ const G = {
 
                 const descriptionText = isBulk
                     ? `Choose where to add <strong>${incomingPatients.length} patient${incomingPatients.length === 1 ? '' : 's'}</strong>:`
-                    : `Choose where to add <strong>${incomingPatients[0].processName(incomingPatients[0].name) || 'this patient'}</strong>:`;
+                    : `Choose where to add <strong>${incomingPatients[0].processName(incomingPatients[0].name) || 'this patient'}</strong>:`
 
                 const validOptionsHtml = []
                 listArray.forEach(listData => {
@@ -1845,6 +1756,37 @@ const G = {
             WARD_OPTIONS: SOEHADI_DATABASE.wardOptions,
         },
     },
+    hospitalManager: {
+        roomLookup: {},
+        docLookup: {},
+        init() {
+            this.roomLookup = {}
+            this.docLookup = {}
+
+            const ALL_HOSPITALS = Object.values(G.HOSPITAL)
+            for (const h of ALL_HOSPITALS) {
+                if (h?.DATABASE?.roomDatabase) {
+                    for (const r of Object.values(h.DATABASE.roomDatabase)) {
+                        const uniqueKey = `${h.ID}_${r.id}`
+                        this.roomLookup[uniqueKey] = {
+                            // hospital: h,
+                            hid: h.ID,
+                            room: r,
+                        }
+                    }
+                }
+                if (h?.DATABASE?.doctorDatabase) {
+                    for (const d of Object.values(h.DATABASE.doctorDatabase)) {
+                        const uniqueKey = `${h.ID}_${d.id}`
+                        this.docLookup[uniqueKey] = {
+                            hid: h.ID,
+                            doc: d,
+                        }
+                    }
+                }
+            }
+        },
+    },
     getActiveHospital() {
         const selectedHospitalKey = this.sidebar.targetHospitalSelect.value
         return this.HOSPITAL && this.HOSPITAL[selectedHospitalKey] ? this.HOSPITAL[selectedHospitalKey] : null
@@ -1944,4 +1886,4 @@ document.addEventListener('DOMContentLoaded', () => {
     Events.emit('entrypoint')
 })
 
-// window.G = G
+window.G = G
