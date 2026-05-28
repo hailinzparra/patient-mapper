@@ -202,18 +202,18 @@ export class Patient {
         )
     }
     static formatSOAPIText(soapObject) {
-        const s = soapObject?.s || soapObject?.subjective || '-';
-        const o = soapObject?.o || soapObject?.objective || '-';
-        const a = soapObject?.a || soapObject?.assessment || '-';
-        const p = soapObject?.p || soapObject?.planning || '-';
-        const i = soapObject?.i || soapObject?.instruction || '-';
+        const s = soapObject?.s || soapObject?.subjective || '.'
+        const o = soapObject?.o || soapObject?.objective || '.'
+        const a = soapObject?.a || soapObject?.assessment || '.'
+        const p = soapObject?.p || soapObject?.planning || '.'
+        const i = soapObject?.i || soapObject?.instruction || '.'
 
         return [
-            `Subjective (S):\n${s}`,
-            `Objective (O):\n${o}`,
-            `Assessment (A):\n${a}`,
-            `Planning (P):\n${p}`,
-            `Instruction (I):\n${i}`,
+            `Subjective (S)\n${s}`,
+            `Objective (O)\n${o}`,
+            `Assessment (A)\n${a}`,
+            `Planning (P)\n${p}`,
+            `Instruction (I)\n${i}`,
         ].join('\n\n')
     }
 }

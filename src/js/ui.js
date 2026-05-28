@@ -1,4 +1,4 @@
-import { Utils, VaultDriver } from './utils.js'
+import { Utils, VaultDriver, Tab, TabManager } from './utils.js'
 import { Patient, PatientList } from './clinical.js'
 import { ApiSoediranDriver } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
@@ -718,6 +718,7 @@ export class MyPatientsRenderer {
     patientList = new PatientList({})
     #settingsStore = null
     #patientsStore = null
+    #tabManager = new TabManager()
     // #roomLookup = {}
     // #docLookup = {}
 
@@ -745,7 +746,7 @@ export class MyPatientsRenderer {
         emptyRoomsContainer: null,
     }
 
-    async init(parentNode, patientList, settingsStore, patientsStore, roomLookup, docLookup) {
+    async init(parentNode, patientList, settingsStore, patientsStore, tabManager, roomLookup, docLookup) {
         if (!roomLookup || !docLookup || !(patientList instanceof PatientList) || !(parentNode instanceof HTMLElement)) {
             console.warn('Initialization failed: Invalid roomLookup, patientList, or parentNode.')
             return
@@ -755,6 +756,7 @@ export class MyPatientsRenderer {
         this.patientList = patientList
         this.#settingsStore = settingsStore
         this.#patientsStore = patientsStore
+        this.#tabManager = tabManager
         // this.#roomLookup = roomLookup
         // this.#docLookup = docLookup
 
@@ -1161,7 +1163,7 @@ export class MyPatientsRenderer {
 
         const badgeColorClass = theme === 'emerald' ? 'bg-emerald-500' : 'bg-slate-400'
         const textColorClass = theme === 'emerald' ? 'text-emerald-600' : 'text-slate-500'
-        const patientSubtitle = `${patientCount} record${patientCount === 1 ? '' : 's'}`
+        const recordSubtitle = `${patientCount} record${patientCount === 1 ? '' : 's'}`
 
         const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 rotate-180' }, [
             c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M19 9l-7 7-7-7' } }),
@@ -1178,8 +1180,8 @@ export class MyPatientsRenderer {
         const textStack = c('div', { classes: 'flex flex-col gap-0.5' }, [
             titleRow,
             c('span', {
-                classes: 'text-[10px] text-slate-400 font-normal uppercase group-hover:text-blue-500 transition-colors pl-3.5',
-                text: patientSubtitle,
+                classes: 'room-header-counter text-[10px] text-slate-400 font-normal uppercase group-hover:text-blue-500 transition-colors pl-3.5',
+                text: recordSubtitle,
             }),
         ])
 
@@ -1457,6 +1459,82 @@ export class MyPatientsRenderer {
             notesContainer,
         ])
     }
+    openPatientWorkspaceTab(p) {
+        if (!(p instanceof Patient) || !(this.#tabManager instanceof TabManager)) return
+
+        const tabId = `pat-details-${p.id}`
+        const tabName = `${p.name}`
+        const c = Utils.DOM.createElement
+
+        this.#tabManager.addTab(tabId, tabName, [], false)
+        this.#tabManager.open(tabId)
+    }
+    promptDeletePatient(patientId) {
+        const p = this.patientList.getPatient(patientId)
+        if (!p) return
+
+        const ui = p.getUIDisplayData() || {}
+        const confirmMessage = `Are you sure you want to remove patient "${ui.name || 'Unknown'}" (${ui.mrn || '-'}) from this list?`
+
+        if (window.confirm(confirmMessage)) {
+            this.executeInPlacePatientDeletion(p)
+        }
+    }
+    executeInPlacePatientDeletion(patientInstance) {
+        const patientId = patientInstance.id
+        const roomId = patientInstance.roomId
+
+        const patientWrapper = document.querySelector(`.patient-wrapper[data-id="${patientId}"], .compact-row[data-id="${patientId}"]`)
+        const roomCard = document.querySelector(`[data-room-id="${roomId}"]`)
+
+        this.patientList.removePatient(patientId)
+        this.savePatientsData()
+
+        if (patientWrapper) {
+            patientWrapper.remove()
+        }
+
+        if (roomCard) {
+            const remainingPatientIds = this.patientList.patientOrderMap[roomId] || []
+            const currentCount = remainingPatientIds.length
+
+            const countLabel = roomCard.querySelector('.room-count')
+            if (countLabel) {
+                countLabel.textContent = currentCount === 1 ? '1 Record' : `${currentCount} Records`
+            }
+
+            if (currentCount === 0) {
+                const slotsContainer = roomCard.patientSlotsContainer
+                if (slotsContainer) {
+                    slotsContainer.innerHTML = ''
+                    const c = Utils.DOM.createElement
+                    slotsContainer.append(
+                        c('p', { classes: 'text-[10px] italic text-slate-400 text-center py-2', text: 'No patients assigned' })
+                    )
+                }
+                const upBtn = roomCard.querySelector('.move-room-up')
+                const downBtn = roomCard.querySelector('.move-room-down')
+                if (upBtn) upBtn.remove()
+                if (downBtn) downBtn.remove()
+            }
+        }
+
+        const newTotalPatients = this.patientList.patients.length || 0
+        const recordCounterText = `${newTotalPatients} record${newTotalPatients === 1 ? '' : 's'}`
+        if (this.#nodes.assignedRoomsContainer) {
+            const totalPatientsBadge = this.#nodes.assignedRoomsContainer.querySelector('.room-header-counter')
+            if (totalPatientsBadge) {
+                totalPatientsBadge.textContent = recordCounterText
+            }
+        }
+        if (this.#nodes.headerCounter) {
+            this.#nodes.headerCounter.textContent = recordCounterText
+        }
+
+        if (this.patientList.patients.length === 0) {
+            this.buildListContainerDOM()
+        }
+    }
     handleRoomMove(roomId, direction) {
         const orderArray = this.patientList.roomOrder
         const currentIndex = orderArray.indexOf(roomId)
@@ -1552,7 +1630,7 @@ export class MyPatientsRenderer {
     }
     generateCopyAllNotesText() {
         const listTitle = this.patientList.name || 'Patient List'
-        let textOutput = `${listTitle} (${this.patientList.patients.length || 0})\n\n`
+        let textOutput = `${listTitle} (${this.patientList.patients.length || 0})\n\n\n`
 
         const patientLookup = new Map(this.patientList.patients.map(p => [p.id, p]))
         const roomBlocks = []
@@ -1599,7 +1677,7 @@ export class MyPatientsRenderer {
     }
     generateCopyAllRecordsText() {
         const listTitle = this.patientList.name || 'Patient List'
-        let textOutput = `${listTitle} (${this.patientList.patients.length || 0})\n\n`
+        let textOutput = `${listTitle} (${this.patientList.patients.length || 0})\n\n\n`
 
         const patientLookup = new Map(this.patientList.patients.map(p => [p.id, p]))
         const roomBlocks = []
@@ -1645,9 +1723,6 @@ export class MyPatientsRenderer {
         textOutput += roomBlocks.join('\n\n\n')
         return textOutput.trim()
     }
-    openPatientWorkspaceTab(p) {
-        console.log('open in new tabb', p)
-    }
     toggleNotesSlideOut(patientId) {
         console.log('toggle notes', patientId)
         if (this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_MINE) {
@@ -1656,8 +1731,5 @@ export class MyPatientsRenderer {
         if (this.#notesFilterDay === MyPatientsRenderer.DAYS.TODAY) {
             // Trigger the logic/click to select "Today" inside the DOM
         }
-    }
-    promptDeletePatient(patientId) {
-        console.log('deleting', patientId)
     }
 }

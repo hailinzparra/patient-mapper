@@ -1047,6 +1047,7 @@ const G = {
                             patientList,
                             G.store.settings,
                             G.store.patients,
+                            G.nav.tabs.myPatients,
                             G.hospitalManager.roomLookup,
                             G.hospitalManager.docLookup,
                         )
