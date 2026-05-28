@@ -1168,7 +1168,7 @@ const G = {
                 statusText,
             ])
 
-            const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 transform rotate-180' }, [
+            const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 rotate-180' }, [
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M19 9l-7 7-7-7' } }),
             ])
             const criteriaHeader = c('div', { classes: 'flex items-center justify-between p-1 cursor-not-allowed select-none transition-all duration-200 group text-slate-500 hover:text-blue-600' }, [
@@ -1357,7 +1357,7 @@ const G = {
 
             btnCopyAll.addEventListener('click', async (e) => {
                 const fullTextPayload = this.generateAllPatientsCopyText(sortedPrimaryGroups, currentGroupingMode)
-                await this.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
+                await Utils.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
             })
 
             btnAddAll.addEventListener('click', () => {
@@ -1419,7 +1419,7 @@ const G = {
                     const cardTextPayload = currentGroupingMode === 'ROOM'
                         ? this.generateRoomGroupCopyText(primaryGroup)
                         : this.generateDoctorGroupCopyText(primaryGroup)
-                    await this.executeNativeClipboardCopy(cardTextPayload, e.currentTarget, 'COPIED!')
+                    await Utils.executeNativeClipboardCopy(cardTextPayload, e.currentTarget, 'COPIED!')
                 })
 
                 const sortedSubGroups = Object.values(primaryGroup.subGroups).sort((a, b) =>
@@ -1473,7 +1473,7 @@ const G = {
 
                             btnCopy.addEventListener('click', async (e) => {
                                 const singleTextPayload = p.toClipboardString()
-                                await this.executeNativeClipboardCopy(singleTextPayload, e.currentTarget)
+                                await Utils.executeNativeClipboardCopy(singleTextPayload, e.currentTarget)
                             })
 
                             btnAdd.addEventListener('click', async () => {
@@ -1579,32 +1579,6 @@ const G = {
                     ? this.generateRoomGroupCopyText(group)
                     : this.generateDoctorGroupCopyText(group)
             }).join('\n\n\n')
-        },
-        async executeNativeClipboardCopy(textToCopy, feedbackEl, copiedText = 'Copied!') {
-            if (!textToCopy) return
-            try {
-                await navigator.clipboard.writeText(textToCopy)
-                if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
-                    const originalText = feedbackEl.innerText
-                    feedbackEl.innerText = copiedText
-                    setTimeout(() => {
-                        feedbackEl.innerText = originalText
-                    }, 1000)
-                }
-            } catch (err) {
-                this.swalFatalError(
-                    err,
-                    'Copy Failed',
-                    'The application encountered a fatal copy error:',
-                )
-                if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
-                    const originalText = feedbackEl.innerText
-                    feedbackEl.innerText = 'Error'
-                    setTimeout(() => {
-                        feedbackEl.innerText = originalText
-                    }, 1000)
-                }
-            }
         },
         async promptAndAddPatientToList(rawInput) {
             const listArray = G.store.patients?.data?.lists

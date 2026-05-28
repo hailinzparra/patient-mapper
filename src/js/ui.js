@@ -1027,7 +1027,7 @@ export class MyPatientsRenderer {
             text: 'Copy All Notes',
         })
 
-        const btnCopyPatients = c('button', {
+        const btnCopyRecords = c('button', {
             classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
             text: 'Copy All Records',
         })
@@ -1048,7 +1048,7 @@ export class MyPatientsRenderer {
         ])
 
         const headerLayoutWrapper = c('div', { classes: 'p-4 bg-white space-y-2 mb-4 rounded-lg shadow-sm overflow-hidden' }, [
-            c('div', { classes: 'flex gap-2' }, [btnCopyNotes, btnCopyPatients]),
+            c('div', { classes: 'flex gap-2' }, [btnCopyNotes, btnCopyRecords]),
             viewControls,
             // helperStrip,
         ])
@@ -1056,8 +1056,8 @@ export class MyPatientsRenderer {
         // ==========================================
         // DATA LAYOUT
         // ==========================================
-        const assignedRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[1000px] opacity-100 overflow-y-auto transition-all duration-300 ease-in-out mt-2' })
-        const emptyRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[1000px] opacity-100 overflow-y-auto transition-all duration-300 ease-in-out mt-2' })
+        const assignedRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 opacity-100 transition-opacity duration-300 ease-in-out overflow-y-auto mt-2' })
+        const emptyRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 opacity-100 transition-opacity duration-300 ease-in-out overflow-y-auto mt-2' })
 
         const instantiatedRoomCards = {}
 
@@ -1071,8 +1071,8 @@ export class MyPatientsRenderer {
             const roomName = this.#patientRoomMap.get(firstPatientId)
             if (!roomName) continue
 
-            const patientCount = patientIds.length
-            const roomCard = this.createRoomCard(roomId, roomName, patientCount)
+            const recordCount = patientIds.length
+            const roomCard = this.createRoomCard(roomId, roomName, recordCount)
             instantiatedRoomCards[roomId] = roomCard
             assignedRoomsBody.append(roomCard)
 
@@ -1134,13 +1134,14 @@ export class MyPatientsRenderer {
         // ==========================================
         // EVENT LISTENERS
         // ==========================================
-        btnCopyNotes.addEventListener('click', () => {
-            // this.promptAndAddPatientToList(uniqueDataset)
+        btnCopyNotes.addEventListener('click', async (e) => {
+            const allNotesPayload = this.generateCopyAllNotesText()
+            await Utils.executeNativeClipboardCopy(allNotesPayload, e.currentTarget)
         })
 
-        btnCopyPatients.addEventListener('click', async (e) => {
-            // const fullTextPayload = this.generateAllPatientsCopyText(sortedPrimaryGroups, currentGroupingMode)
-            // await this.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
+        btnCopyRecords.addEventListener('click', async (e) => {
+            const allRecordsPayload = this.generateCopyAllRecordsText()
+            await Utils.executeNativeClipboardCopy(allRecordsPayload, e.currentTarget)
         })
 
         viewControls.querySelectorAll('button[data-view-mode]').forEach(btn => {
@@ -1162,7 +1163,7 @@ export class MyPatientsRenderer {
         const textColorClass = theme === 'emerald' ? 'text-emerald-600' : 'text-slate-500'
         const patientSubtitle = `${patientCount} record${patientCount === 1 ? '' : 's'}`
 
-        const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 transform rotate-180' }, [
+        const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 rotate-180' }, [
             c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M19 9l-7 7-7-7' } }),
         ])
 
@@ -1191,10 +1192,10 @@ export class MyPatientsRenderer {
             isOpen = !isOpen
             if (isOpen) {
                 bodyContentNode.classList.remove('max-h-0', 'opacity-0')
-                bodyContentNode.classList.add('max-h-[1000px]', 'opacity-100', 'mt-2')
+                bodyContentNode.classList.add('opacity-100', 'mt-2')
                 chevronIcon.classList.add('rotate-180')
             } else {
-                bodyContentNode.classList.remove('max-h-[1000px]', 'opacity-100', 'mt-2')
+                bodyContentNode.classList.remove('opacity-100', 'mt-2')
                 bodyContentNode.classList.add('max-h-0', 'opacity-0')
                 chevronIcon.classList.remove('rotate-180')
             }
@@ -1204,7 +1205,7 @@ export class MyPatientsRenderer {
 
         return c('div', { classes: 'rooms-container mb-4' }, [header, bodyContentNode])
     }
-    createRoomCard(roomId, roomName, patientCount = 0) {
+    createRoomCard(roomId, roomName, recordCount = 0) {
         const c = Utils.DOM.createElement
 
         const btnUp = c('button', { classes: 'move-room-up p-0.5 hover:bg-slate-200 rounded text-slate-400' }, [
@@ -1223,14 +1224,12 @@ export class MyPatientsRenderer {
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
             ]),
         ])
-        const btnToggle = c('button', { classes: 'toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all' }, [
-            c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-transform', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-                c('path', { attrs: { d: 'M19 9l-7 7-7-7', 'stroke-width': '2.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } }),
-            ]),
+        const toggleIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-transform', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+            c('path', { attrs: { d: 'M19 9l-7 7-7-7', 'stroke-width': '2.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } }),
         ])
-
-        btnUp.addEventListener('click', () => this.handleRoomMove(roomId, 'up'))
-        btnDown.addEventListener('click', () => this.handleRoomMove(roomId, 'down'))
+        const btnToggle = c('button', { classes: 'toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all' }, [
+            toggleIcon,
+        ])
 
         const patientSlots = c('div', { classes: 'patient-list p-2 space-y-2' })
 
@@ -1246,7 +1245,7 @@ export class MyPatientsRenderer {
                         c('h4', { classes: 'text-[11px] font-black text-slate-700 uppercase leading-none mb-1', text: roomName }),
                         c('span', {
                             classes: 'room-count text-[9px] font-bold text-blue-500 uppercase tracking-tight',
-                            text: patientCount === 1 ? '1 Record' : `${patientCount} Records`
+                            text: recordCount === 1 ? '1 Record' : `${recordCount} Records`
                         })
                     ])
                 ]),
@@ -1257,6 +1256,21 @@ export class MyPatientsRenderer {
         ])
 
         cardWrapper.patientSlotsContainer = patientSlots
+
+        btnCopy.addEventListener('click', () => this.handleCopyRoomData(roomId, roomName, recordCount))
+
+        if (recordCount > 0) {
+            btnUp.addEventListener('click', () => this.handleRoomMove(roomId, 'up'))
+            btnDown.addEventListener('click', () => this.handleRoomMove(roomId, 'down'))
+        }
+        btnToggle.addEventListener('click', () => {
+            patientSlots.classList.toggle('hidden')
+            const isHidden = patientSlots.classList.contains('hidden')
+            toggleIcon.style.transform = isHidden ? 'rotate(-90deg)' : 'rotate(0deg)'
+        })
+        if (recordCount === 0) {
+            btnToggle.click()
+        }
 
         return cardWrapper
     }
@@ -1377,19 +1391,22 @@ export class MyPatientsRenderer {
             ]),
         ])
 
+        const statusClasses = ui.status === Patient.STATUS.ACTIVE
+            ? ['bg-emerald-50 border-emerald-100', 'bg-emerald-500 animate-pulse', 'text-emerald-600']
+            : ['bg-slate-50 border-slate-200', 'bg-slate-400', 'text-slate-600']
         const metadataBlock = c('div', { classes: 'flex items-center justify-between mt-1' }, [
             c('div', { classes: 'flex items-center gap-2 overflow-x-auto no-scrollbar' }, [
-                c('div', { classes: 'flex items-center bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full js-status-pill' }, [
-                    c('div', { classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 js-status-dot animate-pulse' }),
-                    c('span', { classes: 'text-[8px] font-black tracking-tight text-emerald-600 js-status-label', text: ui.status })
+                c('div', { classes: `flex items-center border px-2 py-0.5 rounded-full js-status-pill ${statusClasses[0]}` }, [
+                    c('div', { classes: `w-1.5 h-1.5 rounded-full mr-1.5 js-status-dot ${statusClasses[1]}` }),
+                    c('span', { classes: `text-[8px] font-black tracking-tight js-status-label ${statusClasses[2]}`, text: ui.status }),
                 ]),
                 c('div', { classes: 'flex items-center bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full' }, [
                     c('span', { classes: 'text-[8px] font-black text-blue-400 mr-1 tracking-tighter', text: 'In:' }),
-                    c('span', { classes: 'text-[8px] font-bold text-blue-700 whitespace-nowrap js-adm-date', text: ui.admText })
+                    c('span', { classes: 'text-[8px] font-bold text-blue-700 whitespace-nowrap js-adm-date', text: ui.admText }),
                 ]),
                 c('div', { classes: 'flex items-center bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full' }, [
                     c('span', { classes: 'text-[8px] font-black text-slate-400 mr-1 tracking-tighter', text: 'Out:' }),
-                    c('span', { classes: 'text-[8px] font-bold text-slate-600 whitespace-nowrap js-dis-date', text: ui.disText })
+                    c('span', { classes: 'text-[8px] font-bold text-slate-600 whitespace-nowrap js-dis-date', text: ui.disText }),
                 ]),
             ]),
             c('button', { classes: 'refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group' }, [
@@ -1496,6 +1513,137 @@ export class MyPatientsRenderer {
 
         this.patientList.reorderPatientsInRoom(roomId, currentIndex, targetIndex)
         this.savePatientsData()
+    }
+    handleCopyRoomData(roomId, roomName, patientCount) {
+        const patientIds = this.patientList.patientOrderMap[roomId] || []
+        let textOutput = `*${roomName} (${patientCount})*\n\n`
+
+        const patientBlocks = []
+
+        for (const patientId of patientIds) {
+            const p = this.patientList.getPatient(patientId)
+            if (!p) continue
+
+            const ui = p.getUIDisplayData() || {}
+            const docName = this.#patientDocMap.get(p.id)
+            const soapObject = p.soap || null
+            const soapText = Patient.formatSOAPIText(soapObject)
+            const block = [
+                `${p.toClipboardString()}`,
+                `Physician in charge: ${docName}`,
+                `Admission date: ${ui.admText}`,
+                `Discharge date: ${ui.disText}`,
+                `\n${soapText}`,
+            ].join('\n')
+
+            patientBlocks.push(block)
+        }
+
+        textOutput += patientBlocks.join('\n\n\n')
+
+        const toast = Utils.UI.toast
+        navigator.clipboard.writeText(textOutput.trim())
+            .then(() => {
+                toast.pop(`Copied! (${roomName})`, toast.type.success)
+            })
+            .catch(err => {
+                toast.pop(`Copy failed (${roomName})`, toast.type.error)
+            })
+    }
+    generateCopyAllNotesText() {
+        const listTitle = this.patientList.name || 'Patient List'
+        let textOutput = `${listTitle} (${this.patientList.patients.length || 0})\n\n`
+
+        const patientLookup = new Map(this.patientList.patients.map(p => [p.id, p]))
+        const roomBlocks = []
+
+        for (const roomId of this.patientList.roomOrder) {
+            const patientIds = this.patientList.patientOrderMap[roomId] || []
+            if (patientIds.length === 0) continue
+
+            const firstPatientId = patientIds[0]
+            const roomName = this.#patientRoomMap.get(firstPatientId)
+            if (!roomName) continue
+
+            const patientCount = patientIds.length
+            let roomText = `*${roomName} (${patientCount})*\n\n`
+            const patientBlocks = []
+
+            for (const patientId of patientIds) {
+                const p = patientLookup.get(patientId)
+                if (!p) continue
+
+                const ui = p.getUIDisplayData() || {}
+                const docName = this.#patientDocMap.get(p.id)
+
+                const soapObject = p.soap || null
+                const soapText = Patient.formatSOAPIText(soapObject)
+
+                const block = [
+                    `${p.toClipboardString()}`,
+                    `Physician in charge: ${docName}`,
+                    `Admission date: ${ui.admText}`,
+                    `Discharge date: ${ui.disText}`,
+                    `\n${soapText}`
+                ].join('\n')
+
+                patientBlocks.push(block)
+            }
+
+            roomText += patientBlocks.join('\n\n\n')
+            roomBlocks.push(roomText)
+        }
+
+        textOutput += roomBlocks.join('\n\n\n')
+        return textOutput.trim()
+    }
+    generateCopyAllRecordsText() {
+        const listTitle = this.patientList.name || 'Patient List'
+        let textOutput = `${listTitle} (${this.patientList.patients.length || 0})\n\n`
+
+        const patientLookup = new Map(this.patientList.patients.map(p => [p.id, p]))
+        const roomBlocks = []
+
+        for (const roomId of this.patientList.roomOrder) {
+            const patientIds = this.patientList.patientOrderMap[roomId] || []
+            if (patientIds.length === 0) continue
+
+            const firstPatientId = patientIds[0]
+            const roomName = this.#patientRoomMap.get(firstPatientId)
+            if (!roomName) continue
+
+            const patientCount = patientIds.length
+            let roomBlockText = `*${roomName} (${patientCount})*\n\n`
+
+            const doctorGroupMap = new Map()
+
+            for (const patientId of patientIds) {
+                const p = patientLookup.get(patientId)
+                if (!p) continue
+
+                const docName = this.#patientDocMap.get(p.id) || 'No Doctor Assigned'
+
+                if (!doctorGroupMap.has(docName)) {
+                    doctorGroupMap.set(docName, [])
+                }
+                doctorGroupMap.get(docName).push(p)
+            }
+
+            const doctorSegments = []
+            for (const [docName, patients] of doctorGroupMap.entries()) {
+                const lines = [`${docName} (${patients.length})`]
+                for (const p of patients) {
+                    lines.push(`- ${p.toClipboardString()}`)
+                }
+                doctorSegments.push(lines.join('\n'))
+            }
+
+            roomBlockText += doctorSegments.join('\n\n')
+            roomBlocks.push(roomBlockText)
+        }
+
+        textOutput += roomBlocks.join('\n\n\n')
+        return textOutput.trim()
     }
     openPatientWorkspaceTab(p) {
         console.log('open in new tabb', p)

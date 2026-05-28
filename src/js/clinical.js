@@ -7,6 +7,11 @@ export class Patient {
     }
     static FEMALE = 0
     static MALE = 1
+    static STATUS = {
+        INACTIVE: 'Inactive', // cancelled or deceased
+        ACTIVE: 'Active',
+        DISCHARGED: 'Discharged',
+    }
 
     constructor({
         id,
@@ -90,18 +95,19 @@ export class Patient {
         if (!this.admDate) return null
         try {
             const start = new Date(this.admDate)
-            const end = this.disDate ? new Date(this.disDate) : new Date()
+            const isDischarged = !!this.disDate
+            const end = isDischarged ? new Date(this.disDate) : new Date()
 
             if (isNaN(start.getTime()) || isNaN(end.getTime())) return null
 
             const totalMilliseconds = end - start
-            if (totalMilliseconds < 0) return { d: 0, h: 0 }
+            if (totalMilliseconds < 0) return { d: 0, h: 0, isDischarged }
 
             const totalHours = Math.floor(totalMilliseconds / (1000 * 60 * 60))
             const days = Math.floor(totalHours / 24)
             const hours = totalHours % 24
 
-            return { d: days, h: hours }
+            return { d: days, h: hours, isDischarged }
         } catch (e) {
             return null
         }
@@ -139,7 +145,7 @@ export class Patient {
         const gender = this.getGenderText().short
         const admText = this.getDateText(this.admDate)
         const disText = this.getDateText(this.disDate)
-        const status = this.disDate ? 'Finished' : 'Active'
+        const status = !!this.disDate ? Patient.STATUS.DISCHARGED : Patient.STATUS.ACTIVE
         const lastUp = Utils.formatFullTimestamp(this.lastUpdated)
 
         let age = '??y'
@@ -152,7 +158,8 @@ export class Patient {
         const losObj = this.losMetrics
         if (losObj) {
             const text = `${losObj.d}d ${losObj.h}h`
-            const isFresh = ((losObj.d * 24) + losObj.h) < 24
+            const hoursTotal = (losObj.d * 24) + losObj.h
+            const isFresh = hoursTotal < 24 && !losObj.isDischarged
             los = { text, isFresh }
         }
 
@@ -193,6 +200,21 @@ export class Patient {
             clean(d1.admDate) === clean(d2.admDate) &&
             clean(d1.disDate) === clean(d2.disDate)
         )
+    }
+    static formatSOAPIText(soapObject) {
+        const s = soapObject?.s || soapObject?.subjective || '-';
+        const o = soapObject?.o || soapObject?.objective || '-';
+        const a = soapObject?.a || soapObject?.assessment || '-';
+        const p = soapObject?.p || soapObject?.planning || '-';
+        const i = soapObject?.i || soapObject?.instruction || '-';
+
+        return [
+            `Subjective (S):\n${s}`,
+            `Objective (O):\n${o}`,
+            `Assessment (A):\n${a}`,
+            `Planning (P):\n${p}`,
+            `Instruction (I):\n${i}`,
+        ].join('\n\n')
     }
 }
 
