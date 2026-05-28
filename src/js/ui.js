@@ -832,8 +832,8 @@ export class MyPatientsRenderer {
         const patientCounterText = `${totalPatients} record${totalPatients === 1 ? '' : 's'}`
 
         this.#nodes.headerCounter = c('div', { classes: 'my-patients-counter bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100', text: patientCounterText })
-        this.#nodes.headerTitle = c('div', { classes: 'my-patients-title text-[13px] font-bold tracking-wide mb-1 break-all line-clamp-3', attrs: { 'data-list-id': this.patientList.id }, text: titleText })
-        this.#nodes.header = c('div', { classes: 'p-3 text-center bg-white text-slate-500 rounded-xl border border-slate-200 overflow-hidden' }, [
+        this.#nodes.headerTitle = c('div', { classes: 'my-patients-title text-[13px] font-bold tracking-wide break-all line-clamp-3', attrs: { 'data-list-id': this.patientList.id }, text: titleText })
+        this.#nodes.header = c('div', { classes: 'flex items-center justify-between gap-4 p-3 text-center bg-white text-slate-800 rounded-xl border border-slate-200 overflow-hidden' }, [
             this.#nodes.headerTitle,
             this.#nodes.headerCounter,
         ])
@@ -888,7 +888,7 @@ export class MyPatientsRenderer {
         const btnBatchRefresh = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors group' }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Refresh' }),
-                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Refresh all patients' })
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Refresh all records' })
             ]),
             c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4 group-active:rotate-180 transition-transform duration-500' }, [
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } })
@@ -898,7 +898,7 @@ export class MyPatientsRenderer {
         const btnBatchNotes = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors' }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Open Notes' }),
-                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: "Open all patients' notes" })
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: "Open all records' notes" })
             ]),
             c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' } })
@@ -991,7 +991,7 @@ export class MyPatientsRenderer {
         const totalPatients = this.patientList.patients.length || 0
 
         if (!this.#nodes.listContainer) {
-            this.#nodes.listContainer = c('div', { classes: 'p-4 bg-white border border-slate-200 rounded-xl text-xs text-slate-500' })
+            this.#nodes.listContainer = c('div', { classes: 'rounded-xl' })
         }
 
         this.#nodes.listContainer.innerHTML = ''
@@ -1012,13 +1012,13 @@ export class MyPatientsRenderer {
         // HEADER LAYOUT
         // ==========================================
         const btnCopyNotes = c('button', {
-            classes: 'flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+            classes: 'flex-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
             text: 'Copy All Notes*',
         })
 
         const btnCopyPatients = c('button', {
             classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
-            text: 'Copy All Patients',
+            text: 'Copy All Records',
         })
 
         const getTabClass = (isActive, colorClass = 'text-blue-600') => isActive
@@ -1036,7 +1036,7 @@ export class MyPatientsRenderer {
             c('span', { html: `*To copy a note: <strong>Open it</strong> and use filters to ensure it appears as the <strong>first item</strong>. Leave notes closed to exclude them.` }),
         ])
 
-        const headerLayoutWrapper = c('div', { classes: 'sticky top-0 z-30 pt-2 -mt-1 bg-white space-y-2 mb-4 rounded-b-lg shadow-lg overflow-hidden' }, [
+        const headerLayoutWrapper = c('div', { classes: 'sticky top-0 z-30 p-4 -mt-1 bg-white space-y-2 mb-4 rounded-lg shadow-sm overflow-hidden' }, [
             c('div', { classes: 'flex gap-2' }, [btnCopyNotes, btnCopyPatients]),
             viewControls,
             helperStrip,
@@ -1082,7 +1082,7 @@ export class MyPatientsRenderer {
         const totalEmptyPatients = 0
 
         this.#nodes.filledRoomsContainer = this.createCollapsibleSection(
-            'Occupied Rooms',
+            'Assigned Rooms',
             totalOccupiedRooms,
             totalOccupiedPatients,
             'emerald',
@@ -1090,7 +1090,7 @@ export class MyPatientsRenderer {
         )
 
         this.#nodes.emptyRoomsContainer = this.createCollapsibleSection(
-            'Empty Rooms',
+            'Unassigned Rooms',
             totalEmptyRooms,
             totalEmptyPatients,
             'slate',
@@ -1223,7 +1223,7 @@ export class MyPatientsRenderer {
                         c('h4', { classes: 'text-[11px] font-black text-slate-700 uppercase leading-none mb-1', text: roomName }),
                         c('span', {
                             classes: 'room-count text-[9px] font-bold text-blue-500 uppercase tracking-tight',
-                            text: patientCount === 1 ? '1 Patient' : `${patientCount} Patients`
+                            text: patientCount === 1 ? '1 Record' : `${patientCount} Records`
                         })
                     ])
                 ]),
@@ -1264,36 +1264,33 @@ export class MyPatientsRenderer {
         btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p.id))
         btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id))
 
-        let genderColorClass = 'text-slate-400'
-        if (p.gender === Patient.MALE) genderColorClass = 'text-blue-500 font-bold'
-        if (p.gender === Patient.FEMALE) genderColorClass = 'text-rose-500 font-bold'
-
         // ==========================================
         // BRANCH A: COMPACT VIEW
         // ==========================================
+        let genderColorClass = 'text-slate-400'
+        if (p.gender === Patient.MALE) genderColorClass = 'text-blue-500'
+        if (p.gender === Patient.FEMALE) genderColorClass = 'text-rose-500'
         if (this.#viewMode === MyPatientsRenderer.VIEWS.COMPACT) {
-            const losBadgeClasses = ui.los?.isFresh
-                ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-100 text-amber-800 border-amber-200 tracking-tighter ml-1'
-                : 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter ml-1'
+            const losBadgeClasses = ui.los.isFresh
+                ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-50 text-amber-700 border-amber-200 tracking-tighter mr-1'
+                : 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter mr-1'
 
             const dataContainer = c('div', { classes: 'text-xs font-medium text-slate-700 leading-relaxed patient-data truncate flex-1 pr-2' }, [
+                ui.los.text !== '??' ? c('span', { classes: losBadgeClasses, text: ui.los.text }) : null,
                 c('span', { classes: 'font-bold text-slate-400', text: ui.bedName }),
                 c('span', { text: '/' }),
-                c('span', { classes: genderColorClass, text: ui.gender }),
+                c('span', { classes: `font-bold ${genderColorClass}`, text: ui.gender }),
                 c('span', { text: '/' }),
                 c('span', { classes: 'font-bold text-slate-900', text: ui.name }),
                 c('span', { text: '/' }),
-                c('span', { classes: 'text-slate-500 font-mono', text: ui.mrn }),
+                c('span', { classes: 'text-slate-500', text: ui.mrn }),
                 c('span', { text: '/' }),
                 c('span', { classes: 'text-slate-500', text: ui.age }),
-                // c('span', { text: '/' }),
-                // c('span', { classes: 'text-blue-600 font-semibold', text: ui.dx }),
-                ui.los.text !== '??' ? c('span', { classes: losBadgeClasses, text: ui.los.text }) : null
             ])
 
             const compactActions = c('div', { classes: 'actions flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity' }, [
                 btnOpenDetails,
-                btnNotes,
+                // btnNotes,
                 btnDelete,
             ])
 
@@ -1309,12 +1306,15 @@ export class MyPatientsRenderer {
         // ==========================================
         // BRANCH B: FULL VIEW
         // ==========================================
-        const bedBlock = c('div', { classes: 'bed-info flex flex-col items-center justify-center min-w-[55px] px-1 py-2 bg-slate-100 border-slate-200 rounded-lg border transition-colors duration-500' }, [
+        const bedBlockColorClasses = ui.los.isFresh
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-slate-100 border-slate-200'
+        const bedBlock = c('div', { classes: `bed-info flex flex-col items-center justify-center min-w-[55px] px-1 py-2 rounded-lg border ${bedBlockColorClasses} transition-colors duration-500` }, [
             c('span', { classes: 'text-[8px] font-black text-slate-400 uppercase leading-none mb-1', text: 'Bed' }),
             c('span', { classes: 'text-[11px] font-black text-blue-700 max-w-[50px] truncate', text: ui.bedName }),
             c('div', { classes: 'mt-1.5 pt-1 border-t border-black/5 w-full flex justify-center' }, [
                 c('span', {
-                    classes: 'los-text text-[9px] font-bold text-slate-500 leading-none',
+                    classes: `los-text text-[9px] font-bold ${ui.los.isFresh ? 'text-amber-700' : 'text-slate-500'} leading-none`,
                     text: ui.los.text,
                 }),
             ]),

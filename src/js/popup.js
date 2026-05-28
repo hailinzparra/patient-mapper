@@ -575,7 +575,7 @@ const G = {
         },
         async openListDataModal(patientList, listBtn, rowWrapper) {
             const count = patientList.patients.length
-            const localizedDate = new Date(PatientList.getLastUpdated(patientList) || Date.now()).toLocaleDateString()
+            const lastUpText = PatientList.getLastUpdatedText(patientList)
             const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0', 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 text-left',
                 'flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 hover:border-slate-300 rounded-md text-xs font-bold bg-white hover:bg-slate-50 active:bg-slate-100 shadow-sm transition cursor-pointer',
                 'class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"',
@@ -586,7 +586,7 @@ const G = {
                 <div class="${cls[0]}"><span class="${cls[1]}">List Name:</span><span class="font-medium text-slate-800">${patientList.name}</span></div>
                 <div class="${cls[0]}"><span class="${cls[1]}">Total Records:</span>
                 <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100">${count} record${count === 1 ? '' : 's'}</span></div>
-                <div class="${cls[0]}"><span class="${cls[1]}">Last Updated:</span><span class="text-slate-700">${localizedDate}</span></div></div>
+                <div class="${cls[0]}"><span class="${cls[1]}">Last Updated:</span><span class="text-slate-700">${lastUpText}</span></div></div>
                 <div class="w-full mb-3"><label for="swal-input-name" class="${cls[2]}">Rename List</label>
                 <input id="swal-input-name" type="text"
                     class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-800 placeholder-slate-400 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
@@ -1317,12 +1317,12 @@ const G = {
 
             const btnCopyAll = c('button', {
                 classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
-                text: 'Copy All Patients',
+                text: 'Copy All Records',
             })
 
             const btnAddAll = c('button', {
                 classes: 'flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
-                text: 'Add All Patients',
+                text: 'Add All Records',
             })
 
             const getTabClass = (isActive, colorClass = 'text-blue-600') => isActive
@@ -1407,7 +1407,7 @@ const G = {
                 })
                 const totalBadge = c('span', {
                     classes: `${currentTheme.badge} text-white text-center text-[9px] font-bold px-2 py-0.5 rounded-full`,
-                    text: `${primaryGroup.subPatientsTotal} PATIENT${primaryGroup.subPatientsTotal !== 1 ? 'S' : ''}`,
+                    text: `${primaryGroup.subPatientsTotal} RECORD${primaryGroup.subPatientsTotal !== 1 ? 'S' : ''}`,
                 })
                 const cardHeader = c('div', { classes: `${currentTheme.bg} px-3 py-1.5 flex justify-between items-center` }, [
                     c('span', { classes: 'text-[11px] font-black text-white uppercase tracking-widest', text: primaryGroup.primaryName }),
@@ -1437,12 +1437,12 @@ const G = {
                             const ui = p.getUIDisplayData()
                             let genderColorClass = 'text-slate-400'
                             if (p.gender === Patient.MALE) {
-                                genderColorClass = 'text-blue-500 font-bold'
+                                genderColorClass = 'text-blue-500'
                             } else if (p.gender === Patient.FEMALE) {
-                                genderColorClass = 'text-rose-500 font-bold'
+                                genderColorClass = 'text-rose-500'
                             }
                             const losBadgeClasses = ui.los.isFresh
-                                ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-100 text-amber-800 border-amber-200 tracking-tighter ml-1'
+                                ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-50 text-amber-700 border-amber-200 tracking-tighter ml-1'
                                 : 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter ml-1'
                             const dataContainer = c('div', { classes: 'text-xs font-medium text-slate-700 leading-relaxed patient-data' }, [
                                 c('span', { classes: 'font-bold text-slate-400', text: ui.bedName }),
@@ -1624,7 +1624,7 @@ const G = {
                     : [rawInput instanceof Patient ? rawInput : new Patient(rawInput)]
 
                 const descriptionText = isBulk
-                    ? `Choose where to add <strong>${incomingPatients.length} patient${incomingPatients.length === 1 ? '' : 's'}</strong>:`
+                    ? `Choose where to add <strong>${incomingPatients.length} record${incomingPatients.length === 1 ? '' : 's'}</strong>:`
                     : `Choose where to add <strong>${incomingPatients[0].processName(incomingPatients[0].name) || 'this patient'}</strong>:`
 
                 const validOptionsHtml = []
@@ -1646,7 +1646,7 @@ const G = {
                             : `<span class="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap shrink-0">${isBulk ? `${duplicateCount} ` : ''}already exist${duplicateCount === 1 ? 's' : ''}</span>`
                     }
 
-                    const recordsHtml = `<span class="text-blue-700">${count} patient${count === 1 ? '' : 's'}</span>`
+                    const recordsHtml = `<span class="text-blue-700">${count} record${count === 1 ? '' : 's'}</span>`
 
                     validOptionsHtml.push(`
                     <label class="flex items-center justify-between p-2.5 border border-slate-200 bg-white hover:bg-slate-50 rounded-md shadow-sm cursor-pointer transition active:scale-[0.99] overflow-x-hidden">
@@ -1668,7 +1668,7 @@ const G = {
                         <div class="space-y-2 max-h-[280px] overflow-x-hidden overflow-y-auto px-1 py-1">${validOptionsHtml.join('')}</div>
                     `,
                     showCancelButton: true,
-                    confirmButtonText: isBulk ? 'Add All Patients' : 'Add Patient',
+                    confirmButtonText: isBulk ? 'Add All Records' : 'Add Record',
                     preConfirm() {
                         const checkedRadio = document.querySelector('input[name="swal-patient-list-select"]:checked')
                         if (!checkedRadio) {

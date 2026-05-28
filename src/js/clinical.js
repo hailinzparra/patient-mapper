@@ -286,7 +286,7 @@ export class PatientList {
             patientOrderMap: data.patientOrderMap || {},
         })
     }
-    static getLastUpdated(patientList) {
+    static getLastUpdatedText(patientList) {
         const patients = patientList?.patients
         if (!patients || patients.length === 0) return null
         const timestamps = patients
