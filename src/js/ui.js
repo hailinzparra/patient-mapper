@@ -717,6 +717,7 @@ export class MyPatientsRenderer {
     parentNode = document.createElement('div')
     patientList = new PatientList({})
     #settingsStore = null
+    #patientsStore = null
     // #roomLookup = {}
     // #docLookup = {}
 
@@ -740,11 +741,11 @@ export class MyPatientsRenderer {
         settings: null,
 
         listContainer: null,
-        filledRoomsContainer: null,
+        assignedRoomsContainer: null,
         emptyRoomsContainer: null,
     }
 
-    async init(parentNode, patientList, settingsStore, roomLookup, docLookup) {
+    async init(parentNode, patientList, settingsStore, patientsStore, roomLookup, docLookup) {
         if (!roomLookup || !docLookup || !(patientList instanceof PatientList) || !(parentNode instanceof HTMLElement)) {
             console.warn('Initialization failed: Invalid roomLookup, patientList, or parentNode.')
             return
@@ -753,21 +754,26 @@ export class MyPatientsRenderer {
         this.parentNode = parentNode
         this.patientList = patientList
         this.#settingsStore = settingsStore
+        this.#patientsStore = patientsStore
         // this.#roomLookup = roomLookup
         // this.#docLookup = docLookup
 
         this.reloadSettingsData()
 
-        const filledRoomKeys = new Set()
+        const assignedRoomKeys = new Set()
         this.patientUiMeta = []
 
         for (const p of this.patientList.patients) {
             const roomKey = `${p.hid}_${p.roomId}`
             const roomMatch = roomLookup[roomKey]
-            const roomName = (roomMatch && roomMatch.room) ? roomMatch.room.name : `Room ${p.roomId}`
+            const roomName = (roomMatch && roomMatch.room)
+                ? roomMatch.room.name
+                : p.roomId ? `Room ${p.roomId}` : 'Unknown Room'
             const docKey = `${p.hid}_${p.docId}`
             const docMatch = docLookup[docKey]
-            const docName = (docMatch && docMatch.doc) ? docMatch.doc.name : `Doctor ${p.docId}`
+            const docName = (docMatch && docMatch.doc)
+                ? docMatch.doc.name
+                : p.docId ? `Doctor ${p.docId}` : 'No Doctor Assigned'
 
             this.patientUiMeta.push({
                 id: p.id,
@@ -776,7 +782,7 @@ export class MyPatientsRenderer {
             })
 
             if (roomMatch) {
-                filledRoomKeys.add(roomKey)
+                assignedRoomKeys.add(roomKey)
             }
         }
 
@@ -784,7 +790,7 @@ export class MyPatientsRenderer {
         this.#patientDocMap = new Map(this.patientUiMeta.map(m => [m.id, m.docName]))
 
         this.emptyRooms = Object.keys(roomLookup)
-            .filter(key => (!filledRoomKeys.has(key) && roomLookup[key].hid === this.#activeHospitalId))
+            .filter(key => (!assignedRoomKeys.has(key) && roomLookup[key].hid === this.#activeHospitalId))
             .map(key => roomLookup[key])
         this.emptyRooms.sort((a, b) => a.room.name.localeCompare(b.room.name))
     }
@@ -792,6 +798,11 @@ export class MyPatientsRenderer {
         const store = this.#settingsStore
         if (!(store instanceof VaultDriver)) return
         await store.update(newData)
+    }
+    async savePatientsData() {
+        const store = this.#patientsStore
+        if (!(store instanceof VaultDriver)) return
+        await store.update({ lists: G.store.patients.data.lists })
     }
     getSettingsData() {
         const store = this.#settingsStore
@@ -831,7 +842,7 @@ export class MyPatientsRenderer {
         const totalPatients = this.patientList.patients.length || 0
         const patientCounterText = `${totalPatients} record${totalPatients === 1 ? '' : 's'}`
 
-        this.#nodes.headerCounter = c('div', { classes: 'my-patients-counter bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100', text: patientCounterText })
+        this.#nodes.headerCounter = c('div', { classes: 'my-patients-counter text-blue-700 font-bold px-2 py-0.5 text-[13px] uppercase', text: patientCounterText })
         this.#nodes.headerTitle = c('div', { classes: 'my-patients-title text-[13px] font-bold tracking-wide break-all line-clamp-3', attrs: { 'data-list-id': this.patientList.id }, text: titleText })
         this.#nodes.header = c('div', { classes: 'flex items-center justify-between gap-4 p-3 text-center bg-white text-slate-800 rounded-xl border border-slate-200 overflow-hidden' }, [
             this.#nodes.headerTitle,
@@ -1013,7 +1024,7 @@ export class MyPatientsRenderer {
         // ==========================================
         const btnCopyNotes = c('button', {
             classes: 'flex-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
-            text: 'Copy All Notes*',
+            text: 'Copy All Notes',
         })
 
         const btnCopyPatients = c('button', {
@@ -1036,33 +1047,42 @@ export class MyPatientsRenderer {
             c('span', { html: `*To copy a note: <strong>Open it</strong> and use filters to ensure it appears as the <strong>first item</strong>. Leave notes closed to exclude them.` }),
         ])
 
-        const headerLayoutWrapper = c('div', { classes: 'sticky top-0 z-30 p-4 -mt-1 bg-white space-y-2 mb-4 rounded-lg shadow-sm overflow-hidden' }, [
+        const headerLayoutWrapper = c('div', { classes: 'p-4 bg-white space-y-2 mb-4 rounded-lg shadow-sm overflow-hidden' }, [
             c('div', { classes: 'flex gap-2' }, [btnCopyNotes, btnCopyPatients]),
             viewControls,
-            helperStrip,
+            // helperStrip,
         ])
 
         // ==========================================
         // DATA LAYOUT
         // ==========================================
-        const filledRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[1000px] opacity-100 overflow-y-auto transition-all duration-300 ease-in-out mt-2' })
+        const assignedRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[1000px] opacity-100 overflow-y-auto transition-all duration-300 ease-in-out mt-2' })
         const emptyRoomsBody = c('div', { classes: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[1000px] opacity-100 overflow-y-auto transition-all duration-300 ease-in-out mt-2' })
 
         const instantiatedRoomCards = {}
 
-        const orderedPatientList = this.patientList.patients
-        for (const p of orderedPatientList) {
-            const roomName = this.#patientRoomMap.get(p.id)
-            const docName = this.#patientDocMap.get(p.id)
+        const patientLookup = new Map(this.patientList.patients.map(p => [p.id, p]))
+
+        for (const roomId of this.patientList.roomOrder) {
+            const patientIds = this.patientList.patientOrderMap[roomId] || []
+            if (patientIds.length === 0) continue
+
+            const firstPatientId = patientIds[0]
+            const roomName = this.#patientRoomMap.get(firstPatientId)
             if (!roomName) continue
-            if (!instantiatedRoomCards[p.roomId]) {
-                const patientCount = 0 // find a way
-                const roomCard = this.createRoomCard(p.roomId, roomName, patientCount)
-                instantiatedRoomCards[p.roomId] = roomCard
-                filledRoomsBody.append(roomCard)
+
+            const patientCount = patientIds.length
+            const roomCard = this.createRoomCard(roomId, roomName, patientCount)
+            instantiatedRoomCards[roomId] = roomCard
+            assignedRoomsBody.append(roomCard)
+
+            for (const patientId of patientIds) {
+                const p = patientLookup.get(patientId)
+                if (!p) continue
+                const docName = this.#patientDocMap.get(p.id)
+                const patientCard = this.createPatientCard(p, docName)
+                roomCard.patientSlotsContainer.append(patientCard)
             }
-            const patientCard = this.createPatientCard(p, docName)
-            instantiatedRoomCards[p.roomId].patientSlotsContainer.append(patientCard)
         }
 
         if (this.emptyRooms && this.emptyRooms.length > 0) {
@@ -1075,18 +1095,18 @@ export class MyPatientsRenderer {
             }
         }
 
-        const totalOccupiedRooms = Object.keys(instantiatedRoomCards).length
-        const totalOccupiedPatients = this.patientList.patients.length
+        const totalAssignedRooms = Object.keys(instantiatedRoomCards).length
+        const totalAssignedPatients = this.patientList.patients.length
 
         const totalEmptyRooms = this.emptyRooms ? this.emptyRooms.length : 0
         const totalEmptyPatients = 0
 
-        this.#nodes.filledRoomsContainer = this.createCollapsibleSection(
+        this.#nodes.assignedRoomsContainer = this.createCollapsibleSection(
             'Assigned Rooms',
-            totalOccupiedRooms,
-            totalOccupiedPatients,
+            totalAssignedRooms,
+            totalAssignedPatients,
             'emerald',
-            filledRoomsBody,
+            assignedRoomsBody,
         )
 
         this.#nodes.emptyRoomsContainer = this.createCollapsibleSection(
@@ -1100,11 +1120,11 @@ export class MyPatientsRenderer {
 
         this.#nodes.emptyRoomsContainer.classList.remove('mb-4')
 
-        this.#nodes.filledRoomsContainer.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_forwards]')
+        this.#nodes.assignedRoomsContainer.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_forwards]')
         this.#nodes.emptyRoomsContainer.classList.add('opacity-0', 'animate-[fadeInUp_0.2s_ease-out_100ms_forwards]')
 
         const dataLayoutWrapper = c('div', { classes: 'space-y-4' }, [
-            this.#nodes.filledRoomsContainer,
+            this.#nodes.assignedRoomsContainer,
             this.#nodes.emptyRoomsContainer,
         ])
 
@@ -1208,6 +1228,9 @@ export class MyPatientsRenderer {
                 c('path', { attrs: { d: 'M19 9l-7 7-7-7', 'stroke-width': '2.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } }),
             ]),
         ])
+
+        btnUp.addEventListener('click', () => this.handleRoomMove(roomId, 'up'))
+        btnDown.addEventListener('click', () => this.handleRoomMove(roomId, 'down'))
 
         const patientSlots = c('div', { classes: 'patient-list p-2 space-y-2' })
 
@@ -1330,21 +1353,27 @@ export class MyPatientsRenderer {
             c('p', { classes: 'text-[9px] font-bold text-blue-500 truncate', text: docName }),
         ])
 
+        const btnPatientUp = c('button', { classes: 'move-p-up p-1 text-slate-300 hover:text-blue-500 transition-colors' }, [
+            c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
+                c('path', { attrs: { d: 'M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z' } }),
+            ]),
+        ])
+        const btnPatientDown = c('button', { classes: 'move-p-down p-1 text-slate-300 hover:text-blue-500 transition-colors' }, [
+            c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
+                c('path', { attrs: { d: 'M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' } }),
+            ]),
+        ])
+
+        btnPatientUp.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'up'))
+        btnPatientDown.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'down'))
+
         const actionBlock = c('div', { classes: 'flex items-center gap-1' }, [
             btnOpenDetails,
             btnNotes,
             btnDelete,
             c('div', { classes: 'flex flex-col gap-0.5 ml-1' }, [
-                c('button', { classes: 'move-p-up p-1 text-slate-300 hover:text-blue-500 transition-colors' }, [
-                    c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
-                        c('path', { attrs: { d: 'M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z' } }),
-                    ]),
-                ]),
-                c('button', { classes: 'move-p-down p-1 text-slate-300 hover:text-blue-500 transition-colors' }, [
-                    c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'currentColor', viewBox: '0 0 20 20' } }, [
-                        c('path', { attrs: { d: 'M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' } }),
-                    ]),
-                ]),
+                btnPatientUp,
+                btnPatientDown,
             ]),
         ])
 
@@ -1410,6 +1439,63 @@ export class MyPatientsRenderer {
             ]),
             notesContainer,
         ])
+    }
+    handleRoomMove(roomId, direction) {
+        const orderArray = this.patientList.roomOrder
+        const currentIndex = orderArray.indexOf(roomId)
+        if (currentIndex === -1) return
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+        if (targetIndex < 0 || targetIndex >= orderArray.length) return
+
+        const currentEl = document.querySelector(`[data-room-id="${roomId}"]`)
+        if (!currentEl) return
+
+        const siblingEl = direction === 'up'
+            ? currentEl.previousElementSibling
+            : currentEl.nextElementSibling
+
+        if (siblingEl) {
+            if (direction === 'up') {
+                siblingEl.before(currentEl)
+            } else {
+                siblingEl.after(currentEl)
+            }
+        }
+
+        this.patientList.reorderRooms(currentIndex, targetIndex)
+        this.savePatientsData()
+    }
+    handlePatientMove(patientId, roomId, direction) {
+        if (!roomId) return
+
+        const orderArray = this.patientList.patientOrderMap[roomId] || []
+        const currentIndex = orderArray.indexOf(patientId)
+        if (currentIndex === -1) return
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+        if (targetIndex < 0 || targetIndex >= orderArray.length) return
+
+        const roomEl = document.querySelector(`[data-room-id="${roomId}"]`)
+        if (!roomEl) return
+
+        const currentEl = roomEl.querySelector(`.patient-wrapper[data-id="${patientId}"]`)
+        if (!currentEl) return
+
+        const siblingEl = direction === 'up'
+            ? currentEl.previousElementSibling
+            : currentEl.nextElementSibling
+
+        if (siblingEl && siblingEl.matches('.patient-wrapper')) {
+            if (direction === 'up') {
+                siblingEl.before(currentEl)
+            } else {
+                siblingEl.after(currentEl)
+            }
+        }
+
+        this.patientList.reorderPatientsInRoom(roomId, currentIndex, targetIndex)
+        this.savePatientsData()
     }
     openPatientWorkspaceTab(p) {
         console.log('open in new tabb', p)

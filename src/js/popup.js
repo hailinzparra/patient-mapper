@@ -1046,6 +1046,7 @@ const G = {
                             myHomePanel,
                             patientList,
                             G.store.settings,
+                            G.store.patients,
                             G.hospitalManager.roomLookup,
                             G.hospitalManager.docLookup,
                         )
