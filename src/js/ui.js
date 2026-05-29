@@ -714,6 +714,7 @@ export class MyPatientsRenderer {
         COMPACT: 'COMPACT',
     }
 
+    G
     parentNode = document.createElement('div')
     patientList = new PatientList({})
     #settingsStore = null
@@ -746,12 +747,13 @@ export class MyPatientsRenderer {
         emptyRoomsContainer: null,
     }
 
-    async init(parentNode, patientList, settingsStore, patientsStore, tabManager, roomLookup, docLookup) {
+    async init(G, parentNode, patientList, settingsStore, patientsStore, tabManager, roomLookup, docLookup) {
         if (!roomLookup || !docLookup || !(patientList instanceof PatientList) || !(parentNode instanceof HTMLElement)) {
             console.warn('Initialization failed: Invalid roomLookup, patientList, or parentNode.')
             return
         }
 
+        this.G = G
         this.parentNode = parentNode
         this.patientList = patientList
         this.#settingsStore = settingsStore
@@ -1185,9 +1187,32 @@ export class MyPatientsRenderer {
             }),
         ])
 
+        const btnCollapseAll = c('button', { classes: 'p-1.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 active:scale-90 transition-all shadow-sm' }, [
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M7 11l5-5m0 0l5 5m-5-5v12m-8-2l8 8 8-8' } }),
+            ]),
+        ])
+
+        const btnExpandAll = c('button', { classes: 'p-1.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 active:scale-90 transition-all shadow-sm' }, [
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M19 13l-7 7-7-7m14-8l-7 7-7-7' } }),
+            ]),
+        ])
+
+        const actionButtonsGroup = c('div', { classes: 'flex items-center gap-1 ml-auto mr-2 opacity-100 transition-opacity' }, [
+            btnCollapseAll,
+            btnExpandAll,
+        ])
+
         const header = c('div', { classes: 'flex items-center justify-between p-1 cursor-pointer select-none transition-all duration-200 group text-slate-700' }, [
             textStack,
+            actionButtonsGroup,
             chevronIcon,
+        ])
+
+        const container = c('div', { classes: 'rooms-container mb-4' }, [
+            header,
+            bodyContentNode,
         ])
 
         header.addEventListener('click', () => {
@@ -1195,17 +1220,50 @@ export class MyPatientsRenderer {
             if (isOpen) {
                 bodyContentNode.classList.remove('max-h-0', 'opacity-0')
                 bodyContentNode.classList.add('opacity-100', 'mt-2')
+                actionButtonsGroup.classList.replace('opacity-0', 'opacity-100')
                 chevronIcon.classList.add('rotate-180')
             } else {
                 bodyContentNode.classList.remove('opacity-100', 'mt-2')
                 bodyContentNode.classList.add('max-h-0', 'opacity-0')
+                actionButtonsGroup.classList.replace('opacity-100', 'opacity-0')
                 chevronIcon.classList.remove('rotate-180')
             }
         })
 
+        btnCollapseAll.addEventListener('click', (e) => {
+            e.stopPropagation()
+            const isDisabled = actionButtonsGroup.classList.contains('opacity-0')
+            if (isDisabled) return
+            this.toggleAllRooms(container, true)
+        })
+
+        btnExpandAll.addEventListener('click', (e) => {
+            e.stopPropagation()
+            const isDisabled = actionButtonsGroup.classList.contains('opacity-0')
+            if (isDisabled) return
+            this.toggleAllRooms(container, false)
+        })
+
         if (isClosed) header.click()
 
-        return c('div', { classes: 'rooms-container mb-4' }, [header, bodyContentNode])
+        return container
+    }
+    toggleAllRooms(scopeElement, shouldCollapse) {
+        const roomGroups = scopeElement.querySelectorAll('.room-group')
+        roomGroups.forEach(group => {
+            const toggleBtn = group.querySelector('.toggle-room')
+            const patientList = group.querySelector('.patient-list')
+            if (toggleBtn && patientList) {
+                const isCurrentlyCollapsed = patientList.classList.contains('hidden')
+                // const isEmpty = patientList.querySelectorAll('.js-patient-item')?.length === 0
+                // 1. If we want to collapse and it's currently open -> toggle
+                // 2. If we want to expand, it's currently closed, and NOT empty -> toggle
+                if ((shouldCollapse && !isCurrentlyCollapsed) ||
+                    (!shouldCollapse && isCurrentlyCollapsed/*  && !isEmpty */)) {
+                    toggleBtn.click()
+                }
+            }
+        })
     }
     createRoomCard(roomId, roomName, recordCount = 0) {
         const c = Utils.DOM.createElement
@@ -1334,7 +1392,7 @@ export class MyPatientsRenderer {
             ])
 
             return c('div', {
-                classes: 'compact-row flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 border-b border-slate-100/60 group transition-colors',
+                classes: 'js-patient-item compact-row flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 border-b border-slate-100/60 group transition-colors',
                 attrs: { 'data-id': p.id },
             }, [
                 dataContainer,
@@ -1447,7 +1505,7 @@ export class MyPatientsRenderer {
         ])
 
         return c('div', {
-            classes: 'patient-wrapper flex flex-col gap-2 w-full',
+            classes: 'js-patient-item patient-wrapper flex flex-col gap-2 w-full',
             attrs: { 'data-id': p.id },
         }, [
             c('div', { classes: 'patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all' }, [
@@ -1468,23 +1526,46 @@ export class MyPatientsRenderer {
 
         this.#tabManager.addTab(tabId, tabName, [], false)
         this.#tabManager.open(tabId)
+
+        const titleText = this.#tabManager.getTabHeaderEl(tabId)?.querySelector('.tab-title-text') || null
+        if (titleText) {
+            titleText.classList.add('text-[9px]', 'w-[70px]', 'line-clamp-2', 'leading-tight')
+        }
     }
-    promptDeletePatient(patientId) {
+    async promptDeletePatient(patientId) {
         const p = this.patientList.getPatient(patientId)
         if (!p) return
 
         const ui = p.getUIDisplayData() || {}
-        const confirmMessage = `Are you sure you want to remove patient "${ui.name || 'Unknown'}" (${ui.mrn || '-'}) from this list?`
 
-        if (window.confirm(confirmMessage)) {
-            this.executeInPlacePatientDeletion(p)
+        if (this.G) {
+            const confirmDelete = await this.G.swal.fire({
+                icon: 'warning',
+                title: 'Remove patient?',
+                html: `This will <strong>remove "<span class="text-red-600">${ui.name} (${ui.mrn})</span>"</strong> from this list.`,
+                showDenyButton: true,
+                showCancelButton: true,
+                showConfirmButton: false,
+                denyButtonText: 'Yes, remove it',
+                cancelButtonText: 'Cancel',
+            })
+            if (confirmDelete.isDenied) {
+                this.executeInPlacePatientDeletion(p)
+                this.G.ui.swalSuccessShort('Removed successfully!')
+            }
+        }
+        else {
+            const confirmMessage = `Are you sure you want to remove patient "${ui.name || 'Unknown'}" (${ui.mrn || '-'}) from this list?`
+            if (window.confirm(confirmMessage)) {
+                this.executeInPlacePatientDeletion(p)
+            }
         }
     }
     executeInPlacePatientDeletion(patientInstance) {
         const patientId = patientInstance.id
         const roomId = patientInstance.roomId
 
-        const patientWrapper = document.querySelector(`.patient-wrapper[data-id="${patientId}"], .compact-row[data-id="${patientId}"]`)
+        const patientWrapper = document.querySelector(`.js-patient-item[data-id="${patientId}"]`)
         const roomCard = document.querySelector(`[data-room-id="${roomId}"]`)
 
         this.patientList.removePatient(patientId)

@@ -101,8 +101,10 @@ const G = {
         // Navigation items
         allPatientsBtn: null,
         myPatientsBtn: null,
+        winkBtn: null,
+        growthChartBtn: null,
+        pregnancyWheelBtn: null,
         calculatorBtn: null,
-        templatesBtn: null,
         devModeBtn: null,
         checkReleasesBtn: null,
         // Collapsible list / Accordion components
@@ -135,8 +137,10 @@ const G = {
             this.targetDomainSelect = document.getElementById('target-domain-select')
             this.allPatientsBtn = document.getElementById('sidebar-all-patients')
             this.myPatientsBtn = document.getElementById('sidebar-my-patients')
+            this.winkBtn = document.getElementById('sidebar-wink')
+            this.growthChartBtn = document.getElementById('sidebar-growth-chart')
+            this.pregnancyWheelBtn = document.getElementById('sidebar-pregnancy-wheel')
             this.calculatorBtn = document.getElementById('sidebar-calculator')
-            this.templatesBtn = document.getElementById('sidebar-templates')
             this.devModeBtn = document.getElementById('sidebar-dev-mode')
             this.checkReleasesBtn = document.getElementById('sidebar-check-releases')
             this.myPatientsCollapsedBadge = document.getElementById('sidebar-my-patients-collapsed-badge')
@@ -256,7 +260,7 @@ const G = {
             this.myPatientsBtn.addEventListener('click', () => {
                 G.nav.tabs.allPatients.close()
                 G.nav.tabs.myPatients.open()
-                G.nav.tabs.myPatients.switchTab('my-home')
+                // G.nav.tabs.myPatients.switchTab('my-home')
 
                 if (this.lastSelectedListId) {
                     G.content.myPatients.home.render(this.lastSelectedListId)
@@ -267,9 +271,30 @@ const G = {
                 }
             })
 
+            this.winkBtn.addEventListener('click', () => {
+                G.swal.fire({
+                    title: ';)',
+                    html: `Work in progress`,
+                })
+            })
+
+            this.growthChartBtn.addEventListener('click', () => {
+                G.swal.fire({
+                    title: 'Growth Chart',
+                    html: `Work in progress`,
+                })
+            })
+
+            this.pregnancyWheelBtn.addEventListener('click', () => {
+                G.swal.fire({
+                    title: 'Pregnancy Wheel',
+                    html: `Work in progress`,
+                })
+            })
+
             this.calculatorBtn.addEventListener('click', () => {
                 G.swal.fire({
-                    title: 'MDCalc Calculator',
+                    title: 'Clinical Calculator',
                     html: `
                         <iframe
                             src="https://www.mdcalc.com/"
@@ -278,18 +303,13 @@ const G = {
                             style="border: none; border-radius: 4px;">
                         </iframe>
                     `,
+                    backdrop: false,
                     draggable: true,
                     allowOutsideClick: false,
                     allowEscapeKey: false,
                     showConfirmButton: false,
+                    showCancelButton: true,
                     focusConfirm: false,
-                })
-            })
-
-            this.templatesBtn.addEventListener('click', () => {
-                G.swal.fire({
-                    title: 'Templates',
-                    html: `Work in progress`,
                 })
             })
 
@@ -1018,23 +1038,25 @@ const G = {
                 },
                 async render(listId) {
                     try {
-                        G.swal.fire({
-                            title: 'Generating view...',
-                            text: 'Processing data, please wait.',
-                            allowOutsideClick: false,
-                            allowEscapeKey: false,
-                            showCloseButton: false,
-                            showConfirmButton: false,
-                            didOpen: () => {
-                                G.swal.showLoading()
-                            }
-                        })
+                        // G.swal.fire({
+                        //     title: 'Generating view...',
+                        //     text: 'Processing data, please wait.',
+                        //     allowOutsideClick: false,
+                        //     allowEscapeKey: false,
+                        //     showCloseButton: false,
+                        //     showConfirmButton: false,
+                        //     didOpen: () => {
+                        //         G.swal.showLoading()
+                        //     }
+                        // })
 
                         const myHomePanel = this.getPanel()
                         if (!myHomePanel) return
                         myHomePanel.innerHTML = ''
+                        myHomePanel.innerHTML = `<div class="flex items-center justify-between gap-4 p-3 bg-white rounded-xl border border-slate-200 overflow-hidden animate-pulse">
+                        <div class="h-4 w-32 bg-slate-200 rounded"></div><div class="flex items-center justify-center pr-1"><div class="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-blue-700"></div></div></div>`
 
-                        await Utils.sleep(500)
+                        // await Utils.sleep(500)
 
                         const rawListData = G.store.patients.data.lists.find(list => String(list.id) === String(listId))
                         if (!rawListData) return
@@ -1043,6 +1065,7 @@ const G = {
 
                         const myPatientsRenderer = new MyPatientsRenderer()
                         await myPatientsRenderer.init(
+                            G,
                             myHomePanel,
                             patientList,
                             G.store.settings,
@@ -1053,7 +1076,7 @@ const G = {
                         )
                         await myPatientsRenderer.buildAndRender()
 
-                        G.swal.close()
+                        // G.swal.close()
                     }
                     catch (err) {
                         G.ui.swalFatalError(

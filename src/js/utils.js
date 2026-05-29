@@ -454,12 +454,13 @@ export class Tab {
         button.className = 'px-4 h-full text-[11px] font-bold uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-slate-600 flex items-center gap-2 transition-all shrink-0 focus:outline-none'
 
         const titleSpan = document.createElement('span')
+        titleSpan.className = 'tab-title-text'
         titleSpan.textContent = this.name
         button.append(titleSpan)
 
         if (!this.isPermanent) {
             const closeBtn = document.createElement('span')
-            closeBtn.className = "tab-close-icon ml-1 text-slate-400 hover:text-rose-500 transition-colors flex items-center justify-center p-0.5 rounded"
+            closeBtn.className = 'tab-close-icon ml-1 text-slate-400 hover:text-rose-500 transition-colors flex items-center justify-center p-0.5 rounded'
             closeBtn.innerHTML = Utils.DOM.CLOSE_SVG
             closeBtn.addEventListener('click', (e) => {
                 e.stopPropagation()
