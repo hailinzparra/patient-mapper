@@ -1231,16 +1231,16 @@ export class MyPatientsRenderer {
         })
 
         btnCollapseAll.addEventListener('click', (e) => {
-            e.stopPropagation()
             const isDisabled = actionButtonsGroup.classList.contains('opacity-0')
             if (isDisabled) return
+            e.stopPropagation()
             this.toggleAllRooms(container, true)
         })
 
         btnExpandAll.addEventListener('click', (e) => {
-            e.stopPropagation()
             const isDisabled = actionButtonsGroup.classList.contains('opacity-0')
             if (isDisabled) return
+            e.stopPropagation()
             this.toggleAllRooms(container, false)
         })
 

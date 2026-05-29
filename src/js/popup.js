@@ -601,7 +601,7 @@ const G = {
                 'class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"',
             ]
             const result = await G.swal.fire({
-                title: `<div class="truncate">List Data</div>`,
+                title: `<div class="truncate">Manage List</div>`,
                 html: `<div class="border border-slate-200 rounded-md p-4 bg-slate-50 text-xs text-slate-600 space-y-2 mb-3">
                 <div class="${cls[0]}"><span class="${cls[1]}">List Name:</span><span class="font-medium text-slate-800">${patientList.name}</span></div>
                 <div class="${cls[0]}"><span class="${cls[1]}">Total Records:</span>
