@@ -620,12 +620,13 @@ const G = {
                 <svg ${cls[4]} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                 Load from Device</button></div></div>
                 <div class="w-full"><div class="${cls[2]} mb-2">Cloud Sync</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button type="button" id="swal-btn-cloud-save-data" class="${cls[3]} text-blue-600">
+                <button type="button" id="swal-btn-cloud-save-data" class="${cls[3]} text-blue-600 w-full">
                 <svg ${cls[4]} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
-                Save to Cloud</button>
-                <button type="button" id="swal-btn-cloud-load-data" class="${cls[3]} text-blue-600">
+                Save to Cloud*</button>
+                <button type="button" id="swal-btn-cloud-load-data" class="${cls[3]} text-blue-600 w-full">
                 <svg ${cls[4]} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path></svg>
-                Load from Cloud</button></div></div>`,
+                Load from Cloud</button>
+                <span class="sm:col-span-2 text-[10px] text-slate-500 w-full">*Maximum of <strong>100</strong> records allowed. This list has <strong>${count}</strong> record${count === 1 ? '' : 's'}.</span></div></div>`,
                 showDenyButton: true,
                 showCancelButton: true,
                 denyButtonText: 'Delete List',
@@ -795,6 +796,15 @@ const G = {
             }
         },
         async triggerCloudSave(patientList) {
+            if (patientList && patientList.patients && patientList.patients.length > 100) {
+                G.swal.fire({
+                    icon: 'warning',
+                    title: 'Upload Limit Exceeded',
+                    html: `You have <strong>${patientList.patients.length}</strong> records. The maximum allowed is <strong>100</strong> records per upload.`,
+                })
+                return
+            }
+
             G.swal.fire({
                 title: 'Saving to cloud...',
                 allowOutsideClick: false,
