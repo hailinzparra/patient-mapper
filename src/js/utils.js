@@ -261,15 +261,21 @@ export const Utils = {
             },
         },
     },
-    async executeNativeClipboardCopy(textToCopy, feedbackEl, copiedText = 'Copied!') {
+    async executeNativeClipboardCopy(textToCopy, feedbackEl, copiedText = 'Copied!', errorText = 'Error') {
         if (!textToCopy) return
         try {
             await navigator.clipboard.writeText(textToCopy)
             if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
-                const originalText = feedbackEl.innerText
+                if (feedbackEl._copyTimeout) {
+                    clearTimeout(feedbackEl._copyTimeout)
+                } else {
+                    feedbackEl._originalText = feedbackEl.innerText
+                }
                 feedbackEl.innerText = copiedText
-                setTimeout(() => {
-                    feedbackEl.innerText = originalText
+                feedbackEl._copyTimeout = setTimeout(() => {
+                    feedbackEl.innerText = feedbackEl._originalText
+                    delete feedbackEl._originalText
+                    delete feedbackEl._copyTimeout
                 }, 1000)
             }
         } catch (err) {
@@ -279,10 +285,16 @@ export const Utils = {
             //     'The application encountered a fatal copy error:',
             // )
             if (feedbackEl && feedbackEl.tagName === 'BUTTON') {
-                const originalText = feedbackEl.innerText
-                feedbackEl.innerText = 'Error'
-                setTimeout(() => {
-                    feedbackEl.innerText = originalText
+                if (feedbackEl._copyTimeout) {
+                    clearTimeout(feedbackEl._copyTimeout)
+                } else {
+                    feedbackEl._originalText = feedbackEl.innerText
+                }
+                feedbackEl.innerText = errorText
+                feedbackEl._copyTimeout = setTimeout(() => {
+                    feedbackEl.innerText = feedbackEl._originalText
+                    delete feedbackEl._originalText
+                    delete feedbackEl._copyTimeout
                 }, 1000)
             }
         }

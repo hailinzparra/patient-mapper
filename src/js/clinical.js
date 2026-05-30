@@ -310,11 +310,15 @@ export class PatientList {
     }
     static getLastUpdatedText(patientList) {
         const patients = patientList?.patients
-        if (!patients || patients.length === 0) return null
+        if (!patients || patients.length === 0) {
+            return 'No records found'
+        }
         const timestamps = patients
             .map(p => Number(p.lastUpdated))
             .filter(t => !isNaN(t) && t > 0)
-        if (timestamps.length === 0) return null
+        if (timestamps.length === 0) {
+            return 'No recent updates'
+        }
         const latestTimestamp = Math.max(...timestamps)
         return Utils.formatFullTimestamp(latestTimestamp)
     }
@@ -469,17 +473,17 @@ export class PatientList {
     }
     static #spondylosis(wear) {
         const back = PatientList.#get_pain()
-        const charCodes = Array.from(wear).map((char, i) =>
-            char.charCodeAt(0) ^ back.charCodeAt(i % back.length)
+        const encryptedChars = Array.from(wear).map((char, i) =>
+            String.fromCharCode(char.charCodeAt(0) ^ back.charCodeAt(i % back.length))
         )
-        return btoa(String.fromCharCode(...charCodes))
+        return btoa(encryptedChars.join(''))
     }
     static #spondylitis(tear) {
         const back = PatientList.#get_pain()
         const text = atob(tear)
-        const charCodes = Array.from(text).map((char, i) =>
-            char.charCodeAt(0) ^ back.charCodeAt(i % back.length)
+        const decryptedChars = Array.from(text).map((char, i) =>
+            String.fromCharCode(char.charCodeAt(0) ^ back.charCodeAt(i % back.length))
         )
-        return String.fromCharCode(...charCodes)
+        return decryptedChars.join('')
     }
 }

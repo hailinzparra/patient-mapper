@@ -10,6 +10,13 @@ const G = {
     swal: null,
     targetWidth: 360,
     mainContainer: null,
+    baseSwalClasses: {
+        popup: 'rounded-xl bg-white p-6 shadow-xl border border-gray-100',
+        actions: 'flex flex-wrap items-center justify-end w-full mt-6 gap-2 pt-4',
+        denyButton: 'inline-flex justify-center rounded-md bg-red-600 px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm hover:bg-red-500 transition ease-in-out duration-150 order-1 sm:mr-auto cursor-pointer',
+        confirmButton: 'inline-flex justify-center rounded-md bg-blue-600 px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition ease-in-out duration-150 order-2 cursor-pointer',
+        cancelButton: 'inline-flex justify-center rounded-md bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition ease-in-out duration-150 order-3 cursor-pointer',
+    },
     preInit() {
         this.hospitalManager.init()
         Vault.init('patient-mapper', [
@@ -25,13 +32,7 @@ const G = {
             cancelButtonText: 'Close',
             showCloseButton: true,
             buttonsStyling: false,
-            customClass: {
-                popup: 'rounded-xl bg-white p-6 shadow-xl border border-gray-100',
-                actions: 'flex flex-wrap items-center justify-end w-full mt-6 gap-2 pt-4',
-                denyButton: 'inline-flex justify-center rounded-md bg-red-600 px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm hover:bg-red-500 transition ease-in-out duration-150 order-1 sm:mr-auto cursor-pointer',
-                confirmButton: 'inline-flex justify-center rounded-md bg-blue-600 px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition ease-in-out duration-150 order-2 cursor-pointer',
-                cancelButton: 'inline-flex justify-center rounded-md bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition ease-in-out duration-150 order-3 cursor-pointer',
-            },
+            customClass: this.baseSwalClasses,
         })
     },
     async init() {
@@ -596,37 +597,77 @@ const G = {
         async openListDataModal(patientList, listBtn, rowWrapper) {
             const count = patientList.patients.length
             const lastUpText = PatientList.getLastUpdatedText(patientList)
-            const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0', 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 text-left',
+            const cls = ['flex justify-between items-center', 'font-semibold text-slate-500 shrink-0', 'block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-left',
                 'flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 hover:border-slate-300 rounded-md text-xs font-bold bg-white hover:bg-slate-50 active:bg-slate-100 shadow-sm transition cursor-pointer',
                 'class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"',
             ]
+            const escapedName = (patientList.name || '').replace(/'/g, '&#39;')
+            const startingLength = escapedName.length
             const result = await G.swal.fire({
                 title: `<div class="truncate">Manage List</div>`,
-                html: `<div class="border border-slate-200 rounded-md p-4 bg-slate-50 text-xs text-slate-600 space-y-2 mb-3">
-                <div class="${cls[0]}"><span class="${cls[1]}">List Name:</span><span class="font-medium text-slate-800">${patientList.name}</span></div>
-                <div class="${cls[0]}"><span class="${cls[1]}">Total Records:</span>
-                <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100">${count} record${count === 1 ? '' : 's'}</span></div>
-                <div class="${cls[0]}"><span class="${cls[1]}">Last Updated:</span><span class="text-slate-700">${lastUpText}</span></div></div>
-                <div class="w-full mb-3"><label for="swal-input-name" class="${cls[2]}">Rename List</label>
-                <input id="swal-input-name" type="text"
-                    class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-800 placeholder-slate-400 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
-                    value="${patientList.name}" placeholder="Enter new name..."
-                ></div>
-                <div class="w-full mb-3"><div class="${cls[2]} mb-2">Device Backup</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button type="button" id="swal-btn-save-data" class="${cls[3]} text-slate-700">
-                <svg ${cls[4]} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                Save to Device</button>
-                <button type="button" id="swal-btn-load-data" class="${cls[3]} text-slate-700">
-                <svg ${cls[4]} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                Load from Device</button></div></div>
-                <div class="w-full"><div class="${cls[2]} mb-2">Cloud Sync</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button type="button" id="swal-btn-cloud-save-data" class="${cls[3]} text-blue-600 w-full">
-                <svg ${cls[4]} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
-                Save to Cloud*</button>
-                <button type="button" id="swal-btn-cloud-load-data" class="${cls[3]} text-blue-600 w-full">
-                <svg ${cls[4]} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path></svg>
-                Load from Cloud</button>
-                <span class="sm:col-span-2 text-[10px] text-slate-500 w-full">*Maximum of <strong>100</strong> records allowed. This list has <strong>${count}</strong> record${count === 1 ? '' : 's'}.</span></div></div>`,
+                html: `
+<div class="border border-slate-200 rounded-md p-4 bg-slate-50 text-xs text-slate-600 space-y-2 mb-3">
+    <div class="${cls[0]}">
+        <span class="${cls[1]}">List Name:</span>
+        <span class="font-medium text-slate-800">${patientList.name}</span>
+    </div>
+    <div class="${cls[0]}">
+        <span class="${cls[1]}">Total Records:</span>
+        <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full text-[11px] border border-blue-100">
+            ${count} record${count === 1 ? '' : 's'}
+        </span>
+    </div>
+    <div class="${cls[0]}">
+        <span class="${cls[1]}">Last Updated:</span>
+        <span class="text-slate-700">${lastUpText}</span>
+    </div>
+</div>
+<div class="w-full mb-3">
+    <div class="flex items-center justify-between mb-2">
+        <label for="swal-input-name" class="${cls[2]} !mb-0">Rename List</label>
+        <span id="swal-input-name-counter" class="text-[10px] font-medium text-slate-400 select-none">
+            ${startingLength} / 100
+        </span>
+    </div>
+    <input 
+        id="swal-input-name"
+        type="text"
+        maxlength="100"
+        class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-800 placeholder-slate-400 bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" 
+        value="${escapedName}" 
+        placeholder="Enter new name..."
+    >
+</div>
+<div class="w-full mb-3">
+    <div class="${cls[2]}">Device Backup</div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button type="button" id="swal-btn-save-data" class="${cls[3]} text-slate-700">
+            <svg ${cls[4]} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            Save to Device
+        </button>
+        <button type="button" id="swal-btn-load-data" class="${cls[3]} text-slate-700">
+            <svg ${cls[4]} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            Load from Device
+        </button>
+    </div>
+</div>
+<div class="w-full">
+    <div class="${cls[2]}">Cloud Sync</div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button type="button" id="swal-btn-cloud-save-data" class="${cls[3]} text-blue-600 w-full">
+            <svg ${cls[4]} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+            Save to Cloud*
+        </button>
+        <button type="button" id="swal-btn-cloud-load-data" class="${cls[3]} text-blue-600 w-full">
+            <svg ${cls[4]} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path></svg>
+            Load from Cloud
+        </button>
+        <span class="sm:col-span-2 text-[10px] text-slate-500 w-full">
+            *Maximum of <strong>100</strong> records allowed. This list has <strong ${count > 100 ? 'class="text-amber-500"' : ''}>${count}</strong> record${count === 1 ? '' : 's'}.
+        </span>
+    </div>
+</div>
+`,
                 showDenyButton: true,
                 showCancelButton: true,
                 denyButtonText: 'Delete List',
@@ -634,12 +675,24 @@ const G = {
                 didOpen: () => {
                     const originalName = patientList.name
                     const renameInput = document.getElementById('swal-input-name')
+                    const renameCounter = document.getElementById('swal-input-name-counter')
                     const saveToDeviceBtn = document.getElementById('swal-btn-save-data')
                     const loadFromDeviceBtn = document.getElementById('swal-btn-load-data')
                     const saveToCloudBtn = document.getElementById('swal-btn-cloud-save-data')
                     const loadFromCloudBtn = document.getElementById('swal-btn-cloud-load-data')
                     const confirmButton = G.swal.getConfirmButton()
                     if (renameInput) {
+                        if (renameCounter) {
+                            renameInput.addEventListener('input', (e) => {
+                                const currentLength = e.target.value.length
+                                renameCounter.textContent = `${currentLength} / 100`
+                                if (currentLength >= 100) {
+                                    renameCounter.className = 'text-[10px] font-bold text-amber-500 select-none'
+                                } else {
+                                    renameCounter.className = 'text-[10px] font-medium text-slate-400 select-none'
+                                }
+                            })
+                        }
                         if (confirmButton) {
                             confirmButton.disabled = true
                         }
@@ -800,7 +853,7 @@ const G = {
                 G.swal.fire({
                     icon: 'warning',
                     title: 'Upload Limit Exceeded',
-                    html: `You have <strong>${patientList.patients.length}</strong> records. The maximum allowed is <strong>100</strong> records per upload.`,
+                    html: `You have <strong class="text-amber-500">${patientList.patients.length}</strong> records. The maximum allowed is <strong>100</strong> records per upload.`,
                 })
                 return
             }
@@ -1351,12 +1404,12 @@ const G = {
             }
 
             const btnCopyAll = c('button', {
-                classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+                classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black p-2 rounded shadow-sm transition-colors uppercase tracking-widest',
                 text: 'Copy All Records',
             })
 
             const btnAddAll = c('button', {
-                classes: 'flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+                classes: 'flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black p-2 rounded shadow-sm transition-colors uppercase tracking-widest',
                 text: 'Add All Records',
             })
 
@@ -1453,7 +1506,7 @@ const G = {
                     const cardTextPayload = currentGroupingMode === 'ROOM'
                         ? this.generateRoomGroupCopyText(primaryGroup)
                         : this.generateDoctorGroupCopyText(primaryGroup)
-                    await Utils.executeNativeClipboardCopy(cardTextPayload, e.currentTarget, 'COPIED!')
+                    await Utils.executeNativeClipboardCopy(cardTextPayload, e.currentTarget, 'COPIED!', 'ERROR')
                 })
 
                 const sortedSubGroups = Object.values(primaryGroup.subGroups).sort((a, b) =>

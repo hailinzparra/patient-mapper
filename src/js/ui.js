@@ -739,6 +739,7 @@ export class MyPatientsRenderer {
         header: null,
         headerTitle: null,
         headerCounter: null,
+        btnPreviewOptions: null,
 
         settings: null,
 
@@ -843,15 +844,37 @@ export class MyPatientsRenderer {
     buildHeaderDOM() {
         const c = Utils.DOM.createElement
         const titleText = `${this.patientList.name}`
-        const totalPatients = this.patientList.patients.length || 0
-        const patientCounterText = `${totalPatients} record${totalPatients === 1 ? '' : 's'}`
+        const totalRecords = this.patientList.patients.length || 0
+        const recordCounterText = `${totalRecords} record${totalRecords === 1 ? '' : 's'}`
 
-        this.#nodes.headerCounter = c('div', { classes: 'my-patients-counter text-blue-700 font-bold px-2 py-0.5 text-[13px] uppercase', text: patientCounterText })
-        this.#nodes.headerTitle = c('div', { classes: 'my-patients-title text-[13px] font-bold tracking-wide break-all line-clamp-3', attrs: { 'data-list-id': this.patientList.id }, text: titleText })
-        this.#nodes.header = c('div', { classes: 'flex items-center justify-between gap-4 p-3 text-center bg-white text-slate-800 rounded-xl border border-slate-200 overflow-hidden' }, [
+        this.#nodes.headerTitle = c('div', {
+            classes: 'my-patients-title text-[13px] font-bold tracking-wide break-all line-clamp-3 text-left flex-1 min-w-0',
+            attrs: { 'data-list-id': this.patientList.id },
+            text: titleText,
+        })
+        this.#nodes.headerCounter = c('div', {
+            classes: 'my-patients-counter text-blue-700 font-black px-2 py-0.5 text-[13px] uppercase tracking-tight whitespace-nowrap flex-shrink-0',
+            text: recordCounterText,
+        })
+        this.#nodes.btnPreviewOptions = c('button', {
+            classes: 'p-1.5 text-slate-600 bg-slate-50 hover:text-slate-800 hover:bg-slate-100 rounded-lg active:scale-95 transition-all flex items-center justify-center flex-shrink-0 border border-slate-200 ml-1',
+        }, [
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-5 h-5' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 6h16M4 12h16m-7 6h7' } }),
+            ]),
+        ])
+        this.#nodes.header = c('div', {
+            classes: 'flex items-center justify-between p-3 bg-white text-slate-800 rounded-xl border border-slate-200 overflow-hidden shadow-sm'
+        }, [
             this.#nodes.headerTitle,
             this.#nodes.headerCounter,
+            this.#nodes.btnPreviewOptions,
         ])
+
+        this.#nodes.btnPreviewOptions.addEventListener('click', () => {
+            if (!this.G || !this.G.swal) return
+            this.openPDFConfigDrawer()
+        })
     }
     buildSettingsDOM() {
         let isSettingsOpen = false
@@ -903,31 +926,53 @@ export class MyPatientsRenderer {
         const btnBatchRefresh = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors group' }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Refresh' }),
-                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Refresh all records' })
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Refresh multiple records' }),
             ]),
-            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4 group-active:rotate-180 transition-transform duration-500' }, [
-                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } })
-            ])
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } }),
+            ]),
         ])
 
         const btnBatchNotes = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors' }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Open Notes' }),
-                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: "Open all records' notes" })
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: "Open multiple records' notes" }),
             ]),
             c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
-                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' } })
-            ])
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' } }),
+            ]),
+        ])
+
+        const btnBatchOpen = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors' }, [
+            c('span', { classes: 'flex flex-col items-start leading-tight' }, [
+                c('span', { text: 'Batch Open Tabs' }),
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Open multiple records in tabs' }),
+            ]),
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' } }),
+            ]),
+        ])
+
+        const btnBatchRemove = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors' }, [
+            c('span', { classes: 'flex flex-col items-start leading-tight' }, [
+                c('span', { text: 'Batch Remove' }),
+                c('span', { classes: 'text-[8px] font-medium text-slate-400 group-hover:text-red-300', text: 'Remove multiple records' }),
+            ]),
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' } }),
+            ]),
         ])
 
         const batchButtonsGrid = c('div', { classes: 'grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4' }, [
             btnBatchRefresh,
-            btnBatchNotes
+            btnBatchNotes,
+            btnBatchOpen,
+            btnBatchRemove,
         ])
 
         const batchOperationsWrapper = c('div', { classes: 'relative' }, [
             batchOperationsLabel,
-            batchButtonsGrid
+            batchButtonsGrid,
         ])
 
         // ==========================================
@@ -1027,12 +1072,12 @@ export class MyPatientsRenderer {
         // HEADER LAYOUT
         // ==========================================
         const btnCopyNotes = c('button', {
-            classes: 'flex-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+            classes: 'flex-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black p-2 rounded shadow-sm transition-colors uppercase tracking-widest',
             text: 'Copy All Notes',
         })
 
         const btnCopyRecords = c('button', {
-            classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black py-2 rounded shadow-sm transition-colors uppercase tracking-widest',
+            classes: 'flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black p-2 rounded shadow-sm transition-colors uppercase tracking-widest',
             text: 'Copy All Records',
         })
 
@@ -1084,7 +1129,7 @@ export class MyPatientsRenderer {
                 const p = patientLookup.get(patientId)
                 if (!p) continue
                 const docName = this.#patientDocMap.get(p.id)
-                const patientCard = this.createPatientCard(p, docName)
+                const patientCard = this.createPatientCard(p, docName, roomName)
                 roomCard.patientSlotsContainer.append(patientCard)
             }
         }
@@ -1159,13 +1204,13 @@ export class MyPatientsRenderer {
             })
         })
     }
-    createCollapsibleSection(titleText, roomCount, patientCount, theme, bodyContentNode, isClosed = false) {
+    createCollapsibleSection(titleText, roomCount, recordCount, theme, bodyContentNode, isClosed = false) {
         const c = Utils.DOM.createElement
         let isOpen = true
 
         const badgeColorClass = theme === 'emerald' ? 'bg-emerald-500' : 'bg-slate-400'
         const textColorClass = theme === 'emerald' ? 'text-emerald-600' : 'text-slate-500'
-        const recordSubtitle = `${patientCount} record${patientCount === 1 ? '' : 's'}`
+        const recordSubtitle = `${recordCount} record${recordCount === 1 ? '' : 's'}`
 
         const chevronIcon = c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-3 h-3 text-slate-400 transition-transform duration-300 rotate-180' }, [
             c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M19 9l-7 7-7-7' } }),
@@ -1279,16 +1324,17 @@ export class MyPatientsRenderer {
             ]),
         ])
 
-        const btnCopy = c('button', { classes: 'copy-room-data p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all mr-1' }, [
-            c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-all', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
-            ]),
+        const svgCopyIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-all', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+            c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
         ])
-        const toggleIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-transform', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+        const btnCopy = c('button', { classes: 'copy-room-data p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all mr-1' }, [
+            svgCopyIcon,
+        ])
+        const svgToggleIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-transform', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
             c('path', { attrs: { d: 'M19 9l-7 7-7-7', 'stroke-width': '2.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } }),
         ])
         const btnToggle = c('button', { classes: 'toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all' }, [
-            toggleIcon,
+            svgToggleIcon,
         ])
 
         const patientSlots = c('div', { classes: 'patient-list p-2 space-y-2' })
@@ -1317,7 +1363,9 @@ export class MyPatientsRenderer {
 
         cardWrapper.patientSlotsContainer = patientSlots
 
-        btnCopy.addEventListener('click', () => this.handleCopyRoomData(roomId, roomName, recordCount))
+        btnCopy.addEventListener('click', () => {
+            this.handleCopyRoomData(roomId, roomName, recordCount, svgCopyIcon)
+        })
 
         if (recordCount > 0) {
             btnUp.addEventListener('click', () => this.handleRoomMove(roomId, 'up'))
@@ -1326,7 +1374,7 @@ export class MyPatientsRenderer {
         btnToggle.addEventListener('click', () => {
             patientSlots.classList.toggle('hidden')
             const isHidden = patientSlots.classList.contains('hidden')
-            toggleIcon.style.transform = isHidden ? 'rotate(-90deg)' : 'rotate(0deg)'
+            svgToggleIcon.style.transform = isHidden ? 'rotate(-90deg)' : 'rotate(0deg)'
         })
         if (recordCount === 0) {
             btnToggle.click()
@@ -1334,7 +1382,7 @@ export class MyPatientsRenderer {
 
         return cardWrapper
     }
-    createPatientCard(patientInstance, docName) {
+    createPatientCard(patientInstance, docName, roomName) {
         const c = Utils.DOM.createElement
         const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
         const ui = p.getUIDisplayData() || {}
@@ -1359,7 +1407,7 @@ export class MyPatientsRenderer {
         // Bind events
         btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
         btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p.id))
-        btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id))
+        btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id, roomName))
 
         // ==========================================
         // BRANCH A: COMPACT VIEW
@@ -1385,7 +1433,9 @@ export class MyPatientsRenderer {
                 c('span', { classes: 'text-slate-500', text: ui.age }),
             ])
 
-            const compactActions = c('div', { classes: 'actions flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity' }, [
+            const compactActions = c('div', {
+                classes: 'actions flex items-center gap-1'
+            }, [
                 btnOpenDetails,
                 // btnNotes,
                 btnDelete,
@@ -1532,17 +1582,18 @@ export class MyPatientsRenderer {
             titleText.classList.add('text-[9px]', 'w-[70px]', 'line-clamp-2', 'leading-tight')
         }
     }
-    async promptDeletePatient(patientId) {
+    async promptDeletePatient(patientId, roomName) {
         const p = this.patientList.getPatient(patientId)
         if (!p) return
 
         const ui = p.getUIDisplayData() || {}
 
         if (this.G) {
+            const roomNameText = roomName ? `${roomName}/` : ''
             const confirmDelete = await this.G.swal.fire({
                 icon: 'warning',
-                title: 'Remove patient?',
-                html: `This will <strong>remove "<span class="text-red-600">${ui.name} (${ui.mrn})</span>"</strong> from this list.`,
+                title: 'Remove record?',
+                html: `This will <strong>remove "${roomNameText}<span class="text-red-600">${ui.name} (${ui.mrn})</span>"</strong> from this list.`,
                 showDenyButton: true,
                 showCancelButton: true,
                 showConfirmButton: false,
@@ -1555,7 +1606,7 @@ export class MyPatientsRenderer {
             }
         }
         else {
-            const confirmMessage = `Are you sure you want to remove patient "${ui.name || 'Unknown'}" (${ui.mrn || '-'}) from this list?`
+            const confirmMessage = `Are you sure you want to remove record "${ui.name || 'Unknown'}" (${ui.mrn || '-'}) from this list?`
             if (window.confirm(confirmMessage)) {
                 this.executeInPlacePatientDeletion(p)
             }
@@ -1673,9 +1724,9 @@ export class MyPatientsRenderer {
         this.patientList.reorderPatientsInRoom(roomId, currentIndex, targetIndex)
         this.savePatientsData()
     }
-    handleCopyRoomData(roomId, roomName, patientCount) {
+    handleCopyRoomData(roomId, roomName, recordCount, feedbackEl) {
         const patientIds = this.patientList.patientOrderMap[roomId] || []
-        let textOutput = `*${roomName} (${patientCount})*\n\n`
+        let textOutput = `*${roomName} (${recordCount})*\n\n`
 
         const patientBlocks = []
 
@@ -1701,12 +1752,45 @@ export class MyPatientsRenderer {
         textOutput += patientBlocks.join('\n\n\n')
 
         const toast = Utils.UI.toast
+
+        const originalColor = 'text-slate-400'
+        const successColor = 'text-green-500'
+        const errorColor = 'text-red-500'
+
+        if (feedbackEl) {
+            if (feedbackEl._copyTimeout) {
+                clearTimeout(feedbackEl._copyTimeout)
+            } else {
+                feedbackEl._currentColorState = successColor
+            }
+        }
+
         navigator.clipboard.writeText(textOutput.trim())
             .then(() => {
                 toast.pop(`Copied! (${roomName})`, toast.type.success)
+                if (feedbackEl) {
+                    const classToRemove = feedbackEl._currentColorState === errorColor ? errorColor : originalColor
+                    feedbackEl.classList.replace(classToRemove, successColor)
+                    feedbackEl._currentColorState = successColor
+                    feedbackEl._copyTimeout = setTimeout(() => {
+                        feedbackEl.classList.replace(successColor, originalColor)
+                        delete feedbackEl._copyTimeout
+                        delete feedbackEl._currentColorState
+                    }, 1000)
+                }
             })
             .catch(err => {
                 toast.pop(`Copy failed (${roomName})`, toast.type.error)
+                if (feedbackEl) {
+                    const classToRemove = feedbackEl._currentColorState === successColor ? successColor : originalColor
+                    feedbackEl.classList.replace(classToRemove, errorColor)
+                    feedbackEl._currentColorState = errorColor
+                    feedbackEl._copyTimeout = setTimeout(() => {
+                        feedbackEl.classList.replace(errorColor, originalColor)
+                        delete feedbackEl._copyTimeout
+                        delete feedbackEl._currentColorState
+                    }, 1000)
+                }
             })
     }
     generateCopyAllNotesText() {
@@ -1724,8 +1808,8 @@ export class MyPatientsRenderer {
             const roomName = this.#patientRoomMap.get(firstPatientId)
             if (!roomName) continue
 
-            const patientCount = patientIds.length
-            let roomText = `*${roomName} (${patientCount})*\n\n`
+            const recordCount = patientIds.length
+            let roomText = `*${roomName} (${recordCount})*\n\n`
             const patientBlocks = []
 
             for (const patientId of patientIds) {
@@ -1771,8 +1855,8 @@ export class MyPatientsRenderer {
             const roomName = this.#patientRoomMap.get(firstPatientId)
             if (!roomName) continue
 
-            const patientCount = patientIds.length
-            let roomBlockText = `*${roomName} (${patientCount})*\n\n`
+            const recordCount = patientIds.length
+            let roomBlockText = `*${roomName} (${recordCount})*\n\n`
 
             const doctorGroupMap = new Map()
 
@@ -1811,6 +1895,134 @@ export class MyPatientsRenderer {
         }
         if (this.#notesFilterDay === MyPatientsRenderer.DAYS.TODAY) {
             // Trigger the logic/click to select "Today" inside the DOM
+        }
+    }
+    openPDFConfigDrawer() {
+        const activeListName = this.patientList?.name
+        const c = Utils.DOM.createElement
+
+        const historySelect = c('select', {
+            classes: 'p-2 border border-slate-200 rounded-lg text-xs bg-white w-full',
+            html: `
+            <option value="yes">Yes, include full records</option>
+            <option value="no">No, overview only</option>
+        `
+        })
+
+        const layoutSelect = c('select', {
+            classes: 'p-2 border border-slate-200 rounded-lg text-xs bg-white w-full',
+            html: `
+            <option value="compact">Compact Grid</option>
+            <option value="detailed">Expanded Rows</option>
+        `
+        })
+
+        const drawerContainer = c('div', { classes: 'text-left space-y-6' }, [
+
+            // --- SECTION 1: SOURCE PANEL ---
+            c('div', { classes: 'bg-slate-50 border border-slate-200/60 rounded-xl p-3.5' }, [
+                c('span', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1', text: 'Source' }),
+                c('h4', {
+                    classes: 'text-xs font-semibold text-slate-700 leading-relaxed line-clamp-2',
+                    text: activeListName,
+                })
+            ]),
+
+            // --- SECTION 2: SETTINGS MATRIX ---
+            c('div', { classes: 'space-y-4' }, [
+                c('span', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1', text: 'Settings' }),
+                c('div', { classes: 'flex flex-col gap-1' }, [
+                    c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Include Patient History' }),
+                    historySelect
+                ]),
+                c('div', { classes: 'flex flex-col gap-1' }, [
+                    c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Layout Style' }),
+                    layoutSelect
+                ])
+            ])
+        ])
+
+        try {
+            this.G.swal.fire({
+                title: 'Export',
+                html: drawerContainer,
+                position: 'top-end',
+                grow: 'column',
+                showConfirmButton: true,
+                showCancelButton: true,
+                confirmButtonText: 'Generate PDF',
+                cancelButtonText: 'Cancel',
+                customClass: {
+                    ...this.G.baseSwalClasses,
+                    container: 'swal-drawer-scope',
+                    popup: `swal-sidebar-drawer ${this.G.baseSwalClasses.popup}`,
+                    htmlContainer: 'p-6 pr-12 overflow-y-auto max-h-[calc(100vh-160px)] text-left m-0'
+                },
+                showClass: { popup: 'swal-drawer-show' },
+                hideClass: { popup: 'swal-drawer-hide' },
+                preConfirm: () => {
+                    const configValues = {
+                        includeHistory: historySelect.value,
+                        layoutStyle: layoutSelect.value
+                    }
+                    this.executePDFGeneration(configValues)
+                    return false // Keep drawer open
+                }
+            })
+        } catch (err) {
+            console.error('Failed opening configuration drawer:', err)
+        }
+    }
+    executePDFGeneration(configs) {
+        console.log('Compiling datasets with configurations:', configs)
+
+        const newTab = window.open('about:blank', '_blank');
+        if (!newTab) {
+            alert('Pop-up blocker detected! Please allow pop-ups to preview document.');
+            return
+        }
+
+        newTab.document.write(`
+            <html>
+            <head>
+                <title>Generating PDF Preview...</title>
+                <script src="https://cdn.tailwindcss.com"></script>
+            </head>
+            <body class="bg-slate-900 text-slate-100 h-screen flex flex-col items-center justify-center font-sans">
+                <div class="flex flex-col items-center gap-3">
+                    <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm font-bold tracking-wide">Assembling patient records matrix...</p>
+                </div>
+            </body>
+            </html>
+        `)
+
+        try {
+            const activeRecords = this.patientList?.patients || []
+            // Mock Generation Sequence (Swap this with html2pdf / jsPDF compilation sequence)
+            setTimeout(() => {
+                newTab.document.open()
+                newTab.document.write(`
+                <html>
+                <head>
+                    <title>Patient List Preview</title>
+                    <script src="https://cdn.tailwindcss.com"></script>
+                </head>
+                <body class="bg-gray-100 p-8 text-gray-800">
+                    <div class="max-w-4xl mx-auto bg-white p-6 shadow rounded-xl">
+                        <h1 class="text-xl font-bold border-b pb-4">Export Summary</h1>
+                        <p class="mt-2 text-sm">Compiled target length: <strong>${activeRecords.length} patients</strong></p>
+                        <p class="text-xs text-gray-400">Applied Filter Matrix: ${JSON.stringify(configs)}</p>
+                        <button onclick="window.print()" class="mt-6 px-4 py-2 bg-blue-600 text-white rounded-md text-xs font-bold">Print/Save via Browser</button>
+                    </div>
+                </body>
+                </html>
+            `)
+                newTab.document.close()
+            }, 1200)
+        } catch (err) {
+            console.error('Compilation failed:', err)
+            newTab.close() // Clean up tab resource leakage on absolute fault
         }
     }
 }
