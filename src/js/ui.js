@@ -2,6 +2,7 @@ import { Utils, VaultDriver, Tab, TabManager } from './utils.js'
 import { Patient, PatientList } from './clinical.js'
 import { ApiSoediranDriver } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
+import { hospitalContext } from './context.js'
 
 export class PatientLookup {
     #selectedDocs = []
@@ -720,8 +721,6 @@ export class MyPatientsRenderer {
     #settingsStore = null
     #patientsStore = null
     #tabManager = new TabManager()
-    // #roomLookup = {}
-    // #docLookup = {}
 
     #activeHospitalId = 0
     #notesFilterRole = MyPatientsRenderer.FILTERS.ROLE_MINE
@@ -748,9 +747,9 @@ export class MyPatientsRenderer {
         emptyRoomsContainer: null,
     }
 
-    async init(G, parentNode, patientList, settingsStore, patientsStore, tabManager, roomLookup, docLookup) {
-        if (!roomLookup || !docLookup || !(patientList instanceof PatientList) || !(parentNode instanceof HTMLElement)) {
-            console.warn('Initialization failed: Invalid roomLookup, patientList, or parentNode.')
+    async init(G, parentNode, patientList, settingsStore, patientsStore, tabManager) {
+        if (!(patientList instanceof PatientList) || !(parentNode instanceof HTMLElement)) {
+            console.warn('Initialization failed: Invalid patientList or parentNode.')
             return
         }
 
@@ -760,8 +759,6 @@ export class MyPatientsRenderer {
         this.#settingsStore = settingsStore
         this.#patientsStore = patientsStore
         this.#tabManager = tabManager
-        // this.#roomLookup = roomLookup
-        // this.#docLookup = docLookup
 
         this.reloadSettingsData()
 
@@ -770,15 +767,8 @@ export class MyPatientsRenderer {
 
         for (const p of this.patientList.patients) {
             const roomKey = `${p.hid}_${p.roomId}`
-            const roomMatch = roomLookup[roomKey]
-            const roomName = (roomMatch && roomMatch.room)
-                ? roomMatch.room.name
-                : p.roomId ? `Room ${p.roomId}` : 'Unknown Room'
-            const docKey = `${p.hid}_${p.docId}`
-            const docMatch = docLookup[docKey]
-            const docName = (docMatch && docMatch.doc)
-                ? docMatch.doc.name
-                : p.docId ? `Doctor ${p.docId}` : 'No Doctor Assigned'
+            const roomName = hospitalContext.getRoomName(p.hid, p.roomId)
+            const docName = hospitalContext.getDoctorName(p.hid, p.docId)
 
             this.patientUiMeta.push({
                 id: p.id,
@@ -786,7 +776,7 @@ export class MyPatientsRenderer {
                 docName: docName,
             })
 
-            if (roomMatch) {
+            if (p.roomId && hospitalContext.roomLookup.has(roomKey)) {
                 assignedRoomKeys.add(roomKey)
             }
         }
@@ -794,9 +784,12 @@ export class MyPatientsRenderer {
         this.#patientRoomMap = new Map(this.patientUiMeta.map(m => [m.id, m.roomName]))
         this.#patientDocMap = new Map(this.patientUiMeta.map(m => [m.id, m.docName]))
 
-        this.emptyRooms = Object.keys(roomLookup)
-            .filter(key => (!assignedRoomKeys.has(key) && roomLookup[key].hid === this.#activeHospitalId))
-            .map(key => roomLookup[key])
+        this.emptyRooms = []
+        for (const [key, record] of hospitalContext.roomLookup.entries()) {
+            if (record.hid === this.#activeHospitalId && !assignedRoomKeys.has(key)) {
+                this.emptyRooms.push(record)
+            }
+        }
         this.emptyRooms.sort((a, b) => a.room.name.localeCompare(b.room.name))
     }
     async saveSettingsData(newData = {}) {
@@ -921,7 +914,7 @@ export class MyPatientsRenderer {
         // ==========================================
         // BATCH OPERATIONS SECTION
         // ==========================================
-        const batchOperationsLabel = c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1.5 ml-1', text: 'Batch Operations' })
+        const batchOperationsLabel = c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1.5 ml-1', text: 'Batch Operations (WIP)' })
 
         const btnBatchRefresh = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors group' }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
@@ -1929,22 +1922,22 @@ export class MyPatientsRenderer {
             ]),
 
             // --- SECTION 2: SETTINGS MATRIX ---
-            c('div', { classes: 'space-y-4' }, [
-                c('span', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1', text: 'Settings' }),
-                c('div', { classes: 'flex flex-col gap-1' }, [
-                    c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Include Patient History' }),
-                    historySelect
-                ]),
-                c('div', { classes: 'flex flex-col gap-1' }, [
-                    c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Layout Style' }),
-                    layoutSelect
-                ])
-            ])
+            // c('div', { classes: 'space-y-4' }, [
+            //     c('span', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1', text: 'Settings' }),
+            //     c('div', { classes: 'flex flex-col gap-1' }, [
+            //         c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Include Patient History' }),
+            //         historySelect
+            //     ]),
+            //     c('div', { classes: 'flex flex-col gap-1' }, [
+            //         c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Layout Style' }),
+            //         layoutSelect
+            //     ])
+            // ])
         ])
 
         try {
             this.G.swal.fire({
-                title: 'Export',
+                title: 'Export (WIP)',
                 html: drawerContainer,
                 position: 'top-end',
                 grow: 'column',
@@ -1965,7 +1958,7 @@ export class MyPatientsRenderer {
                         includeHistory: historySelect.value,
                         layoutStyle: layoutSelect.value
                     }
-                    this.executePDFGeneration(configValues)
+                    // this.executePDFGeneration(configValues)
                     return false // Keep drawer open
                 }
             })

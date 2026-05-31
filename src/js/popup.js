@@ -3,6 +3,7 @@ import { Patient, PatientList } from './clinical.js'
 import { PatientLookup, MyPatientsRenderer } from './ui.js'
 import { SOEDIRAN_DATABASE, ApiSoediranDriver } from './api-soediran.js'
 import { SOEHADI_DATABASE, ApiSoehadiDriver } from './api-soehadi.js'
+import { HOSPITAL_REGISTRY, hospitalContext } from './context.js'
 
 const api = typeof browser !== 'undefined' ? browser : chrome
 
@@ -18,7 +19,6 @@ const G = {
         cancelButton: 'inline-flex justify-center rounded-md bg-white px-2.5 py-1.5 text-[10px] font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition ease-in-out duration-150 order-3 cursor-pointer',
     },
     preInit() {
-        this.hospitalManager.init()
         Vault.init('patient-mapper', [
             'eyJhcGlLZXkiOiJBSXphU3lEODMzdGtLSEk3S1hXRFdKNTlSWVJ6TXY0aGN5TGQ5cmsiLCJhdXRoRG9tYWluIjoibHVtaWZpbGxldC5maXJlYmFzZW',
             'FwcC5jb20iLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vbHVtaWZpbGxldC1kZWZhdWx0LXJ0ZGIuYXNpYS1zb3V0aGVhc3QxLmZpcmViYXNlZGF0YWJh',
@@ -202,33 +202,39 @@ const G = {
                 this.toggleToolsAccordion()
             })
 
-            this.targetHospitalSelect.innerHTML = Object.keys(G.HOSPITAL)
-                .map(key => `<option value="${key}">${G.HOSPITAL[key].NAME}</option>`)
+            this.targetHospitalSelect.innerHTML = Object.keys(HOSPITAL_REGISTRY)
+                .map(key => `<option value="${key}">${HOSPITAL_REGISTRY[key].name}</option>`)
                 .join('')
             this.targetHospitalSelect.addEventListener('change', async () => {
+                const selectedKey = this.targetHospitalSelect.value
+                hospitalContext.changeHospital(selectedKey)
                 await G.store.settings.update({
-                    activeHospitalId: G.getActiveHospital().ID,
+                    activeHospitalId: hospitalContext.activeConfig.id,
                     activeDomainIndex: 0,
                 })
                 Events.emit('hospital_change')
                 await this.updateDomainDropdown()
             })
             this.targetDomainSelect.addEventListener('change', async () => {
+                const selectedKey = this.targetHospitalSelect.value
+                const selectedDomain = this.targetDomainSelect.value
+                hospitalContext.changeHospital(selectedKey, selectedDomain)
                 let selectedIndex = 0
                 this.targetDomainSelect.querySelectorAll('option').forEach(option => {
-                    if (option.value === G.getActiveDomain()) {
+                    if (option.value === selectedDomain) {
                         selectedIndex = Number(option.dataset.index)
                     }
                 })
                 await G.store.settings.update({
+                    activeHospitalId: hospitalContext.activeConfig.id,
                     activeDomainIndex: selectedIndex,
                 })
                 await this.runLiveEnvSync()
             })
 
             this.authBtn.addEventListener('click', () => {
-                const home = G.getActiveHospital().PATHS.HOME
-                const domain = G.getActiveDomain()
+                const home = hospitalContext.activeDriver.PATHS.HOME
+                const domain = hospitalContext.activeDomain
                 api.tabs.create({
                     url: `${domain}${home}`,
                     active: true,
@@ -362,10 +368,14 @@ const G = {
             // call once to match loaded settings
             this.updateOnToggle()
 
-            const activeDomainIndexOnLoad = G.store.settings.data.activeDomainIndex
-            Utils.DOM.selectOptionByValue(this.targetHospitalSelect, G.getHospitalKeyById(G.store.settings.data.activeHospitalId))
+            const { activeHospitalId, activeDomainIndex } = G.store.settings.data
+            const matchedHospital = hospitalContext.getHospitalById(activeHospitalId)
+            const resolvedKey = matchedHospital
+                ? matchedHospital.driver.SYSTEM_NAME
+                : Object.keys(HOSPITAL_REGISTRY)[0]
+            Utils.DOM.selectOptionByValue(this.targetHospitalSelect, resolvedKey)
             await Utils.sleep(100)
-            Utils.DOM.selectOptionByDatasetIndex(this.targetDomainSelect, activeDomainIndexOnLoad)
+            Utils.DOM.selectOptionByDatasetIndex(this.targetDomainSelect, activeDomainIndex)
 
             this.allPatientsBtn.click()
 
@@ -487,18 +497,21 @@ const G = {
         },
         async updateDomainDropdown() {
             const selectedHospitalKey = this.targetHospitalSelect.value
+            const selectedHospital = HOSPITAL_REGISTRY[selectedHospitalKey]
+            if (!selectedHospital) return
             let index = 0
-            this.targetDomainSelect.innerHTML = G.HOSPITAL[selectedHospitalKey].DOMAINS.map(domain =>
+            this.targetDomainSelect.innerHTML = selectedHospital.driver.DOMAINS.map(domain =>
                 `<option value="${domain}" data-index="${index++}">${domain}</option>`
             ).join('')
+            hospitalContext.changeHospital(selectedHospitalKey, this.targetDomainSelect.value)
             await this.runLiveEnvSync()
         },
         async runLiveEnvSync() {
             this.disableInputs()
             await Utils.sleep(500)
             try {
-                const activeDriver = G.getActiveDriver()
-                const activeDomain = this.targetDomainSelect.value
+                const activeDriver = hospitalContext.activeDriver
+                const activeDomain = hospitalContext.activeDomain
 
                 if (!activeDriver) throw new Error('No API driver implementation found.')
 
@@ -1134,8 +1147,6 @@ const G = {
                             G.store.settings,
                             G.store.patients,
                             G.nav.tabs.myPatients,
-                            G.hospitalManager.roomLookup,
-                            G.hospitalManager.docLookup,
                         )
                         await myPatientsRenderer.buildAndRender()
 
@@ -1219,20 +1230,13 @@ const G = {
             })
         },
         onSwitchHospital() {
-            const activeHospital = G.getActiveHospital()
+            const activeHospital = hospitalContext.activeConfig
             if (!activeHospital) return
 
-            const config = {
-                driver: activeHospital.DRIVER,
-                database: activeHospital.DATABASE,
-                systemName: activeHospital.DRIVER.SYSTEM_NAME,
-                wardOptions: activeHospital.WARD_OPTIONS,
-            }
-
-            this.patientLookup.setDriver(config.driver)
-            this.patientLookup.setDatabase(config.database, true)
-            this.patientLookup.updateInputs(config.wardOptions)
-            this.patientLookup.addSpecificInputs(config.systemName)
+            this.patientLookup.setDriver(activeHospital.driver)
+            this.patientLookup.setDatabase(activeHospital.database, true)
+            this.patientLookup.updateInputs(activeHospital.wardOptions)
+            this.patientLookup.addSpecificInputs(activeHospital.driver.SYSTEM_NAME)
         },
         async launchPatientLookupTab(payload, docGroups, roomGroups, driver) {
             this.tabCounter++
@@ -1327,9 +1331,9 @@ const G = {
             await Utils.sleep(500)
 
             try {
-                const hid = Utils.getValidValue(G.getActiveHospital()?.ID, -1)
+                const hid = hospitalContext.activeConfig?.id ?? -1
                 const session = G.store.session.data
-                const targetDomain = G.getActiveDomain()
+                const targetDomain = hospitalContext.activeDomain
                 const completeDataset = await driver.handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, (progress) => {
                     const { index, status, data } = progress
                     const targetDot = statusDotElements[index]
@@ -1454,8 +1458,8 @@ const G = {
             const groupedData = uniqueDataset.reduce((acc, current) => {
                 const p = current.toJSON ? current.toJSON() : current
 
-                const roomName = p.roomId ? this.getResolvedNameFromDatabase(p.hid, 'room', p.roomId) : 'UNKNOWN ROOM'
-                const docName = p.docId ? this.getResolvedNameFromDatabase(p.hid, 'doctor', p.docId) : 'NO DOCTOR ASSIGNED'
+                const roomName = hospitalContext.getRoomName(p.hid, p.roomId)
+                const docName = hospitalContext.getDoctorName(p.hid, p.docId)
 
                 const primaryId = currentGroupingMode === 'ROOM' ? p.roomId : p.docId
                 const secondaryId = currentGroupingMode === 'ROOM' ? p.docId : p.roomId
@@ -1598,15 +1602,6 @@ const G = {
                     }
                 })
             })
-        },
-        getResolvedNameFromDatabase(hid, type, idToFind) {
-            // work: find a faster way
-            const database = G.getHospitalDatabaseById(hid)
-            if (!database) return idToFind
-            const arrayKey = type === 'room' ? 'roomDatabase' : 'doctorDatabase'
-            const dataset = database[arrayKey] || []
-            const foundEntry = dataset.find(item => String(item.id) === String(idToFind))
-            return foundEntry ? foundEntry.name : idToFind
         },
         generateRoomGroupCopyText(roomGroup) {
             const lines = []
@@ -1798,86 +1793,6 @@ const G = {
             }
         },
     },
-    HOSPITAL: {
-        SOEDIRAN: {
-            ID: 0,
-            NAME: ApiSoediranDriver.NAME,
-            DATABASE: SOEDIRAN_DATABASE,
-            DOMAINS: ApiSoediranDriver.DOMAINS,
-            PATHS: ApiSoediranDriver.PATHS,
-            DRIVER: ApiSoediranDriver,
-            WARD_OPTIONS: SOEDIRAN_DATABASE.wardOptions,
-        },
-        SOEHADI: {
-            ID: 1,
-            NAME: ApiSoehadiDriver.NAME,
-            DATABASE: SOEHADI_DATABASE,
-            DOMAINS: ApiSoehadiDriver.DOMAINS,
-            PATHS: ApiSoehadiDriver.PATHS,
-            DRIVER: ApiSoehadiDriver,
-            WARD_OPTIONS: SOEHADI_DATABASE.wardOptions,
-        },
-    },
-    hospitalManager: {
-        roomLookup: {},
-        docLookup: {},
-        init() {
-            this.roomLookup = {}
-            this.docLookup = {}
-
-            const ALL_HOSPITALS = Object.values(G.HOSPITAL)
-            for (const h of ALL_HOSPITALS) {
-                if (h?.DATABASE?.roomDatabase) {
-                    for (const r of Object.values(h.DATABASE.roomDatabase)) {
-                        const uniqueKey = `${h.ID}_${r.id}`
-                        this.roomLookup[uniqueKey] = {
-                            // hospital: h,
-                            hid: h.ID,
-                            room: r,
-                        }
-                    }
-                }
-                if (h?.DATABASE?.doctorDatabase) {
-                    for (const d of Object.values(h.DATABASE.doctorDatabase)) {
-                        const uniqueKey = `${h.ID}_${d.id}`
-                        this.docLookup[uniqueKey] = {
-                            hid: h.ID,
-                            doc: d,
-                        }
-                    }
-                }
-            }
-        },
-    },
-    getActiveHospital() {
-        const selectedHospitalKey = this.sidebar.targetHospitalSelect.value
-        return this.HOSPITAL && this.HOSPITAL[selectedHospitalKey] ? this.HOSPITAL[selectedHospitalKey] : null
-    },
-    getActiveDomain() {
-        return this.sidebar.targetDomainSelect.value
-    },
-    getActiveHospitalDatabase() {
-        const activeHospital = this.getActiveHospital()
-        return activeHospital ? activeHospital.DATABASE : null
-    },
-    getActiveDriver() {
-        const activeHospital = this.getActiveHospital()
-        return activeHospital ? activeHospital.DRIVER : null
-    },
-    getHospitalById(targetId) {
-        const key = this.getHospitalKeyById(targetId)
-        return key ? G.HOSPITAL[key] : null
-    },
-    getHospitalKeyById(targetId) {
-        const foundEntry = Object.entries(this.HOSPITAL).find(([key, hospital]) => {
-            return hospital && hospital.ID !== undefined && String(hospital.ID) === String(targetId)
-        })
-        return foundEntry ? foundEntry[0] : null
-    },
-    getHospitalDatabaseById(targetId) {
-        const hospital = this.getHospitalById(targetId)
-        return hospital ? hospital.DATABASE : null
-    },
 }
 
 Events.on('entrypoint', async (ev) => {
@@ -1947,5 +1862,3 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     Events.emit('entrypoint')
 })
-
-window.G = G
