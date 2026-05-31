@@ -1,17 +1,17 @@
-import { Events } from './utils.js'
+import { VaultDriver } from './utils.js'
 import { SOEDIRAN_DATABASE, ApiSoediranDriver } from './api-soediran.js'
 import { SOEHADI_DATABASE, ApiSoehadiDriver } from './api-soehadi.js'
 
 export const HOSPITAL_REGISTRY = {
     [ApiSoediranDriver.SYSTEM_NAME]: {
-        id: 0,
+        id: ApiSoediranDriver.HID,
         name: ApiSoediranDriver.NAME,
         driver: ApiSoediranDriver,
         database: SOEDIRAN_DATABASE,
         wardOptions: SOEDIRAN_DATABASE.wardOptions,
     },
     [ApiSoehadiDriver.SYSTEM_NAME]: {
-        id: 1,
+        id: ApiSoehadiDriver.HID,
         name: ApiSoehadiDriver.NAME,
         driver: ApiSoehadiDriver,
         database: SOEHADI_DATABASE,
@@ -24,6 +24,7 @@ class HospitalContextManager {
         this.activeConfig = null
         this.activeDriver = null
         this.activeDomain = null
+        this.session = new VaultDriver('session')
 
         this.roomLookup = new Map()
         this.docLookup = new Map()

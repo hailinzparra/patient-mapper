@@ -130,3 +130,8 @@ body {
     margin: 0 !important;
     padding: 4px !important;
 }
+
+.patient-wrapper:has(.patient-notes-container:not(.hidden)) .patient-card {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}

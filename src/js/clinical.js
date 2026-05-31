@@ -201,21 +201,6 @@ export class Patient {
             clean(d1.disDate) === clean(d2.disDate)
         )
     }
-    static formatSOAPIText(soapObject) {
-        const s = soapObject?.s || soapObject?.subjective || '.'
-        const o = soapObject?.o || soapObject?.objective || '.'
-        const a = soapObject?.a || soapObject?.assessment || '.'
-        const p = soapObject?.p || soapObject?.planning || '.'
-        const i = soapObject?.i || soapObject?.instruction || '.'
-
-        return [
-            `Subjective (S)\n${s}`,
-            `Objective (O)\n${o}`,
-            `Assessment (A)\n${a}`,
-            `Planning (P)\n${p}`,
-            `Instruction (I)\n${i}`,
-        ].join('\n\n')
-    }
 }
 
 export class PatientList {
@@ -485,5 +470,96 @@ export class PatientList {
             String.fromCharCode(char.charCodeAt(0) ^ back.charCodeAt(i % back.length))
         )
         return decryptedChars.join('')
+    }
+}
+
+export class ClinicalNote {
+    static TYPES = Object.freeze({
+        SOAP: 'SOAP',
+        SBAR: 'SBAR',
+        ADIME: 'ADIME',
+    })
+
+    static CREATOR_TYPES = Object.freeze({
+        DOCTOR: 'Doctor',
+        PARAMEDIC: 'Paramedic',
+        NUTRITIONIST: 'Nutritionist',
+        UNKNOWN: 'Unknown',
+    })
+
+    constructor(init = {}) {
+        this.id = init.id || ''
+        this.recId = init.recId || ''
+        this.roomId = init.roomId || ''
+        this.roomName = init.roomName || 'Unknown Room'
+        this.type = init.type || ClinicalNote.TYPES.SOAP
+
+        this.content = {
+            // SOAP / SOAPI
+            subjective: init.content?.subjective || '',
+            objective: init.content?.objective || '',
+            assessment: init.content?.assessment || '',
+            planning: init.content?.planning || '',
+            instruction: init.content?.instruction || '',
+            // SBAR
+            situation: init.content?.situation || '',
+            background: init.content?.background || '',
+            recommendation: init.content?.recommendation || '',
+            // ADIME
+            diagnosis: init.content?.diagnosis || '',
+            intervention: init.content?.intervention || '',
+            monitoring: init.content?.monitoring || '',
+            evaluation: init.content?.evaluation || '',
+        }
+
+        this.creator = {
+            id: init.creator?.id || '',
+            name: init.creator?.name || 'Staff Member',
+            type: init.creator?.type || ClinicalNote.CREATOR_TYPES.UNKNOWN,
+        }
+
+        this.timestamp = init.timestamp || ''
+
+        this.verification = init.verification ? {
+            isVerified: !!init.verification.isVerified,
+            id: init.verification.id || '',
+            verificatorName: init.verification.verificatorName || '',
+            timestamp: init.verification.timestamp || ''
+        } : null
+    }
+
+    static NOTE_TYPE_CONFIGS = {
+        [ClinicalNote.TYPES.SOAP]: [
+            { label: 'Subjective (S)', key: 'subjective', valClass: 'val-subjective' },
+            { label: 'Objective (O)', key: 'objective', valClass: 'val-objective' },
+            { label: 'Assessment (A)', key: 'assessment', valClass: 'val-assessment' },
+            { label: 'Planning (P)', key: 'planning', valClass: 'val-planning' },
+            { label: 'Instruction (I)', key: 'instruction', valClass: 'val-instruction' },
+        ],
+        [ClinicalNote.TYPES.SBAR]: [
+            { label: 'Situation (S)', key: 'situation', valClass: 'val-situation' },
+            { label: 'Background (B)', key: 'background', valClass: 'val-background' },
+            { label: 'Assessment (A)', key: 'assessment', valClass: 'val-assessment' },
+            { label: 'Recommendation (R)', key: 'recommendation', valClass: 'val-recommendation' },
+        ],
+        [ClinicalNote.TYPES.ADIME]: [
+            { label: 'Assessment (A)', key: 'assessment', valClass: 'val-assessment' },
+            { label: 'Diagnosis (D)', key: 'diagnosis', valClass: 'val-diagnosis' },
+            { label: 'Intervention (I)', key: 'intervention', valClass: 'val-intervention' },
+            { label: 'Monitoring (M)', key: 'monitoring', valClass: 'val-monitoring' },
+            { label: 'Evaluation (E)', key: 'evaluation', valClass: 'val-evaluation' },
+        ]
+    }
+
+    static formatToText(note) {
+        if (!note) return '-'
+        const config = ClinicalNote.NOTE_TYPE_CONFIGS[note.type] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
+        const lines = [`[${note.type} Note by ${note.creator.name} (${note.creator.type})]`]
+        config.forEach(field => {
+            const rawContent = note.content[field.key] || '-'
+            const cleanContent = Utils.decodeHtmlEntities(rawContent).replace(/<br\s*\/?>/gi, '\n')
+            lines.push(`${field.label}:\n${cleanContent}`)
+        })
+        return lines.join('\n\n')
     }
 }

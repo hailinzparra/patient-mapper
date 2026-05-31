@@ -1,5 +1,5 @@
 import { Utils, VaultDriver, Tab, TabManager } from './utils.js'
-import { Patient, PatientList } from './clinical.js'
+import { Patient, PatientList, ClinicalNote } from './clinical.js'
 import { ApiSoediranDriver } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
 import { hospitalContext } from './context.js'
@@ -1012,6 +1012,12 @@ export class MyPatientsRenderer {
         btnBatchNotes.addEventListener('click', () => {
         })
 
+        btnBatchOpen.addEventListener('click', () => {
+        })
+
+        btnBatchRemove.addEventListener('click', () => {
+        })
+
         roleFilterGroup.querySelectorAll('button[data-role]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const selectedRole = e.currentTarget.getAttribute('data-role')
@@ -1048,6 +1054,9 @@ export class MyPatientsRenderer {
         }
 
         this.#nodes.listContainer.innerHTML = ''
+
+        G.store.temp.activeNotesSlideOutRenderers.forEach(renderer => renderer.destroy?.())
+        G.store.temp.activeNotesSlideOutRenderers = []
 
         // ==========================================
         // NO PATIENTS
@@ -1397,11 +1406,6 @@ export class MyPatientsRenderer {
             ]),
         ])
 
-        // Bind events
-        btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
-        btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p.id))
-        btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id, roomName))
-
         // ==========================================
         // BRANCH A: COMPACT VIEW
         // ==========================================
@@ -1481,9 +1485,6 @@ export class MyPatientsRenderer {
             ]),
         ])
 
-        btnPatientUp.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'up'))
-        btnPatientDown.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'down'))
-
         const actionBlock = c('div', { classes: 'flex items-center gap-1' }, [
             btnOpenDetails,
             btnNotes,
@@ -1532,26 +1533,40 @@ export class MyPatientsRenderer {
             c('span', { classes: 'flex h-1.5 w-1.5 rounded-full bg-slate-200' })
         ])
 
-        const notesContainer = c('div', { classes: 'patient-notes-container hidden bg-slate-50 border border-slate-200 border-t-0 -mt-2 rounded-b-xl shadow-sm overflow-hidden transition-all duration-300' }, [
+        const notesCreateButton = c('button', { classes: 'notes-create-btn p-1 me-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all' }, [
+            c('svg', { classes: 'w-3.5 h-3.5', attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M12 4v16m8-8H4' } }),
+            ]),
+        ])
+        const notesCloseButton = c('button', { classes: 'notes-close-inner text-slate-400 hover:text-red-500 text-[12px] font-black px-1', text: '✕' })
+        const notesContainer = c('div', { classes: 'patient-notes-container bg-slate-50 border border-slate-200 border-t-0 -mt-2 rounded-b-xl shadow-sm overflow-hidden transition-all duration-300 ease-in-out max-h-[1000px] opacity-100 starting:max-h-0 starting:opacity-0 hidden' }, [
             c('div', { classes: 'notes-header px-3 py-1.5 border-b border-slate-200 flex justify-between items-center bg-white/50' }, [
-                c('div', { classes: 'flex items-center gap-2' }, [
-                    c('div', { classes: 'flex bg-slate-200 p-0.5 rounded-md text-[8px] font-bold' }, [
-                        c('button', { classes: 'filter-notes-all px-2 py-0.5 rounded bg-white text-slate-800 shadow-sm transition-all', text: 'ALL' }),
-                        c('button', { classes: 'filter-notes-mine px-2 py-0.5 rounded text-slate-500 transition-all', text: 'MINE' }),
-                        c('button', { classes: 'filter-notes-docs px-2 py-0.5 rounded text-slate-500 transition-all', text: 'DOCTORS' }),
+                c('div', { classes: 'flex flex-1 items-center gap-2' }, [
+                    c('div', { classes: 'role-filter-group flex bg-slate-200 p-0.5 rounded-md text-[8px] font-bold' }, [
+                        c('button', { classes: this.notesGetTabClass(false), attrs: { 'data-role': MyPatientsRenderer.FILTERS.ROLE_ALL }, text: 'ALL' }),
+                        c('button', { classes: this.notesGetTabClass(false), attrs: { 'data-role': MyPatientsRenderer.FILTERS.ROLE_MINE }, text: 'MINE' }),
+                        c('button', { classes: this.notesGetTabClass(false), attrs: { 'data-role': MyPatientsRenderer.FILTERS.ROLE_DOCTORS }, text: 'DOCTORS' }),
                     ]),
                 ]),
-                c('button', { classes: 'notes-close-inner text-slate-400 hover:text-red-500 text-[12px] font-black px-1', text: '✕' })
+                notesCreateButton,
+                notesCloseButton,
             ]),
-            c('div', { classes: 'date-pagination flex gap-1 px-3 py-1.5 bg-slate-100/50 border-b border-slate-200 overflow-x-auto no-scrollbar' }),
-            c('div', { classes: 'notes-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto' }),
+            c('div', { classes: 'notes-pagination-track flex gap-1 px-3 py-1.5 bg-slate-100/50 border-b border-slate-200 overflow-x-auto' }),
+            c('div', { classes: 'notes-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto transition-opacity duration-300 ease-in-out' }),
         ])
+
+        btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
+        btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes))
+        notesCloseButton.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes, false))
+        btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id, roomName))
+        btnPatientUp.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'up'))
+        btnPatientDown.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'down'))
 
         return c('div', {
             classes: 'js-patient-item patient-wrapper flex flex-col gap-2 w-full',
             attrs: { 'data-id': p.id },
         }, [
-            c('div', { classes: 'patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all' }, [
+            c('div', { classes: 'patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all overflow-hidden' }, [
                 c('div', { classes: 'flex items-center gap-3' }, [bedBlock, infoBlock, actionBlock]),
                 metadataBlock,
                 metadataBlock,
@@ -1730,7 +1745,7 @@ export class MyPatientsRenderer {
             const ui = p.getUIDisplayData() || {}
             const docName = this.#patientDocMap.get(p.id)
             const soapObject = p.soap || null
-            const soapText = Patient.formatSOAPIText(soapObject)
+            const soapText = ClinicalNote.formatToText(soapObject)
             const block = [
                 `${p.toClipboardString()}`,
                 `Physician in charge: ${docName}`,
@@ -1813,7 +1828,7 @@ export class MyPatientsRenderer {
                 const docName = this.#patientDocMap.get(p.id)
 
                 const soapObject = p.soap || null
-                const soapText = Patient.formatSOAPIText(soapObject)
+                const soapText = ClinicalNote.formatToText(soapObject)
 
                 const block = [
                     `${p.toClipboardString()}`,
@@ -1881,14 +1896,133 @@ export class MyPatientsRenderer {
         textOutput += roomBlocks.join('\n\n\n')
         return textOutput.trim()
     }
-    toggleNotesSlideOut(patientId) {
-        console.log('toggle notes', patientId)
-        if (this.#notesFilterRole === MyPatientsRenderer.FILTERS.ROLE_MINE) {
-            // Trigger the logic/click to select "Mine" inside the DOM
+    notesGetTabClass(isActive, colorClass = 'text-blue-600') {
+        return isActive
+            ? `is-active px-2 py-0.5 font-bold rounded bg-white ${colorClass} shadow-sm text-center`
+            : 'px-2 py-0.5 font-bold rounded text-slate-500 hover:text-slate-700 text-center'
+    }
+    async toggleNotesSlideOut(p, notesContainer, btnNotes, forceState = null) {
+        const c = Utils.DOM.createElement
+        const ui = p.getUIDisplayData()
+        const isOpen = forceState !== null ? forceState : !!notesContainer.classList.contains('hidden')
+        const createBtn = notesContainer.querySelector('.notes-create-btn')
+        const closeBtn = notesContainer.querySelector('.notes-close-inner')
+        const filterGroup = notesContainer.querySelector('.role-filter-group')
+        const filterButtons = notesContainer.querySelectorAll('.role-filter-group > button[data-role]')
+        const paginationTrack = notesContainer.querySelector('.notes-pagination-track')
+        const notesBody = notesContainer.querySelector('.notes-body')
+
+        notesBody.innerHTML = ''
+        paginationTrack.innerHTML = ''
+        filterGroup.classList.add('opacity-50')
+        createBtn.classList.remove('hover:bg-emerald-600', 'hover:text-white')
+        createBtn.classList.add('opacity-50')
+        createBtn.disabled = true
+        closeBtn.classList.remove('hover:text-red-500')
+        closeBtn.classList.add('opacity-50')
+        closeBtn.disabled = true
+
+        if (!isOpen) {
+            filterButtons.forEach(b => {
+                b.onclick = null
+                b.className = this.notesGetTabClass(false)
+            })
+            notesContainer.classList.add('hidden')
+            btnNotes.classList.add('hover:bg-blue-600', 'hover:text-white')
+            btnNotes.classList.remove('opacity-50')
+            btnNotes.disabled = false
+            return
         }
-        if (this.#notesFilterDay === MyPatientsRenderer.DAYS.TODAY) {
-            // Trigger the logic/click to select "Today" inside the DOM
+
+        notesContainer.classList.remove('hidden')
+        btnNotes.classList.remove('hover:bg-blue-600', 'hover:text-white')
+        btnNotes.classList.add('opacity-50')
+        btnNotes.disabled = true
+
+        const loadingDiv = c('div', { classes: 'flex flex-col items-center justify-center p-2 space-y-3 text-slate-500' }, [
+            c('svg', { classes: 'animate-spin h-4 w-4 text-blue-600', attrs: { viewBox: '0 0 24 24', fill: 'none' } }, [
+                c('circle', { classes: 'opacity-25', attrs: { cx: '12', cy: '12', r: '10', stroke: 'currentColor', 'stroke-width': '4' } }),
+                c('path', { classes: 'opacity-75', attrs: { fill: 'currentColor', d: 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z' } }),
+            ]),
+            c('span', { classes: 'text-[11px] font-semibold animate-pulse', text: `Loading notes (${ui.name})...` }),
+        ])
+
+        notesBody.classList.add('flex', 'flex-col', 'justify-center')
+        notesBody.appendChild(loadingDiv)
+
+        await Utils.sleep(500)
+
+        try {
+            const clinicalNotesClient = hospitalContext.activeDriver.clinicalNotesContext(
+                hospitalContext.activeDomain,
+                hospitalContext.session.data,
+            )
+            const rawNotes = await clinicalNotesClient.fetch(p.recId)
+
+            if (NotesSlideOutRenderer.isForceCancelled(p.id, notesContainer)) {
+                // The container was replaced or removed while fetching
+                // We exit here, no instantiate
+                return
+            }
+
+            const renderer = new NotesSlideOutRenderer(notesContainer, rawNotes, p, btnNotes)
+            this.G.store.temp.activeNotesSlideOutRenderers.push(renderer)
+
+            // clear loading
+            notesBody.innerHTML = ''
+            notesBody.classList.remove('flex', 'flex-col', 'justify-center')
+
+            // reload settings just to be safe
+            this.reloadSettingsData()
+            const defaultFilterRole = this.#notesFilterRole
+            const defaultFilterDay = this.#notesFilterDay
+
+            // start first render
+            renderer.init(defaultFilterRole, defaultFilterDay)
+
+            // render filter role elements
+            filterGroup.classList.remove('opacity-50')
+            filterButtons.forEach((btn, btnIndex) => {
+                btn.className = this.notesGetTabClass(btn.dataset.role === defaultFilterRole, btn.dataset.role === MyPatientsRenderer.FILTERS.ROLE_ALL ? 'text-slate-600' : 'text-blue-600')
+                btn.onclick = () => {
+                    if (filterGroup.classList.contains('opacity-50')) return
+                    let currentIndex = -1
+                    filterButtons.forEach((b, i) => {
+                        if (b.classList.contains('is-active')) currentIndex = i
+                        const fallbackColor = b.dataset.role === MyPatientsRenderer.FILTERS.ROLE_ALL ? 'text-slate-600' : 'text-blue-600'
+                        b.className = this.notesGetTabClass(i === btnIndex, fallbackColor)
+                    })
+                    if (btnIndex !== currentIndex) {
+                        currentIndex = btnIndex
+                        // re-render on filter role change
+                        renderer.changeFilter(btn.dataset.role)
+                    }
+                }
+            })
+            createBtn.classList.add('hover:bg-emerald-600', 'hover:text-white')
+            createBtn.classList.remove('opacity-50')
+            createBtn.disabled = false
         }
+        catch (err) {
+            console.error(err)
+            notesBody.innerHTML = ''
+            const errorDiv = c('div', { classes: 'flex flex-col items-center justify-center p-2 text-center rounded-lg space-y-1 overflow-hidden' }, [
+                c('svg', { classes: 'h-4 w-4 text-red-500', attrs: { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '2' } }, [
+                    c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' } }),
+                ]),
+                c('span', { classes: 'text-[11px] font-semibold text-red-800', text: `Failed to load notes (${ui.name})` }),
+                c('span', { classes: 'text-[8px] text-red-600', text: err.message || 'An unexpected error occurred while communicating with the hospital network.' }),
+            ])
+            notesBody.classList.add('flex', 'flex-col', 'justify-center')
+            notesBody.appendChild(errorDiv)
+        }
+
+        btnNotes.classList.add('hover:bg-blue-600', 'hover:text-white')
+        btnNotes.classList.remove('opacity-50')
+        btnNotes.disabled = false
+        closeBtn.classList.add('hover:text-red-500')
+        closeBtn.classList.remove('opacity-50')
+        closeBtn.disabled = false
     }
     openPDFConfigDrawer() {
         const activeListName = this.patientList?.name
@@ -2017,5 +2151,424 @@ export class MyPatientsRenderer {
             console.error('Compilation failed:', err)
             newTab.close() // Clean up tab resource leakage on absolute fault
         }
+    }
+}
+
+class NotesSlideOutRenderer {
+    /**
+     * @param {HTMLDivElement} container
+     * @param {ClinicalNote[]} notes
+     * @param {Patient} p
+     * @param {HTMLButtonElement} btnNotes
+     */
+    constructor(container, notes, p, btnNotes) {
+        this.p = p
+        this.ui = this.p.getUIDisplayData()
+        this.notes = notes
+        this.container = container
+        this.body = this.container.querySelector('.notes-body')
+        this.createBtn = this.container.querySelector('.notes-create-btn')
+        this.closeBtn = this.container.querySelector('.notes-close-inner')
+        this.filterRoleGroup = this.container.querySelector('.role-filter-group')
+        this.filterRoleButtons = this.container.querySelectorAll('.role-filter-group > button[data-role]')
+        this.paginationTrack = this.container.querySelector('.notes-pagination-track')
+        this.toggleBtn = btnNotes
+
+        this.filterRole = MyPatientsRenderer.FILTERS.ROLE_MINE
+        this.notesByDate = this.groupNotesByDate(this.notes)
+        this.activeDate = null
+        this.availableDates = []
+        this.todayStr = ''
+    }
+    init(defaultFilterRole, defaultFilterDay) {
+        this.filterRole = defaultFilterRole
+        this.availableDates = Object.keys(this.notesByDate).sort((a, b) => b.localeCompare(a))
+        this.todayStr = this.formatDate(Date.now())
+
+        const yesterdayStr = this.formatDate(Date.now() - 24 * 60 * 60 * 1000)
+        const isYesterday = defaultFilterDay === MyPatientsRenderer.DAYS.YESTERDAY
+        const targetDate = isYesterday ? yesterdayStr : this.todayStr
+
+        if (this.availableDates.includes(targetDate)) {
+            this.activeDate = targetDate
+        } else {
+            this.activeDate = this.availableDates.length > 0 ? this.availableDates[0] : this.todayStr
+        }
+
+        this.renderPaginationTrack(this.availableDates)
+        this.render()
+    }
+    /**
+     * Groups notes into an object mapping [YYYY-MM-DD]: ClinicalNote[]
+     * @param {ClinicalNote[]} notes 
+     * @returns {Object.<string, ClinicalNote[]>}
+     */
+    groupNotesByDate(notes) {
+        const grouped = notes.reduce((acc, note) => {
+            const dateStr = this.formatDate(note.timestamp)
+            if (!acc[dateStr]) {
+                acc[dateStr] = []
+            }
+            acc[dateStr].push(note)
+            return acc
+        }, {})
+        for (const dateStr in grouped) {
+            grouped[dateStr].sort((a, b) => {
+                return new Date(b.timestamp) - new Date(a.timestamp)
+            })
+        }
+        return grouped
+    }
+    /**
+     * Dynamically renders tabs for all dates containing notes
+     * @param {string[]} availableDates
+     */
+    renderPaginationTrack(availableDates) {
+        const c = Utils.DOM.createElement
+        const datesToRender = availableDates.length > 0 ? availableDates : [this.activeDate]
+
+        this.paginationTrack.innerHTML = ''
+
+        datesToRender.forEach(dateStr => {
+            const isActive = dateStr === this.activeDate
+            const isToday = dateStr === this.todayStr
+            const notes = this.notesByDate[dateStr] || []
+            const text = `${isToday ? '★ ' : ''}${dateStr} (${this.getRoleFilteredNotes(notes)?.length || 0}/${notes.length || 0})`
+            let classes = 'pagination-btn shrink-0 px-2 py-1 rounded text-[8px] font-bold transition-all '
+            if (isActive) {
+                classes += 'bg-blue-600 text-white'
+            } else if (isToday) {
+                classes += 'bg-amber-50 border-amber-300 text-amber-700'
+            } else {
+                classes += 'bg-white border-slate-200 text-slate-500'
+            }
+
+            const btn = c('button', {
+                classes,
+                text,
+            })
+
+            btn.addEventListener('click', () => {
+                if (this.activeDate !== dateStr) {
+                    this.activeDate = dateStr
+                    this.renderPaginationTrack(availableDates)
+                    this.render()
+                }
+            })
+
+            this.paginationTrack.appendChild(btn)
+        })
+    }
+    render() {
+        if (!this.container) return
+        const c = Utils.DOM.createElement
+
+        const notesForDate = this.notesByDate[this.activeDate] || []
+        const filteredNotes = this.getRoleFilteredNotes(notesForDate)
+
+        this.body.innerHTML = ''
+
+        if (filteredNotes.length === 0) {
+            const isToday = this.activeDate === this.todayStr
+            const displayRole = this.filterRole
+            const displayDate = `${isToday ? '★ ' : ''}${this.activeDate}`
+            const emptyDiv = c('div', { classes: 'flex flex-col items-center justify-center py-12 px-4 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200' }, [
+                c('span', {
+                    classes: 'text-[11px] font-semibold text-slate-700 block mb-1',
+                    text: `No clinical notes found (${this.ui.name})`,
+                }),
+                c('div', { classes: 'flex flex-wrap items-center justify-center gap-1.5 text-[10px] text-slate-500 font-medium' }, [
+                    c('span', { text: 'Filters applied:' }),
+                    c('span', {
+                        classes: 'bg-slate-200/70 text-[8px] text-slate-700 px-1.5 py-0.5 rounded',
+                        text: displayRole,
+                    }),
+                    c('span', { text: '•' }),
+                    c('span', {
+                        classes: 'bg-slate-200/70 text-[8px] text-slate-700 px-1.5 py-0.5 rounded',
+                        text: displayDate,
+                    }),
+                ]),
+            ])
+            this.body.appendChild(emptyDiv)
+            return
+        }
+
+        const userId = this.getUserId()
+        const labelClass = 'text-blue-500 block text-[9px] uppercase tracking-widest mb-1'
+
+        filteredNotes.forEach(note => {
+            const isDoctor = note.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR
+            const badgeColor = isDoctor ? 'bg-blue-600' : 'bg-emerald-600'
+            const dupClass = isDoctor
+                ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600'
+                : 'bg-slate-700 hover:bg-slate-800 text-white border-slate-900/20 shadow-sm'
+
+            const canEdit = note.creator.id === userId
+            const { datePart, timePart } = this.getTimestampParts(note.timestamp)
+
+            // --- BUTTONS & TOGGLE WRAPPER ---
+            const actionContainer = c('div', { classes: 'flex gap-1 items-center' })
+
+            const btnDup = c('button', { classes: `note-duplicate-btn ${dupClass} text-white text-[9px] font-bold px-2 py-0.5 rounded border transition-all`, text: 'Dup' })
+            const btnCopy = c('button', { classes: 'note-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all', text: 'Copy' })
+            const btnEdit = c('button', { classes: 'note-edit-btn bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all', text: 'Edit' })
+            const btnDelete = c('button', { classes: 'note-delete-btn bg-red-500 hover:bg-red-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-red-600 transition-all', text: 'Del' })
+            const btnSave = c('button', { classes: 'note-save-btn bg-emerald-500 hover:bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-emerald-600 transition-all', text: 'Save' })
+            const btnCancel = c('button', { classes: 'note-cancel-btn bg-slate-500 hover:bg-slate-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-slate-600 transition-all', text: 'Cancel' })
+
+            // WORK IN PROGRESS (WIP)
+            btnDup.classList.add('hidden')
+            btnEdit.classList.add('hidden')
+            btnDelete.classList.add('hidden')
+            // WIP WIP
+
+            const showNormalActions = () => {
+                actionContainer.replaceChildren(btnDup, btnCopy, ...(canEdit ? [btnEdit, btnDelete] : []))
+            }
+            const showEditingActions = () => {
+                actionContainer.replaceChildren(btnSave, btnCancel)
+            }
+
+            btnDup.addEventListener('click', () => this.handleDuplicate(note))
+            btnCopy.addEventListener('click', async (e) => {
+                const textOutput = ClinicalNote.formatToText(note)
+                await Utils.executeNativeClipboardCopy(textOutput, e.currentTarget)
+            })
+
+            if (canEdit) {
+                btnDelete.addEventListener('click', () => this.handleDelete(note))
+                btnEdit.addEventListener('click', () => {
+                    showEditingActions()
+                    this.handleStartEditing(note)
+                })
+                btnCancel.addEventListener('click', () => {
+                    showNormalActions()
+                    this.handleCancelEditing(note)
+                })
+                btnSave.addEventListener('click', async () => {
+                    btnSave.disabled = true
+                    btnCancel.disabled = true
+                    btnSave.classList.add('opacity-50', 'cursor-not-allowed')
+                    try {
+                        await this.handleSave(note)
+                        showNormalActions()
+                    }
+                    catch (err) {
+                        console.error(err)
+                    }
+                    finally {
+                        btnSave.disabled = false
+                        btnCancel.disabled = false
+                        btnSave.classList.remove('opacity-50', 'cursor-not-allowed')
+                    }
+                })
+            }
+            showNormalActions()
+
+            // --- VERIFICATION STATUS NODE WORKFLOW ---
+            let verificationSection
+            const v = note.verification
+
+            if (v && v.isVerified) {
+                const { datePart: vDate, timePart: vTime } = this.getTimestampParts(v.timestamp)
+                verificationSection = c('div', { classes: 'flex items-center justify-between bg-emerald-50 border border-emerald-100 rounded px-2.5 py-1 text-[9px]' }, [
+                    c('span', { classes: 'text-emerald-800 font-medium flex items-center gap-1' }, [
+                        // Minimal checkmark icon indicator
+                        c('span', { classes: 'inline-block w-1.5 h-1.5 rounded-full bg-emerald-500' }),
+                        document.createTextNode(`Verified by ${v.verificatorName}`)
+                    ]),
+                    c('span', { classes: 'font-mono text-emerald-600/80', text: `${vDate} ${vTime}` })
+                ])
+            } else {
+                verificationSection = c('div', { classes: 'bg-amber-50 border border-amber-100 text-amber-800 rounded px-2.5 py-1 text-[9px] font-medium flex items-center gap-1' }, [
+                    c('span', { classes: 'inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse' }),
+                    document.createTextNode('Not verified yet')
+                ])
+            }
+
+            // --- CONTENT PROCESSOR ---
+            const currentConfig = ClinicalNote.NOTE_TYPE_CONFIGS[note.type] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
+            const contentRows = currentConfig.map(field => {
+                const rawContent = note.content[field.key] || '-'
+                const decodedContent = Utils.decodeHtmlEntities(rawContent)
+                const textSegments = decodedContent.split(/<br\s*\/?>/i)
+                const formattedChildren = []
+                textSegments.forEach((segment, index) => {
+                    if (segment) formattedChildren.push(document.createTextNode(segment))
+                    if (index < textSegments.length - 1) formattedChildren.push(c('br'))
+                })
+                return c('div', {}, [
+                    c('b', { classes: labelClass, text: field.label }),
+                    c('div', { classes: field.valClass }, formattedChildren),
+                ])
+            })
+
+            // --- STRUCTURAL LAYOUT BUILD ---
+            const noteCard = c('div', { classes: 'note-card bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col mb-4' }, [
+                // UNIFIED STICKY HEADER (Contains: Creator Info, Role Badge, ID & Controls)
+                c('div', { classes: `px-4 py-2 flex justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm` }, [
+                    c('div', { classes: 'flex flex-col gap-1' }, [
+                        c('h4', { classes: 'text-white text-[11px] font-black tracking-wide leading-none', text: note.creator.name }),
+                        c('div', { classes: 'flex items-center gap-2 opacity-90' }, [
+                            c('span', { classes: 'text-white text-[8px] font-bold uppercase tracking-wider bg-white/20 px-1 rounded-sm', text: note.creator.type }),
+                            c('span', { classes: 'text-white/80 text-[7.5px] font-mono', text: `ID: ${note.id}` }),
+                        ]),
+                    ]),
+                    actionContainer,
+                ]),
+                // CARD BODY
+                c('div', { classes: 'p-4 space-y-3.5' }, [
+                    // Metadata Line (Now shows Room, Note Type, and Timestamp)
+                    c('div', { classes: 'flex justify-between items-center border-b border-slate-100 pb-1.5' }, [
+                        // Left Side: Room Name and Note Type badges
+                        c('div', { classes: 'flex items-center gap-1.5' }, [
+                            // Room Name Tag
+                            c('span', {
+                                classes: 'bg-slate-100 text-slate-700 text-[9px] font-bold px-1.5 py-0.5 rounded tracking-tight',
+                                text: note.roomName,
+                            }),
+                            // Divider Pipe
+                            c('span', { classes: 'text-slate-300 text-[10px]', text: '|' }),
+                            // Note Type Tag (SOAP, SBAR, ADIME)
+                            c('span', {
+                                classes: 'bg-blue-50 text-blue-700 text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider',
+                                text: note.type,
+                            }),
+                        ]),
+                        // Right Side: Creation Timestamp
+                        c('p', {
+                            classes: 'text-[9px] font-mono text-slate-500 font-bold val-time',
+                            attrs: { 'data-date': datePart },
+                            text: timePart,
+                        }),
+                    ]),
+                    // Injected Verification status block directly under header details
+                    verificationSection,
+                    // Display Container fields
+                    c('div', { classes: 'soap-display-area space-y-3 text-[11px] leading-relaxed text-slate-700' }, contentRows)
+                ])
+            ])
+
+            this.body.append(noteCard)
+        })
+    }
+    /**
+     * @param {ClinicalNote} note 
+     */
+    handleDuplicate(note) {
+    }
+    /**
+     * @param {ClinicalNote} note 
+     */
+    handleStartEditing(note) {
+    }
+    /**
+     * @param {ClinicalNote} note 
+     */
+    handleCancelEditing(note) {
+    }
+    /**
+     * @param {ClinicalNote} note 
+     */
+    handleDelete(note) {
+    }
+    /**
+     * @param {ClinicalNote} note 
+     */
+    async handleSave(note) {
+        const confirmed = await confirm('save?')
+        if (!confirmed) {
+            throw new Error('User cancelled modal')
+        }
+        // await apiupdatenote(note.id, note.content) blabla
+        // await refreshnotesdata() blabla
+    }
+    destroy() {
+        if (this.filterRoleButtons) {
+            this.filterRoleButtons.forEach(btn => {
+                btn.onclick = null
+            })
+        }
+        if (this.createBtn) this.createBtn.onclick = null
+        if (this.closeBtn) this.closeBtn.onclick = null
+        this.container = null
+        this.body = null
+        this.createBtn = null
+        this.closeBtn = null
+        this.filterRoleGroup = null
+        this.filterRoleButtons = null
+        this.paginationTrack = null
+        this.toggleBtn = null
+    }
+    changeFilter(newFilterRole) {
+        if (this.filterRole !== newFilterRole) {
+            this.filterRole = newFilterRole
+            this.renderPaginationTrack(this.availableDates)
+            this.render()
+        }
+    }
+    disableInputs() {
+        this.filterRoleGroup.classList.add('opacity-50')
+        this.createBtn.classList.remove('hover:bg-emerald-600', 'hover:text-white')
+        this.createBtn.classList.add('opacity-50')
+        this.createBtn.disabled = true
+        this.closeBtn.classList.remove('hover:text-red-500')
+        this.closeBtn.classList.add('opacity-50')
+        this.closeBtn.disabled = true
+        this.toggleBtn.classList.remove('hover:bg-blue-600', 'hover:text-white')
+        this.toggleBtn.classList.add('opacity-50')
+        this.toggleBtn.disabled = true
+    }
+    enableInputs() {
+        this.filterRoleGroup.classList.remove('opacity-50')
+        this.createBtn.classList.add('hover:bg-emerald-600', 'hover:text-white')
+        this.createBtn.classList.remove('opacity-50')
+        this.createBtn.disabled = false
+        this.closeBtn.classList.add('hover:text-red-500')
+        this.closeBtn.classList.remove('opacity-50')
+        this.closeBtn.disabled = false
+        this.toggleBtn.classList.add('hover:bg-blue-600', 'hover:text-white')
+        this.toggleBtn.classList.remove('opacity-50')
+        this.toggleBtn.disabled = false
+    }
+    getUserId() {
+        return hospitalContext.session.data.userData.staffId
+    }
+    /**
+     * Filters a targeted list of notes based on active role
+     * @param {ClinicalNote[]} notesToFilter 
+     */
+    getRoleFilteredNotes(notesToFilter) {
+        switch (this.filterRole) {
+            case MyPatientsRenderer.FILTERS.ROLE_MINE:
+                return notesToFilter.filter(n => n.creator.id === this.getUserId())
+            case MyPatientsRenderer.FILTERS.ROLE_DOCTORS:
+                return notesToFilter.filter(n => n.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR)
+            default:
+                return notesToFilter
+        }
+    }
+    formatDate(timestamp) {
+        if (!timestamp) return 'Unknown Date'
+        return Utils.toLocalISOString(new Date(timestamp)).split('T')[0] // YYYY-MM-DD
+    }
+    /**
+     * @param {string|number|Date} timestamp 
+     * @returns {{datePart: string, timePart: string}}
+     */
+    getTimestampParts(timestamp) {
+        if (!timestamp) return { datePart: '', timePart: '' }
+        const dateObj = new Date(timestamp)
+        if (isNaN(dateObj.getTime())) return { datePart: '', timePart: '' }
+        const t = Utils.toLocalISOString(dateObj)
+        const [rawDate, rawTime] = t.split('T')
+        const datePart = rawDate
+        const timePart = rawTime.slice(0, 8)
+        return { datePart, timePart }
+    }
+    static isForceCancelled(patientId, originalContainer) {
+        const freshNotesContainer = document.querySelector(`.js-patient-item[data-id="${patientId}"] .patient-notes-container`)
+        return originalContainer !== freshNotesContainer
     }
 }

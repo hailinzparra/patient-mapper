@@ -1,5 +1,5 @@
 import { Utils } from './utils.js'
-import { Patient } from './clinical.js'
+import { Patient, ClinicalNote } from './clinical.js'
 import { PatientLookup } from './ui.js'
 
 export const SOEDIRAN_DATABASE = {
@@ -228,6 +228,7 @@ export const SOEDIRAN_DATABASE = {
 }
 
 export const ApiSoediranDriver = {
+    HID: 0,
     NAME: 'RSUD Soediran',
     SYSTEM_NAME: 'Soediran',
     DOMAINS: [
@@ -322,10 +323,28 @@ export const ApiSoediranDriver = {
 
         const rawUser = authResponse.data
 
+        const getStaffByNIP = async (nip, jns) => {
+            const dc = Date.now()
+            const url = `${targetDomain}${this.PATHS.BASE}/general/tenagamedis?_dc=${dc}&JENIS=${jns}&NIP=${nip}&page=1&start=0&limit=25`
+            try {
+                const result = await this.apiRequest(url, session, { method: 'GET' })
+                if (result && result.data && result.data.length > 0) {
+                    return result.data[0]
+                }
+                console.warn(`No staff found with NIP: ${nip}`)
+                return null
+            } catch (err) {
+                console.error('Failed to fetch ID from NIP:', err)
+            }
+        }
+
+        const staff = await getStaffByNIP(rawUser.NIP, rawUser.JNS)
+
         return {
             username: rawUser.LGN,
-            displayName: rawUser.NAME,
+            displayName: staff?.NAMA || rawUser.NAME,
             userId: rawUser.ID,
+            staffId: staff?.ID || null,
         }
     },
     async handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, onProgress) {
@@ -424,6 +443,9 @@ export const ApiSoediranDriver = {
             disDate: v(item?.KELUAR, null),
         })
     },
+    clinicalNotesContext(targetDomain, session) {
+        return new SoediranClinicalNotesContext(this, targetDomain, session)
+    },
 }
 
 class SoediranRequestPayload {
@@ -462,6 +484,148 @@ class SoediranRequestPayload {
             ([_, val]) => val !== null && val !== undefined && val !== ''
         )
         return new URLSearchParams(Object.fromEntries(cleanEntries)).toString()
+    }
+}
+
+class SoediranClinicalNotesContext {
+    constructor(driver, targetDomain, session) {
+        this.driver = driver
+        this.targetDomain = targetDomain
+        this.session = session
+        this.basePath = driver.PATHS.BASE
+    }
+    _url(endpoint) {
+        const dc = Date.now()
+        const delimiter = endpoint.includes('?') ? '&' : '?'
+        return `${this.targetDomain}${this.basePath}${endpoint}${delimiter}_dc=${dc}`
+    }
+    extractContentByNoteType = (type, raw) => {
+        switch (type) {
+            case ClinicalNote.TYPES.SBAR:
+                return {
+                    situation: raw.SUBYEKTIF || '',
+                    background: raw.OBYEKTIF || '',
+                    assessment: raw.ASSESMENT || '',
+                    recommendation: raw.PLANNING || '',
+                }
+            case ClinicalNote.TYPES.ADIME:
+            //     return {}
+            default:
+                return {
+                    subjective: raw.SUBYEKTIF || '',
+                    objective: raw.OBYEKTIF || '',
+                    assessment: raw.ASSESMENT || '',
+                    planning: raw.PLANNING || '',
+                    instruction: raw.INSTRUKSI || '',
+                }
+        }
+    }
+    async fetch(recId, signal) {
+        const url = this._url(`/medicalrecord/cppt?KUNJUNGAN=${recId}&STATUS=1&page=1&start=0&limit=25`)
+        const result = await this.driver.apiRequest(url, this.session, { signal })
+        const rawList = result.data || []
+        return rawList.map(raw => {
+            const creatorTypeMap = {
+                '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
+                '3': ClinicalNote.CREATOR_TYPES.PARAMEDIC,
+                // '?': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
+            }
+            const type = raw.ADIME !== '0' ? ClinicalNote.TYPES.ADIME : (raw.STATUS_SBAR !== '0' ? ClinicalNote.TYPES.SBAR : ClinicalNote.TYPES.SOAP)
+            return new ClinicalNote({
+                id: String(raw.ID || ''),
+                recId: String(raw.KUNJUNGAN || ''),
+                roomId: raw.REFERENSI?.KUNJUNGAN?.RUANGAN,
+                roomName: raw.REFERENSI?.KUNJUNGAN?.REFERENSI?.RUANGAN?.DESKRIPSI,
+                type: type,
+                content: this.extractContentByNoteType(type, raw),
+                creator: {
+                    id: String(raw.TENAGA_MEDIS || ''),
+                    name: Utils.formatNameWithTitle(raw.REFERENSI?.TENAGA_MEDIS?.NAMA),
+                    type: creatorTypeMap[raw.JENIS],
+                },
+                timestamp: Utils.toLocalISOString(new Date(raw.TANGGAL)),
+                verification: raw.VERIFIKASI !== '0' ? {
+                    isVerified: raw.REFERENSI?.VERIFIKASI?.STATUS === '1',
+                    id: String(raw.VERIFIKASI),
+                    verificatorName: (() => {
+                        const n = raw.REFERENSI?.VERIFIKASI?.REFERENSI?.PENGGUNA
+                        if (!n) return ''
+                        const a = n.GELAR_DEPAN ? `${n.GELAR_DEPAN} ` : ''
+                        const b = n.NAMA || ''
+                        const c = n.GELAR_BELAKANG ? `, ${n.GELAR_BELAKANG}` : ''
+                        return `${a}${b}${c}`.trim()
+                    })(),
+                    timestamp: Utils.toLocalISOString(new Date(raw.REFERENSI?.VERIFIKASI?.TANGGAL)),
+                } : null,
+            })
+        })
+    }
+    async submit(noteInstance) {
+        if (!(noteInstance instanceof ClinicalNote)) {
+            throw new Error('Not a clinical note.')
+        }
+
+        const cyclingNum = (Math.floor(Date.now() / 1000) % 100) + 1
+        const modelId = `rekammedis.cppt.Model-${cyclingNum}`
+        const timestamp = noteInstance.timestamp || ''
+        const timeValue = timestamp.split(' ')[1] || '00:00:00'
+
+        const payload = {
+            'STATUS': 1,
+            'JENIS': noteInstance.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR ? 1 : 3,
+            'SUBYEKTIF': noteInstance.content.subjective,
+            'OBYEKTIF': noteInstance.content.objective,
+            'ASSESMENT': noteInstance.content.assessment,
+            'PLANNING': noteInstance.content.planning,
+            'INSTRUKSI': noteInstance.content.instruction,
+            'KUNJUNGAN': noteInstance.recId,
+            'TANGGAL': timestamp,
+            'WAKTU': timeValue,
+            'ID': modelId,
+            'TENAGA_MEDIS': parseInt(noteInstance.creator.id),
+            'TULIS': '',
+            'RENCANA_PULANG': 0,
+            'STATUS_TBAK_SBAR': 0,
+            'STATUS_TBAK': 0,
+            'STATUS_SBAR': noteInstance.type === ClinicalNote.TYPES.SBAR ? 1 : 0,
+            'BACA': 0,
+            'KONFIRMASI': 0,
+            'TANGGAL_RENCANA_PULANG': null,
+            'SUB_DEVISI': 0,
+            'DOKTER_TBAK_OR_SBAR': null,
+            'OLEH': 0,
+            'SELESAI_RAWAT_BERSAMA': '0',
+        }
+
+        const url = this._url('/medicalrecord/cppt')
+        return await this.driver.apiRequest(url, this.session, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        })
+    }
+    async amend(clinicalNoteInstance) {
+        const payload = {
+            'ID': parseInt(clinicalNoteInstance.id),
+            'SUBYEKTIF': clinicalNoteInstance.content.subjective,
+            'OBYEKTIF': clinicalNoteInstance.content.objective,
+            'ASSESMENT': clinicalNoteInstance.content.assessment,
+            'PLANNING': clinicalNoteInstance.content.planning,
+            'TANGGAL': clinicalNoteInstance.timestamp,
+            'DOKTER_TBAK_OR_SBAR': null, // figure out if needed
+            'SELESAI_RAWAT_BERSAMA': '0',
+        }
+        const url = this._url(`/medicalrecord/cppt/${clinicalNoteInstance.id}`)
+        return await this.driver.apiRequest(url, this.session, {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+        })
+    }
+    async archive(id) {
+        const url = this._url(`/medicalrecord/cppt/${id}`)
+        return await this.driver.apiRequest(url, this.session, {
+            method: 'PUT',
+            body: JSON.stringify({ 'STATUS': 0, 'ID': parseInt(id) }),
+        })
     }
 }
 

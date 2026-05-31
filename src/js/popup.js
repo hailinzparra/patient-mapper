@@ -47,8 +47,8 @@ const G = {
     store: {
         temp: {
             activeTargetTabId: null,
+            activeNotesSlideOutRenderers: [],
         },
-        session: new VaultDriver('session'),
         patients: new VaultDriver('patients', {
             lists: [],
         }),
@@ -81,6 +81,7 @@ const G = {
         },
     },
     sidebar: {
+        isInitializing: true,
         lastSelectedListId: null,
         // Structural elements
         container: null,
@@ -122,6 +123,7 @@ const G = {
         toolsAccordionArrow: null,
         toolsAccordionContent: null,
         async init() {
+            this.isInitializing = true
             this.container = document.getElementById('sidebar')
             this.brandText = document.getElementById('sidebar-brand-text')
             this.toggleBtn = document.getElementById('sidebar-toggle-btn')
@@ -206,6 +208,7 @@ const G = {
                 .map(key => `<option value="${key}">${HOSPITAL_REGISTRY[key].name}</option>`)
                 .join('')
             this.targetHospitalSelect.addEventListener('change', async () => {
+                if (this.isInitializing) return
                 const selectedKey = this.targetHospitalSelect.value
                 hospitalContext.changeHospital(selectedKey)
                 await G.store.settings.update({
@@ -216,6 +219,7 @@ const G = {
                 await this.updateDomainDropdown()
             })
             this.targetDomainSelect.addEventListener('change', async () => {
+                if (this.isInitializing) return
                 const selectedKey = this.targetHospitalSelect.value
                 const selectedDomain = this.targetDomainSelect.value
                 hospitalContext.changeHospital(selectedKey, selectedDomain)
@@ -374,13 +378,17 @@ const G = {
                 ? matchedHospital.driver.SYSTEM_NAME
                 : Object.keys(HOSPITAL_REGISTRY)[0]
             Utils.DOM.selectOptionByValue(this.targetHospitalSelect, resolvedKey)
-            await Utils.sleep(100)
+            await this.updateDomainDropdown()
             Utils.DOM.selectOptionByDatasetIndex(this.targetDomainSelect, activeDomainIndex)
+            hospitalContext.changeHospital(resolvedKey, this.targetDomainSelect.value)
+            await this.runLiveEnvSync()
 
             this.allPatientsBtn.click()
 
             Events.on('visible', () => this.runLiveEnvSync())
             Events.on('target_tab_closed', () => this.runLiveEnvSync())
+
+            this.isInitializing = false
         },
         selectListById(listId) {
             if (!listId) return
@@ -504,7 +512,9 @@ const G = {
                 `<option value="${domain}" data-index="${index++}">${domain}</option>`
             ).join('')
             hospitalContext.changeHospital(selectedHospitalKey, this.targetDomainSelect.value)
-            await this.runLiveEnvSync()
+            if (!this.isInitializing) {
+                await this.runLiveEnvSync()
+            }
         },
         async runLiveEnvSync() {
             this.disableInputs()
@@ -516,9 +526,10 @@ const G = {
                 if (!activeDriver) throw new Error('No API driver implementation found.')
 
                 const session = await activeDriver.getSession(activeDomain, api, G.store)
-                await G.store.session.update({ ...session })
+                await hospitalContext.session.update({ ...session })
 
-                const userData = await activeDriver.syncUserData(activeDomain, G.store.session.data)
+                const userData = await activeDriver.syncUserData(activeDomain, hospitalContext.session.data)
+                await hospitalContext.session.update({ ...session, userData: userData })
 
                 this.updateSyncUI(true, true, userData)
             } catch (error) {
@@ -559,7 +570,7 @@ const G = {
 
             this.userName.innerHTML = `<div class="flex flex-col min-w-0"><span class="truncate text-xs font-bold text-slate-800">${userData.displayName}</span><div class="flex items-center gap-1.5 mt-0.5">
             <span class="text-[10px] text-slate-400 truncate max-w-[65px]">@${userData.username}</span>
-            <span class="px-1 py-0 bg-slate-100 text-slate-400 text-[7px] font-black rounded border border-slate-200 tracking-tighter truncate">ID:${userData.userId}</span></div></div>`
+            <span class="px-1 py-0 bg-slate-100 text-slate-400 text-[7px] font-black rounded border border-slate-200 tracking-tighter truncate">UID:${userData.userId}</span></div></div>`
 
             this.statusIndicator.className = 'h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse'
             this.statusText.innerText = 'Online'
@@ -1332,7 +1343,7 @@ const G = {
 
             try {
                 const hid = hospitalContext.activeConfig?.id ?? -1
-                const session = G.store.session.data
+                const session = hospitalContext.session.data
                 const targetDomain = hospitalContext.activeDomain
                 const completeDataset = await driver.handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, (progress) => {
                     const { index, status, data } = progress
@@ -1822,7 +1833,7 @@ Events.on('entrypoint', async (ev) => {
         window.addEventListener('resize', scaleMainContainer)
         scaleMainContainer()
 
-        await Utils.sleep(1000)
+        await Utils.sleep(200)
 
         G.swal.close()
     }
@@ -1862,3 +1873,6 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     Events.emit('entrypoint')
 })
+
+window.G = G
+window.hospitalContext = hospitalContext

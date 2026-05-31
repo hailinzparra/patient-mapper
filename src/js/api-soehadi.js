@@ -287,6 +287,7 @@ export const SOEHADI_DATABASE = {
 }
 
 export const ApiSoehadiDriver = {
+    HID: 1,
     NAME: 'RSUD Soehadi',
     SYSTEM_NAME: 'Soehadi',
     DOMAINS: [
@@ -376,6 +377,7 @@ export const ApiSoehadiDriver = {
                 username: result.userLogin.kdUser,
                 displayName: result.pegawai.namaLengkap,
                 userId: result.pegawai.id,
+                staffId: result.pegawai.id,
             },
         }
     },
