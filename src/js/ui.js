@@ -800,7 +800,7 @@ export class MyPatientsRenderer {
     async savePatientsData() {
         const store = this.#patientsStore
         if (!(store instanceof VaultDriver)) return
-        await store.update({ lists: G.store.patients.data.lists })
+        await store.update({ lists: this.G.store.patients.data.lists })
     }
     getSettingsData() {
         const store = this.#settingsStore
@@ -861,7 +861,7 @@ export class MyPatientsRenderer {
         }, [
             this.#nodes.headerTitle,
             this.#nodes.headerCounter,
-            this.#nodes.btnPreviewOptions,
+            // this.#nodes.btnPreviewOptions,
         ])
 
         this.#nodes.btnPreviewOptions.addEventListener('click', () => {
@@ -1000,7 +1000,7 @@ export class MyPatientsRenderer {
             filtersGridContainer,
         ])
 
-        settingsBody.append(batchOperationsWrapper)
+        // settingsBody.append(batchOperationsWrapper)
         settingsBody.append(globalSettingsWrapper)
 
         // ==========================================
@@ -1055,8 +1055,11 @@ export class MyPatientsRenderer {
 
         this.#nodes.listContainer.innerHTML = ''
 
-        G.store.temp.activeNotesSlideOutRenderers.forEach(renderer => renderer.destroy?.())
-        G.store.temp.activeNotesSlideOutRenderers = []
+        const renderersMap = this.G.store.temp.activeNotesSlideOutRenderers
+        if (renderersMap) {
+            renderersMap.forEach(renderer => renderer.destroy?.())
+            renderersMap.clear()
+        }
 
         // ==========================================
         // NO PATIENTS
@@ -1389,30 +1392,35 @@ export class MyPatientsRenderer {
         const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
         const ui = p.getUIDisplayData() || {}
 
-        // Shared action buttons (Open Details, Notes, Delete)
-        const btnOpenDetails = c('button', { classes: 'patient-open-details-btn p-2 bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white rounded-lg transition-all' }, [
-            c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' } }),
-            ]),
-        ])
-        const btnNotes = c('button', { classes: 'patient-notes-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all' }, [
-            c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' } }),
-            ]),
-        ])
-        const btnDelete = c('button', { classes: 'patient-delete-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all' }, [
-            c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' } }),
-            ]),
-        ])
+        const createBaseButtons = () => {
+            // hidden for WIP
+            const btnOpenDetails = c('button', { classes: 'patient-open-details-btn p-2 bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white rounded-lg transition-all hidden' }, [
+                c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                    c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' } }),
+                ]),
+            ])
+            btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
+
+            const btnDelete = c('button', { classes: 'patient-delete-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all' }, [
+                c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                    c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' } }),
+                ]),
+            ])
+            btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id, roomName))
+
+            return { btnOpenDetails, btnDelete }
+        }
+
+        let genderColorClass = 'text-slate-400'
+        if (p.gender === Patient.MALE) genderColorClass = 'text-blue-500'
+        if (p.gender === Patient.FEMALE) genderColorClass = 'text-rose-500'
 
         // ==========================================
         // BRANCH A: COMPACT VIEW
         // ==========================================
-        let genderColorClass = 'text-slate-400'
-        if (p.gender === Patient.MALE) genderColorClass = 'text-blue-500'
-        if (p.gender === Patient.FEMALE) genderColorClass = 'text-rose-500'
         if (this.#viewMode === MyPatientsRenderer.VIEWS.COMPACT) {
+            const { btnOpenDetails, btnDelete } = createBaseButtons()
+
             const losBadgeClasses = ui.los.isFresh
                 ? 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-amber-50 text-amber-700 border-amber-200 tracking-tighter mr-1'
                 : 'inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border bg-slate-100 text-slate-500 border-slate-200 tracking-tighter mr-1'
@@ -1434,7 +1442,6 @@ export class MyPatientsRenderer {
                 classes: 'actions flex items-center gap-1'
             }, [
                 btnOpenDetails,
-                // btnNotes,
                 btnDelete,
             ])
 
@@ -1450,6 +1457,13 @@ export class MyPatientsRenderer {
         // ==========================================
         // BRANCH B: FULL VIEW
         // ==========================================
+        const { btnOpenDetails, btnDelete } = createBaseButtons()
+        const btnNotes = c('button', { classes: 'patient-notes-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all' }, [
+            c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' } }),
+            ]),
+        ])
+
         const bedBlockColorClasses = ui.los.isFresh
             ? 'bg-amber-50 border-amber-200'
             : 'bg-slate-100 border-slate-200'
@@ -1506,14 +1520,15 @@ export class MyPatientsRenderer {
                 ]),
                 c('div', { classes: 'flex items-center bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full' }, [
                     c('span', { classes: 'text-[8px] font-black text-blue-400 mr-1 tracking-tighter', text: 'In:' }),
-                    c('span', { classes: 'text-[8px] font-bold text-blue-700 whitespace-nowrap js-adm-date', text: ui.admText }),
+                    c('span', { classes: 'text-[8px] font-bold text-blue-700 whitespace-nowrap js-adm-date', text: ui.admText.short }),
                 ]),
                 c('div', { classes: 'flex items-center bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full' }, [
                     c('span', { classes: 'text-[8px] font-black text-slate-400 mr-1 tracking-tighter', text: 'Out:' }),
-                    c('span', { classes: 'text-[8px] font-bold text-slate-600 whitespace-nowrap js-dis-date', text: ui.disText }),
+                    c('span', { classes: 'text-[8px] font-bold text-slate-600 whitespace-nowrap js-dis-date', text: ui.disText.short }),
                 ]),
             ]),
-            c('button', { classes: 'refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group' }, [
+            // hidden for WIP
+            c('button', { classes: 'refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group hidden' }, [
                 c('svg', { attrs: { class: 'w-2.5 h-2.5 transition-transform duration-500', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                     c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } }),
                 ]),
@@ -1533,7 +1548,8 @@ export class MyPatientsRenderer {
             c('span', { classes: 'flex h-1.5 w-1.5 rounded-full bg-slate-200' })
         ])
 
-        const notesCreateButton = c('button', { classes: 'notes-create-btn p-1 me-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all' }, [
+        // hidden for WIP
+        const notesCreateButton = c('button', { classes: 'notes-create-btn p-1 me-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all hidden' }, [
             c('svg', { classes: 'w-3.5 h-3.5', attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M12 4v16m8-8H4' } }),
             ]),
@@ -1555,10 +1571,8 @@ export class MyPatientsRenderer {
             c('div', { classes: 'notes-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto transition-opacity duration-300 ease-in-out' }),
         ])
 
-        btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
         btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes))
         notesCloseButton.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes, false))
-        btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id, roomName))
         btnPatientUp.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'up'))
         btnPatientDown.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'down'))
 
@@ -1568,7 +1582,6 @@ export class MyPatientsRenderer {
         }, [
             c('div', { classes: 'patient-card p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-all overflow-hidden' }, [
                 c('div', { classes: 'flex items-center gap-3' }, [bedBlock, infoBlock, actionBlock]),
-                metadataBlock,
                 metadataBlock,
                 syncBlock,
             ]),
@@ -1744,14 +1757,17 @@ export class MyPatientsRenderer {
 
             const ui = p.getUIDisplayData() || {}
             const docName = this.#patientDocMap.get(p.id)
-            const soapObject = p.soap || null
-            const soapText = ClinicalNote.formatToText(soapObject)
+
+            const renderer = this.G.store.temp.activeNotesSlideOutRenderers.get(p.id)
+            const latestNote = renderer?.getLatestActiveNote()
+            const formattedText = ClinicalNote.formatToText(latestNote, '[No active notes]')
+
             const block = [
                 `${p.toClipboardString()}`,
                 `Physician in charge: ${docName}`,
-                `Admission date: ${ui.admText}`,
-                `Discharge date: ${ui.disText}`,
-                `\n${soapText}`,
+                `Admission date: ${ui.admText.long}`,
+                `Discharge date: ${ui.disText.long}`,
+                `\n${formattedText}`,
             ].join('\n')
 
             patientBlocks.push(block)
@@ -1827,15 +1843,16 @@ export class MyPatientsRenderer {
                 const ui = p.getUIDisplayData() || {}
                 const docName = this.#patientDocMap.get(p.id)
 
-                const soapObject = p.soap || null
-                const soapText = ClinicalNote.formatToText(soapObject)
+                const renderer = this.G.store.temp.activeNotesSlideOutRenderers.get(p.id)
+                const latestNote = renderer?.getLatestActiveNote()
+                const formattedText = ClinicalNote.formatToText(latestNote, '[No active notes]')
 
                 const block = [
                     `${p.toClipboardString()}`,
                     `Physician in charge: ${docName}`,
-                    `Admission date: ${ui.admText}`,
-                    `Discharge date: ${ui.disText}`,
-                    `\n${soapText}`
+                    `Admission date: ${ui.admText.long}`,
+                    `Discharge date: ${ui.disText.long}`,
+                    `\n${formattedText}`,
                 ].join('\n')
 
                 patientBlocks.push(block)
@@ -1966,7 +1983,12 @@ export class MyPatientsRenderer {
             }
 
             const renderer = new NotesSlideOutRenderer(notesContainer, rawNotes, p, btnNotes)
-            this.G.store.temp.activeNotesSlideOutRenderers.push(renderer)
+            const renderersMap = this.G.store.temp.activeNotesSlideOutRenderers
+            if (renderersMap.has(p.id)) {
+                const oldRenderer = renderersMap.get(p.id)
+                oldRenderer.destroy?.()
+            }
+            renderersMap.set(p.id, renderer)
 
             // clear loading
             notesBody.innerHTML = ''
@@ -2179,6 +2201,7 @@ class NotesSlideOutRenderer {
         this.activeDate = null
         this.availableDates = []
         this.todayStr = ''
+        this.latestActiveNote = null
     }
     init(defaultFilterRole, defaultFilterDay) {
         this.filterRole = defaultFilterRole
@@ -2259,12 +2282,58 @@ class NotesSlideOutRenderer {
             this.paginationTrack.appendChild(btn)
         })
     }
+    static CONTENT_LABEL_CLASS = 'text-blue-500 block text-[9px] uppercase tracking-widest mb-1'
+    static NOTE_TYPE_CLASSES = Object.freeze({
+        [ClinicalNote.TYPES.SOAP]: 'bg-blue-50 text-blue-700',
+        [ClinicalNote.TYPES.SBAR]: 'bg-amber-50 text-amber-700',
+        [ClinicalNote.TYPES.ADIME]: 'bg-indigo-50 text-indigo-700',
+    })
+    static DEFAULT_TYPE_CLASS = 'bg-blue-50 text-blue-700'
+    static getCreatorStyles(type) {
+        const TYPES = ClinicalNote.CREATOR_TYPES
+        const defaultButtonClass = 'bg-slate-700 hover:bg-slate-800 text-white border-slate-900/20 shadow-sm'
+        switch (type) {
+            case TYPES.DOCTOR:
+                return {
+                    badgeColor: 'bg-blue-600',
+                    dupClass: 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600',
+                }
+            case TYPES.PARAMEDIC:
+                return {
+                    badgeColor: 'bg-emerald-600',
+                    dupClass: defaultButtonClass,
+                }
+            case TYPES.PHARMACIST:
+                return {
+                    badgeColor: 'bg-zinc-600',
+                    dupClass: defaultButtonClass,
+                }
+            case TYPES.MIDWIFE:
+                return {
+                    badgeColor: 'bg-teal-600',
+                    dupClass: defaultButtonClass,
+                }
+            case TYPES.NUTRITIONIST:
+                return {
+                    badgeColor: 'bg-purple-600',
+                    dupClass: defaultButtonClass,
+                }
+            case TYPES.UNKNOWN:
+            default:
+                return {
+                    badgeColor: 'bg-slate-600',
+                    dupClass: defaultButtonClass,
+                }
+        }
+    }
     render() {
         if (!this.container) return
         const c = Utils.DOM.createElement
 
         const notesForDate = this.notesByDate[this.activeDate] || []
         const filteredNotes = this.getRoleFilteredNotes(notesForDate)
+
+        this.latestActiveNote = filteredNotes.length > 0 ? filteredNotes[0] : null
 
         this.body.innerHTML = ''
 
@@ -2295,14 +2364,9 @@ class NotesSlideOutRenderer {
         }
 
         const userId = this.getUserId()
-        const labelClass = 'text-blue-500 block text-[9px] uppercase tracking-widest mb-1'
-
         filteredNotes.forEach(note => {
-            const isDoctor = note.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR
-            const badgeColor = isDoctor ? 'bg-blue-600' : 'bg-emerald-600'
-            const dupClass = isDoctor
-                ? 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600'
-                : 'bg-slate-700 hover:bg-slate-800 text-white border-slate-900/20 shadow-sm'
+            const { badgeColor, dupClass } = NotesSlideOutRenderer.getCreatorStyles(note.creator.type)
+            const typeColorClass = NotesSlideOutRenderer.NOTE_TYPE_CLASSES[note.type] || NotesSlideOutRenderer.DEFAULT_TYPE_CLASS
 
             const canEdit = note.creator.id === userId
             const { datePart, timePart } = this.getTimestampParts(note.timestamp)
@@ -2399,7 +2463,7 @@ class NotesSlideOutRenderer {
                     if (index < textSegments.length - 1) formattedChildren.push(c('br'))
                 })
                 return c('div', {}, [
-                    c('b', { classes: labelClass, text: field.label }),
+                    c('b', { classes: NotesSlideOutRenderer.CONTENT_LABEL_CLASS, text: field.label }),
                     c('div', { classes: field.valClass }, formattedChildren),
                 ])
             })
@@ -2407,12 +2471,13 @@ class NotesSlideOutRenderer {
             // --- STRUCTURAL LAYOUT BUILD ---
             const noteCard = c('div', { classes: 'note-card bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col mb-4' }, [
                 // UNIFIED STICKY HEADER (Contains: Creator Info, Role Badge, ID & Controls)
-                c('div', { classes: `px-4 py-2 flex justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm` }, [
+                c('div', { classes: `px-4 py-2 flex justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm overflow-hidden` }, [
                     c('div', { classes: 'flex flex-col gap-1' }, [
                         c('h4', { classes: 'text-white text-[11px] font-black tracking-wide leading-none', text: note.creator.name }),
                         c('div', { classes: 'flex items-center gap-2 opacity-90' }, [
                             c('span', { classes: 'text-white text-[8px] font-bold uppercase tracking-wider bg-white/20 px-1 rounded-sm', text: note.creator.type }),
-                            c('span', { classes: 'text-white/80 text-[7.5px] font-mono', text: `ID: ${note.id}` }),
+                            // creation timestamp
+                            c('span', { classes: 'text-[8.5px] text-white/80 font-mono font-bold val-time', attrs: { 'data-date': datePart }, text: timePart }),
                         ]),
                     ]),
                     actionContainer,
@@ -2420,27 +2485,25 @@ class NotesSlideOutRenderer {
                 // CARD BODY
                 c('div', { classes: 'p-4 space-y-3.5' }, [
                     // Metadata Line (Now shows Room, Note Type, and Timestamp)
-                    c('div', { classes: 'flex justify-between items-center border-b border-slate-100 pb-1.5' }, [
+                    c('div', { classes: 'flex justify-between items-center border-b border-slate-100 pb-1.5 overflow-hidden' }, [
                         // Left Side: Room Name and Note Type badges
                         c('div', { classes: 'flex items-center gap-1.5' }, [
-                            // Room Name Tag
+                            // Note Type Tag (SOAP, SBAR, ADIME)
                             c('span', {
-                                classes: 'bg-slate-100 text-slate-700 text-[9px] font-bold px-1.5 py-0.5 rounded tracking-tight',
-                                text: note.roomName,
+                                classes: `${typeColorClass} text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider`,
+                                text: note.type,
                             }),
                             // Divider Pipe
                             c('span', { classes: 'text-slate-300 text-[10px]', text: '|' }),
-                            // Note Type Tag (SOAP, SBAR, ADIME)
+                            // Room Name Tag
                             c('span', {
-                                classes: 'bg-blue-50 text-blue-700 text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider',
-                                text: note.type,
+                                classes: 'text-slate-500 text-[9px] font-bold rounded tracking-tight',
+                                text: note.roomName,
                             }),
                         ]),
-                        // Right Side: Creation Timestamp
-                        c('p', {
-                            classes: 'text-[9px] font-mono text-slate-500 font-bold val-time',
-                            attrs: { 'data-date': datePart },
-                            text: timePart,
+                        c('span', {
+                            classes: 'text-[8px] text-slate-500 font-mono font-bold',
+                            text: `ID: ${note.id}`,
                         }),
                     ]),
                     // Injected Verification status block directly under header details
@@ -2531,6 +2594,13 @@ class NotesSlideOutRenderer {
         this.toggleBtn.classList.add('hover:bg-blue-600', 'hover:text-white')
         this.toggleBtn.classList.remove('opacity-50')
         this.toggleBtn.disabled = false
+    }
+    /**
+     * Returns the most recent clinical note after active date and role filters are applied.
+     * @returns {ClinicalNote|null} The latest active ClinicalNote instance or null if none match filters.
+     */
+    getLatestActiveNote() {
+        return this.latestActiveNote
     }
     getUserId() {
         return hospitalContext.session.data.userData.staffId

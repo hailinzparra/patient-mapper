@@ -25,8 +25,10 @@ const G = {
             'c2UuYXBwIiwicHJvamVjdElkIjoibHVtaWZpbGxldCIsInN0b3JhZ2VCdWNrZXQiOiJsdW1pZmlsbGV0LmZpcmViYXNlc3RvcmFnZS5hcHAiLCJtZX',
             'NzYWdpbmdTZW5kZXJJZCI6Ijg3NDAxNjY5OTgzMyIsImFwcElkIjoiMTo4NzQwMTY2OTk4MzM6d2ViOmQ0M2E2MTk1Y2M3NjNmOGQzMzcyNjgifQ==',
         ].join(''))
+
         this.mainContainer = document.getElementById('main-container')
         this.mainContainer.style.minWidth = `${this.targetWidth}px`
+
         this.swal = Swal.mixin({
             target: this.mainContainer,
             cancelButtonText: 'Close',
@@ -34,6 +36,15 @@ const G = {
             buttonsStyling: false,
             customClass: this.baseSwalClasses,
         })
+
+        const scaleMainContainer = () => {
+            if (!G.mainContainer) return
+            const scale = window.innerWidth < G.targetWidth ? window.innerWidth / G.targetWidth : 1
+            G.mainContainer.style.scale = `${scale}`
+            G.mainContainer.style.height = `${100 / scale}vh`
+        }
+        window.addEventListener('resize', scaleMainContainer)
+        scaleMainContainer()
     },
     async init() {
         await this.store.settings.load()
@@ -47,7 +58,7 @@ const G = {
     store: {
         temp: {
             activeTargetTabId: null,
-            activeNotesSlideOutRenderers: [],
+            activeNotesSlideOutRenderers: new Map(),
         },
         patients: new VaultDriver('patients', {
             lists: [],
@@ -1457,15 +1468,6 @@ const G = {
 
             resultTable.append(headerLayoutWrapper)
 
-            btnCopyAll.addEventListener('click', async (e) => {
-                const fullTextPayload = this.generateAllPatientsCopyText(sortedPrimaryGroups, currentGroupingMode)
-                await Utils.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
-            })
-
-            btnAddAll.addEventListener('click', () => {
-                this.promptAndAddPatientToList(uniqueDataset)
-            })
-
             const groupedData = uniqueDataset.reduce((acc, current) => {
                 const p = current.toJSON ? current.toJSON() : current
 
@@ -1494,6 +1496,18 @@ const G = {
             const sortedPrimaryGroups = Object.values(groupedData).sort((a, b) =>
                 a.primaryName.localeCompare(b.primaryName)
             )
+
+            btnCopyAll.addEventListener('click', async (e) => {
+                const fullTextPayload = this.generateAllPatientsCopyText(sortedPrimaryGroups, currentGroupingMode)
+                await Utils.executeNativeClipboardCopy(fullTextPayload, e.currentTarget)
+            })
+
+            btnAddAll.addEventListener('click', () => {
+                const sortedDataset = sortedPrimaryGroups.flatMap(primaryGroup =>
+                    Object.values(primaryGroup.subGroups).flatMap(subGroup => subGroup.patients)
+                )
+                this.promptAndAddPatientToList(sortedDataset)
+            })
 
             const uiThemes = {
                 ROOM: { bg: 'bg-blue-600', btn: 'bg-blue-500 hover:bg-blue-400', badge: 'bg-blue-700', label: 'COPY ROOM' },
@@ -1822,16 +1836,6 @@ Events.on('entrypoint', async (ev) => {
         })
 
         await G.init()
-
-        // Resize logic
-        const scaleMainContainer = () => {
-            if (!G.mainContainer) return
-            const scale = window.innerWidth < G.targetWidth ? window.innerWidth / G.targetWidth : 1
-            G.mainContainer.style.scale = `${scale}`
-            G.mainContainer.style.height = `${100 / scale}vh`
-        }
-        window.addEventListener('resize', scaleMainContainer)
-        scaleMainContainer()
 
         await Utils.sleep(200)
 

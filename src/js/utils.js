@@ -88,18 +88,22 @@ export const Utils = {
         parts.push(`${minutes}m`)
         return parts.join(' ')
     },
-    formatShortDate(dateInput) {
-        if (dateInput === null || dateInput === undefined || dateInput === '') {
-            throw new Error('Invalid date: Input cannot be null, undefined, or empty')
+    formatDateVariants(dateInput) {
+        if (!dateInput) {
+            return { short: '--', long: '--' }
         }
         const date = dateInput instanceof Date ? dateInput : new Date(dateInput)
         if (isNaN(date.getTime())) {
-            throw new Error("Invalid date provided to formatShortDate")
+            return { short: '--', long: '--' }
         }
-        const weekday = date.toLocaleDateString('en-GB', { weekday: 'short' })
-        const day = date.toLocaleDateString('en-GB', { day: 'numeric' })
-        const month = date.toLocaleDateString('en-GB', { month: 'short' })
-        return `${weekday}, ${day} ${month}`
+        const long = date.toLocaleDateString('en-GB', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        })
+        const short = long.replace(/\s\d{4}$/, '')
+        return { short, long }
     },
     formatFullTimestamp(ms) {
         if (!ms) return '--'

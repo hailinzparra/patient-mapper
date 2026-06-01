@@ -79,11 +79,14 @@ export const SOEDIRAN_DATABASE = {
         { name: 'drg. Qumara', id: '106' },
     ],
     roomDatabase: [
+        { name: 'Poli Dalam', id: '101010104' },
         { name: 'Poli Anak', id: '101010107' },
         { name: 'Poli Syaraf', id: '101010111' },
         { name: 'Poli Jantung', id: '101010114' },
         { name: 'Poli Kebidanan dan Kandungan', id: '101010116' },
+        { name: 'Poli VCT', id: '101010122' },
         { name: 'Poli Anastesi', id: '101010125' },
+        { name: 'Poli Dalam (DM)', id: '101010140' },
         { name: 'RD Bedah Umum', id: '101020101' },
         { name: 'RD Non Bedah', id: '101020201' },
         { name: 'RD Kandungan', id: '101020301' },
@@ -107,6 +110,8 @@ export const SOEDIRAN_DATABASE = {
         { name: 'Mawar', id: '101030114' },
         { name: 'Anyelir 2 (Unit stroke)', id: '101030115' },
         { name: 'Ruang Medik Operatif (IBS)', id: '101080201' },
+        { name: 'Ruang Radiologi', id: '101130101' },
+        { name: 'Instalasi Hemodialisa', id: '101140101' },
         { name: 'Instalasi ICU', id: '101150101' },
     ],
     templates: [
@@ -509,7 +514,13 @@ class SoediranClinicalNotesContext {
                     recommendation: raw.PLANNING || '',
                 }
             case ClinicalNote.TYPES.ADIME:
-            //     return {}
+                return {
+                    assessment: raw.SUBYEKTIF || '',
+                    diagnosis: raw.OBYEKTIF || '',
+                    intervention: raw.ASSESMENT || '',
+                    monitoring: raw.PLANNING || '',
+                    evaluation: '' || '',
+                }
             default:
                 return {
                     subjective: raw.SUBYEKTIF || '',
@@ -528,9 +539,18 @@ class SoediranClinicalNotesContext {
             const creatorTypeMap = {
                 '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
                 '3': ClinicalNote.CREATOR_TYPES.PARAMEDIC,
-                // '?': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
+                '4': ClinicalNote.CREATOR_TYPES.PHARMACIST,
+                '5': ClinicalNote.CREATOR_TYPES.MIDWIFE,
+                '8': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
             }
-            const type = raw.ADIME !== '0' ? ClinicalNote.TYPES.ADIME : (raw.STATUS_SBAR !== '0' ? ClinicalNote.TYPES.SBAR : ClinicalNote.TYPES.SOAP)
+            const creatorType = creatorTypeMap[raw.JENIS]
+            const type = (raw.ADIME !== '0' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
+                ? ClinicalNote.TYPES.ADIME
+                : (raw.STATUS_SBAR !== '0'
+                    ? ClinicalNote.TYPES.SBAR
+                    : ClinicalNote.TYPES.SOAP)
+            const staff = raw.REFERENSI?.TENAGA_MEDIS
+            const staffName = `${staff?.GELAR_DEPAN ? `${staff.GELAR_DEPAN} ` : ''}${staff?.NAMA}${staff?.GELAR_BELAKANG ? `, ${staff.GELAR_BELAKANG}` : ''}`
             return new ClinicalNote({
                 id: String(raw.ID || ''),
                 recId: String(raw.KUNJUNGAN || ''),
@@ -540,8 +560,8 @@ class SoediranClinicalNotesContext {
                 content: this.extractContentByNoteType(type, raw),
                 creator: {
                     id: String(raw.TENAGA_MEDIS || ''),
-                    name: Utils.formatNameWithTitle(raw.REFERENSI?.TENAGA_MEDIS?.NAMA),
-                    type: creatorTypeMap[raw.JENIS],
+                    name: Utils.formatNameWithTitle(staffName),
+                    type: creatorType,
                 },
                 timestamp: Utils.toLocalISOString(new Date(raw.TANGGAL)),
                 verification: raw.VERIFIKASI !== '0' ? {

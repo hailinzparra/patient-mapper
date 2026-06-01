@@ -126,13 +126,7 @@ export class Patient {
         return { long: 'Tidak Diketahui', short: '?' }
     }
     getDateText(date) {
-        let text = ''
-        try {
-            text = Utils.formatShortDate(date)
-        } catch {
-            text = ''
-        }
-        return text || '--'
+        return Utils.formatDateVariants(date)
     }
     getUIDisplayData() {
         const v = Utils.getValidValue
@@ -483,6 +477,8 @@ export class ClinicalNote {
     static CREATOR_TYPES = Object.freeze({
         DOCTOR: 'Doctor',
         PARAMEDIC: 'Paramedic',
+        PHARMACIST: 'Pharmacist',
+        MIDWIFE: 'Midwife',
         NUTRITIONIST: 'Nutritionist',
         UNKNOWN: 'Unknown',
     })
@@ -551,15 +547,40 @@ export class ClinicalNote {
         ]
     }
 
-    static formatToText(note) {
-        if (!note) return '-'
+    static formatToText(note, fallback = '-') {
+        if (!note) return fallback
+
         const config = ClinicalNote.NOTE_TYPE_CONFIGS[note.type] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
-        const lines = [`[${note.type} Note by ${note.creator.name} (${note.creator.type})]`]
+
+        const dateVariants = Utils.formatDateVariants(note.timestamp)
+        const longDate = dateVariants.long
+        let timeStr = ''
+        try {
+            const dateObj = note.timestamp instanceof Date ? note.timestamp : new Date(note.timestamp)
+            if (!isNaN(dateObj.getTime())) {
+                timeStr = dateObj.toLocaleTimeString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                })
+            }
+        } catch {
+            timeStr = ''
+        }
+        const finalTimestampLine = (longDate !== '--' && timeStr) ? `Date: ${longDate} ${timeStr}` : 'Date: --'
+
+        const lines = [
+            `[${note.type} Note by ${note.creator.name} (${note.creator.type})]`,
+            finalTimestampLine,
+        ]
+
         config.forEach(field => {
             const rawContent = note.content[field.key] || '-'
             const cleanContent = Utils.decodeHtmlEntities(rawContent).replace(/<br\s*\/?>/gi, '\n')
             lines.push(`${field.label}:\n${cleanContent}`)
         })
+
         return lines.join('\n\n')
     }
 }
