@@ -577,7 +577,8 @@ export class ClinicalNote {
 
         config.forEach(field => {
             const rawContent = note.content[field.key] || '-'
-            const cleanContent = Utils.decodeHtmlEntities(rawContent).replace(/<br\s*\/?>/gi, '\n')
+            let cleanContent = Utils.decodeHtmlEntities(rawContent)
+            cleanContent = cleanContent.replace(/<br\s*\/?>/gi, '\n')
             lines.push(`${field.label}:\n${cleanContent}`)
         })
 

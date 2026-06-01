@@ -1,5 +1,5 @@
 import { Utils } from './utils.js'
-import { Patient } from './clinical.js'
+import { Patient, ClinicalNote } from './clinical.js'
 import { PatientLookup } from './ui.js'
 
 export const SOEHADI_DATABASE = {
@@ -469,18 +469,21 @@ export const ApiSoehadiDriver = {
         const v = Utils.getValidValue
         return new Patient({
             hid: hid,
-            recId: v(item?.nocmfk, null), // idk yet
+            recId: v(item?.noregistrasi, null),
             mrn: v(item?.nocm, null),
             name: v(item?.namapasien, null),
             dob: v(item?.tgllahir, null),
             gender: v(g, null),
             dx: v(item?.ketklinis, null),
-            roomId: v(item?.objectruanganfk, null),
+            roomId: v(item?.objectruanganfk || item?.namaruangan, null),
             bedName: v(item?.namabed, null),
-            docId: v(item?.objectpegawaifk, null),
+            docId: v(item?.objectpegawaifk || item?.namadokter, null),
             admDate: v(item?.tglregistrasi, null),
             disDate: v(item?.tglselesaiperiksa, null),
         })
+    },
+    clinicalNotesContext(targetDomain, session) {
+        return new SoehadiClinicalNotesContext(this, targetDomain, session)
     },
 }
 
@@ -513,5 +516,94 @@ class SoehadiRequestPayload {
             ([_, val]) => val !== null && val !== undefined && val !== ''
         )
         return new URLSearchParams(Object.fromEntries(cleanEntries)).toString()
+    }
+}
+
+class SoehadiClinicalNotesContext {
+    constructor(driver, targetDomain, session) {
+        this.driver = driver
+        this.targetDomain = targetDomain
+        this.session = session
+        this.basePath = driver.PATHS.BASE
+    }
+    _url(endpoint) {
+        return `${this.targetDomain}${this.basePath}${endpoint}`
+    }
+    extractContentByNoteType(type, raw) {
+        switch (type) {
+            case ClinicalNote.TYPES.SBAR:
+                return {
+                    situation: raw.s_sbar || '',
+                    background: raw.b_sbar || '',
+                    assessment: raw.a_sbar || '',
+                    recommendation: raw.r_sbar || '',
+                }
+            case ClinicalNote.TYPES.ADIME:
+                return {
+                    assessment: raw.a_adime || '',
+                    diagnosis: raw.d_adime || '',
+                    intervention: raw.i_adime || '',
+                    monitoring: raw.m_adime || '',
+                    evaluation: raw.e_adime || '',
+                }
+            default:
+                return {
+                    subjective: raw.s_soap || '',
+                    objective: raw.o_soap || '',
+                    assessment: raw.a_soap || '',
+                    planning: raw.p_soap || '',
+                    instruction: raw.instruksi_ppa || '',
+                }
+        }
+    }
+    async fetch(mrn, recId, signal) {
+        const url = this._url(`/emr/get-riwayatcppt-rajalranap-v2?nocm=${mrn}&noregistrasi=${recId}&pegawaiMultiple=`)
+        const result = await this.driver.apiRequest(url, this.session, { signal })
+        const rawList = result?.data?.data || []
+
+        const creatorTypeMap = {
+            '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
+            '2': ClinicalNote.CREATOR_TYPES.PARAMEDIC,
+            '3': ClinicalNote.CREATOR_TYPES.MIDWIFE,
+            '14': ClinicalNote.CREATOR_TYPES.PHARMACIST,
+            '19': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
+        }
+
+        return rawList.map(raw => {
+            const creatorType = creatorTypeMap[String(raw.profesional_pemberi_asuhan_fk)]
+
+            const type = (raw.jenis_cppt === 'ADIME' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
+                ? ClinicalNote.TYPES.ADIME
+                : (raw.jenis_cppt === 'SBAR'
+                    ? ClinicalNote.TYPES.SBAR
+                    : ClinicalNote.TYPES.SOAP)
+
+            return new ClinicalNote({
+                id: String(raw.norec || ''),
+                recId: String(raw.noregistrasi || ''),
+                roomId: '',
+                roomName: raw.namaruangan || '',
+                type: type,
+                content: this.extractContentByNoteType(type, raw),
+                creator: {
+                    id: String(raw.paraf_soap_adime_fk || ''),
+                    name: Utils.formatNameWithTitle(raw.paraf_soap_adime || ''),
+                    type: creatorType,
+                },
+                timestamp: Utils.toLocalISOString(new Date(raw.tanggal_jam)),
+                verification: raw.review_dpjp ? {
+                    isVerified: !!raw.review_tanggal,
+                    id: String(raw.review_dpjp_fk || ''),
+                    verificatorName: Utils.formatNameWithTitle(raw.review_dpjp),
+                    timestamp: raw.review_tanggal ? Utils.toLocalISOString(new Date(raw.review_tanggal)) : '',
+                } : null,
+            })
+        })
+    }
+    async submit(note) {
+    }
+    async amend(note) {
+    }
+    async archive(id) {
     }
 }

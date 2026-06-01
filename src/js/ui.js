@@ -1970,11 +1970,20 @@ export class MyPatientsRenderer {
         await Utils.sleep(500)
 
         try {
+            if (hospitalContext.activeConfig.id !== p.hid) {
+                const currentHospitalText = hospitalContext.activeConfig.name
+                const targetHospitalText = hospitalContext.getHospitalById(p.hid)?.name || 'the correct hospital'
+                throw new Error(
+                    `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view this record.`
+                    // `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view or edit this record.` HIDDEN FOR WIP ('or edit')
+                )
+            }
+
             const clinicalNotesClient = hospitalContext.activeDriver.clinicalNotesContext(
                 hospitalContext.activeDomain,
                 hospitalContext.session.data,
             )
-            const rawNotes = await clinicalNotesClient.fetch(p.recId)
+            const rawNotes = await clinicalNotesClient.fetch(p.mrn, p.recId)
 
             if (NotesSlideOutRenderer.isForceCancelled(p.id, notesContainer)) {
                 // The container was replaced or removed while fetching
@@ -2363,12 +2372,11 @@ class NotesSlideOutRenderer {
             return
         }
 
-        const userId = this.getUserId()
         filteredNotes.forEach(note => {
             const { badgeColor, dupClass } = NotesSlideOutRenderer.getCreatorStyles(note.creator.type)
             const typeColorClass = NotesSlideOutRenderer.NOTE_TYPE_CLASSES[note.type] || NotesSlideOutRenderer.DEFAULT_TYPE_CLASS
 
-            const canEdit = note.creator.id === userId
+            const canEdit = this.isCreator(note.creator.id)
             const { datePart, timePart } = this.getTimestampParts(note.timestamp)
 
             // --- BUTTONS & TOGGLE WRAPPER ---
@@ -2456,15 +2464,20 @@ class NotesSlideOutRenderer {
             const contentRows = currentConfig.map(field => {
                 const rawContent = note.content[field.key] || '-'
                 const decodedContent = Utils.decodeHtmlEntities(rawContent)
-                const textSegments = decodedContent.split(/<br\s*\/?>/i)
+                const textSegments = decodedContent.split(/(?:<br\s*\/?>|\n)/i)
+
                 const formattedChildren = []
                 textSegments.forEach((segment, index) => {
-                    if (segment) formattedChildren.push(document.createTextNode(segment))
+                    formattedChildren.push(document.createTextNode(segment))
                     if (index < textSegments.length - 1) formattedChildren.push(c('br'))
                 })
+
                 return c('div', {}, [
                     c('b', { classes: NotesSlideOutRenderer.CONTENT_LABEL_CLASS, text: field.label }),
-                    c('div', { classes: field.valClass }, formattedChildren),
+                    c('div', {
+                        classes: field.valClass,
+                        attrs: { style: 'white-space: pre-wrap;' },
+                    }, formattedChildren),
                 ])
             })
 
@@ -2477,7 +2490,7 @@ class NotesSlideOutRenderer {
                         c('div', { classes: 'flex items-center gap-2 opacity-90' }, [
                             c('span', { classes: 'text-white text-[8px] font-bold uppercase tracking-wider bg-white/20 px-1 rounded-sm', text: note.creator.type }),
                             // creation timestamp
-                            c('span', { classes: 'text-[8.5px] text-white/80 font-mono font-bold val-time', attrs: { 'data-date': datePart }, text: timePart }),
+                            c('span', { classes: 'val-time text-[8.5px] text-white/80 font-mono font-bold leading-none', attrs: { 'data-date': datePart }, text: timePart }),
                         ]),
                     ]),
                     actionContainer,
@@ -2502,7 +2515,7 @@ class NotesSlideOutRenderer {
                             }),
                         ]),
                         c('span', {
-                            classes: 'text-[8px] text-slate-500 font-mono font-bold',
+                            classes: 'text-[8px] text-slate-500 font-mono font-bold truncate ml-1',
                             text: `ID: ${note.id}`,
                         }),
                     ]),
@@ -2605,6 +2618,11 @@ class NotesSlideOutRenderer {
     getUserId() {
         return hospitalContext.session.data.userData.staffId
     }
+    isCreator(creatorId) {
+        const currentUserId = this.getUserId()
+        if (!creatorId || !currentUserId) return false
+        return String(creatorId).trim() === String(currentUserId).trim()
+    }
     /**
      * Filters a targeted list of notes based on active role
      * @param {ClinicalNote[]} notesToFilter 
@@ -2612,7 +2630,7 @@ class NotesSlideOutRenderer {
     getRoleFilteredNotes(notesToFilter) {
         switch (this.filterRole) {
             case MyPatientsRenderer.FILTERS.ROLE_MINE:
-                return notesToFilter.filter(n => n.creator.id === this.getUserId())
+                return notesToFilter.filter(n => this.isCreator(n.creator.id))
             case MyPatientsRenderer.FILTERS.ROLE_DOCTORS:
                 return notesToFilter.filter(n => n.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR)
             default:

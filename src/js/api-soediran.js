@@ -531,26 +531,32 @@ class SoediranClinicalNotesContext {
                 }
         }
     }
-    async fetch(recId, signal) {
+    async fetch(mrn, recId, signal) {
         const url = this._url(`/medicalrecord/cppt?KUNJUNGAN=${recId}&STATUS=1&page=1&start=0&limit=25`)
+
         const result = await this.driver.apiRequest(url, this.session, { signal })
         const rawList = result.data || []
+
+        const creatorTypeMap = {
+            '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
+            '3': ClinicalNote.CREATOR_TYPES.PARAMEDIC,
+            '4': ClinicalNote.CREATOR_TYPES.PHARMACIST,
+            '5': ClinicalNote.CREATOR_TYPES.MIDWIFE,
+            '8': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
+        }
+
         return rawList.map(raw => {
-            const creatorTypeMap = {
-                '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
-                '3': ClinicalNote.CREATOR_TYPES.PARAMEDIC,
-                '4': ClinicalNote.CREATOR_TYPES.PHARMACIST,
-                '5': ClinicalNote.CREATOR_TYPES.MIDWIFE,
-                '8': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
-            }
             const creatorType = creatorTypeMap[raw.JENIS]
+
             const type = (raw.ADIME !== '0' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
                 ? ClinicalNote.TYPES.ADIME
                 : (raw.STATUS_SBAR !== '0'
                     ? ClinicalNote.TYPES.SBAR
                     : ClinicalNote.TYPES.SOAP)
+
             const staff = raw.REFERENSI?.TENAGA_MEDIS
             const staffName = `${staff?.GELAR_DEPAN ? `${staff.GELAR_DEPAN} ` : ''}${staff?.NAMA}${staff?.GELAR_BELAKANG ? `, ${staff.GELAR_BELAKANG}` : ''}`
+
             return new ClinicalNote({
                 id: String(raw.ID || ''),
                 recId: String(raw.KUNJUNGAN || ''),
@@ -580,34 +586,34 @@ class SoediranClinicalNotesContext {
             })
         })
     }
-    async submit(noteInstance) {
-        if (!(noteInstance instanceof ClinicalNote)) {
+    async submit(note) {
+        if (!(note instanceof ClinicalNote)) {
             throw new Error('Not a clinical note.')
         }
 
         const cyclingNum = (Math.floor(Date.now() / 1000) % 100) + 1
         const modelId = `rekammedis.cppt.Model-${cyclingNum}`
-        const timestamp = noteInstance.timestamp || ''
+        const timestamp = note.timestamp || ''
         const timeValue = timestamp.split(' ')[1] || '00:00:00'
 
         const payload = {
             'STATUS': 1,
-            'JENIS': noteInstance.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR ? 1 : 3,
-            'SUBYEKTIF': noteInstance.content.subjective,
-            'OBYEKTIF': noteInstance.content.objective,
-            'ASSESMENT': noteInstance.content.assessment,
-            'PLANNING': noteInstance.content.planning,
-            'INSTRUKSI': noteInstance.content.instruction,
-            'KUNJUNGAN': noteInstance.recId,
+            'JENIS': note.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR ? 1 : 3,
+            'SUBYEKTIF': note.content.subjective,
+            'OBYEKTIF': note.content.objective,
+            'ASSESMENT': note.content.assessment,
+            'PLANNING': note.content.planning,
+            'INSTRUKSI': note.content.instruction,
+            'KUNJUNGAN': note.recId,
             'TANGGAL': timestamp,
             'WAKTU': timeValue,
             'ID': modelId,
-            'TENAGA_MEDIS': parseInt(noteInstance.creator.id),
+            'TENAGA_MEDIS': parseInt(note.creator.id),
             'TULIS': '',
             'RENCANA_PULANG': 0,
             'STATUS_TBAK_SBAR': 0,
             'STATUS_TBAK': 0,
-            'STATUS_SBAR': noteInstance.type === ClinicalNote.TYPES.SBAR ? 1 : 0,
+            'STATUS_SBAR': note.type === ClinicalNote.TYPES.SBAR ? 1 : 0,
             'BACA': 0,
             'KONFIRMASI': 0,
             'TANGGAL_RENCANA_PULANG': null,
@@ -623,18 +629,18 @@ class SoediranClinicalNotesContext {
             body: JSON.stringify(payload),
         })
     }
-    async amend(clinicalNoteInstance) {
+    async amend(note) {
         const payload = {
-            'ID': parseInt(clinicalNoteInstance.id),
-            'SUBYEKTIF': clinicalNoteInstance.content.subjective,
-            'OBYEKTIF': clinicalNoteInstance.content.objective,
-            'ASSESMENT': clinicalNoteInstance.content.assessment,
-            'PLANNING': clinicalNoteInstance.content.planning,
-            'TANGGAL': clinicalNoteInstance.timestamp,
+            'ID': parseInt(note.id),
+            'SUBYEKTIF': note.content.subjective,
+            'OBYEKTIF': note.content.objective,
+            'ASSESMENT': note.content.assessment,
+            'PLANNING': note.content.planning,
+            'TANGGAL': note.timestamp,
             'DOKTER_TBAK_OR_SBAR': null, // figure out if needed
             'SELESAI_RAWAT_BERSAMA': '0',
         }
-        const url = this._url(`/medicalrecord/cppt/${clinicalNoteInstance.id}`)
+        const url = this._url(`/medicalrecord/cppt/${note.id}`)
         return await this.driver.apiRequest(url, this.session, {
             method: 'PUT',
             body: JSON.stringify(payload),
