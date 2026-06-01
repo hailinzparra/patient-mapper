@@ -1878,5 +1878,5 @@ document.addEventListener('DOMContentLoaded', () => {
     Events.emit('entrypoint')
 })
 
-window.G = G
-window.hospitalContext = hospitalContext
+// window.G = G
+// window.hospitalContext = hospitalContext
