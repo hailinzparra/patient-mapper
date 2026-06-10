@@ -512,6 +512,7 @@ class SoediranClinicalNotesContext {
                     background: raw.OBYEKTIF || '',
                     assessment: raw.ASSESMENT || '',
                     recommendation: raw.PLANNING || '',
+                    instruction: raw.INSTRUKSI || '',
                 }
             case ClinicalNote.TYPES.ADIME:
                 return {
@@ -520,6 +521,7 @@ class SoediranClinicalNotesContext {
                     intervention: raw.ASSESMENT || '',
                     monitoring: raw.PLANNING || '',
                     evaluation: '' || '',
+                    instruction: raw.INSTRUKSI || '',
                 }
             default:
                 return {
@@ -539,7 +541,7 @@ class SoediranClinicalNotesContext {
 
         const creatorTypeMap = {
             '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
-            '3': ClinicalNote.CREATOR_TYPES.PARAMEDIC,
+            '3': ClinicalNote.CREATOR_TYPES.NURSE,
             '4': ClinicalNote.CREATOR_TYPES.PHARMACIST,
             '5': ClinicalNote.CREATOR_TYPES.MIDWIFE,
             '8': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,

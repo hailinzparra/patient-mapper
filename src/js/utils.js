@@ -90,11 +90,11 @@ export const Utils = {
     },
     formatDateVariants(dateInput) {
         if (!dateInput) {
-            return { short: '--', long: '--' }
+            return { short: '--', long: '--', time: '--', longtime: '--' }
         }
         const date = dateInput instanceof Date ? dateInput : new Date(dateInput)
         if (isNaN(date.getTime())) {
-            return { short: '--', long: '--' }
+            return { short: '--', long: '--', time: '--', longtime: '--' }
         }
         const long = date.toLocaleDateString('en-GB', {
             weekday: 'short',
@@ -103,7 +103,14 @@ export const Utils = {
             year: 'numeric'
         })
         const short = long.replace(/\s\d{4}$/, '')
-        return { short, long }
+        const time = date.toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        })
+        const longtime = (long && time) ? `${long} ${time}` : '--'
+        return { short, long, time, longtime }
     },
     formatFullTimestamp(ms) {
         if (!ms) return '--'

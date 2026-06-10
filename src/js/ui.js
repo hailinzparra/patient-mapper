@@ -1567,8 +1567,8 @@ export class MyPatientsRenderer {
                 notesCreateButton,
                 notesCloseButton,
             ]),
-            c('div', { classes: 'notes-pagination-track flex gap-1 px-3 py-1.5 bg-slate-100/50 border-b border-slate-200 overflow-x-auto' }),
-            c('div', { classes: 'notes-body p-3 min-h-[200px] max-h-[400px] overflow-y-auto transition-opacity duration-300 ease-in-out' }),
+            c('div', { classes: 'notes-pagination-track flex gap-1 px-3 py-1.5 bg-slate-100/50 border-b border-slate-200 overflow-x-auto min-h-[36px]' }),
+            c('div', { classes: 'notes-body p-3 min-h-[400px] max-h-[400px] overflow-y-auto transition-opacity duration-300 ease-in-out' }),
         ])
 
         btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes))
@@ -1765,8 +1765,8 @@ export class MyPatientsRenderer {
             const block = [
                 `${p.toClipboardString()}`,
                 `Physician in charge: ${docName}`,
-                `Admission date: ${ui.admText.long}`,
-                `Discharge date: ${ui.disText.long}`,
+                `Admission date: ${ui.admText.longtime}`,
+                `Discharge date: ${ui.disText.longtime}`,
                 `\n${formattedText}`,
             ].join('\n')
 
@@ -1850,8 +1850,8 @@ export class MyPatientsRenderer {
                 const block = [
                     `${p.toClipboardString()}`,
                     `Physician in charge: ${docName}`,
-                    `Admission date: ${ui.admText.long}`,
-                    `Discharge date: ${ui.disText.long}`,
+                    `Admission date: ${ui.admText.longtime}`,
+                    `Discharge date: ${ui.disText.longtime}`,
                     `\n${formattedText}`,
                 ].join('\n')
 
@@ -1974,8 +1974,8 @@ export class MyPatientsRenderer {
                 const currentHospitalText = hospitalContext.activeConfig.name
                 const targetHospitalText = hospitalContext.getHospitalById(p.hid)?.name || 'the correct hospital'
                 throw new Error(
-                    `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view this record.`
-                    // `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view or edit this record.` HIDDEN FOR WIP ('or edit')
+                    `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view this record's notes.`
+                    // `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view or edit this record's notes.` HIDDEN FOR WIP ('or edit')
                 )
             }
 
@@ -2307,7 +2307,7 @@ class NotesSlideOutRenderer {
                     badgeColor: 'bg-blue-600',
                     dupClass: 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600',
                 }
-            case TYPES.PARAMEDIC:
+            case TYPES.NURSE:
                 return {
                     badgeColor: 'bg-emerald-600',
                     dupClass: defaultButtonClass,
@@ -2350,7 +2350,7 @@ class NotesSlideOutRenderer {
             const isToday = this.activeDate === this.todayStr
             const displayRole = this.filterRole
             const displayDate = `${isToday ? '★ ' : ''}${this.activeDate}`
-            const emptyDiv = c('div', { classes: 'flex flex-col items-center justify-center py-12 px-4 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200' }, [
+            const emptyDiv = c('div', { classes: 'flex flex-col items-center justify-center py-12 px-4 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200 overflow-hidden h-[376px]' }, [
                 c('span', {
                     classes: 'text-[11px] font-semibold text-slate-700 block mb-1',
                     text: `No clinical notes found (${this.ui.name})`,
@@ -2485,10 +2485,19 @@ class NotesSlideOutRenderer {
             const noteCard = c('div', { classes: 'note-card bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col mb-4' }, [
                 // UNIFIED STICKY HEADER (Contains: Creator Info, Role Badge, ID & Controls)
                 c('div', { classes: `px-4 py-2 flex justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm overflow-hidden` }, [
-                    c('div', { classes: 'flex flex-col gap-1' }, [
+                    c('div', { classes: 'flex flex-col gap-1.5' }, [
                         c('h4', { classes: 'text-white text-[11px] font-black tracking-wide leading-none', text: note.creator.name }),
-                        c('div', { classes: 'flex items-center gap-2 opacity-90' }, [
-                            c('span', { classes: 'text-white text-[8px] font-bold uppercase tracking-wider bg-white/20 px-1 rounded-sm', text: note.creator.type }),
+                        c('div', { classes: 'flex items-center gap-1 opacity-90' }, [
+                            // Note type tag (SOAP, SBAR, ADIME)
+                            c('span', {
+                                classes: `${typeColorClass} text-[8px] font-bold uppercase tracking-wider px-1.5 rounded`,
+                                text: note.type,
+                            }),
+                            // Creator type tag (NURSE, DOCTOR, ...)
+                            c('span', {
+                                classes: 'text-white bg-white/20 text-[8px] font-bold uppercase tracking-wider px-1.5 rounded',
+                                text: note.creator.type,
+                            }),
                             // creation timestamp
                             c('span', { classes: 'val-time text-[8.5px] text-white/80 font-mono font-bold leading-none', attrs: { 'data-date': datePart }, text: timePart }),
                         ]),
@@ -2499,15 +2508,10 @@ class NotesSlideOutRenderer {
                 c('div', { classes: 'p-4 space-y-3.5' }, [
                     // Metadata Line (Now shows Room, Note Type, and Timestamp)
                     c('div', { classes: 'flex justify-between items-center border-b border-slate-100 pb-1.5 overflow-hidden' }, [
-                        // Left Side: Room Name and Note Type badges
+                        // Left Side: Room Name
                         c('div', { classes: 'flex items-center gap-1.5' }, [
-                            // Note Type Tag (SOAP, SBAR, ADIME)
-                            c('span', {
-                                classes: `${typeColorClass} text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider`,
-                                text: note.type,
-                            }),
                             // Divider Pipe
-                            c('span', { classes: 'text-slate-300 text-[10px]', text: '|' }),
+                            // c('span', { classes: 'text-slate-300 text-[10px]', text: '|' }),
                             // Room Name Tag
                             c('span', {
                                 classes: 'text-slate-500 text-[9px] font-bold rounded tracking-tight',

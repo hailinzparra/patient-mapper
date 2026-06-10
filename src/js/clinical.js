@@ -476,10 +476,11 @@ export class ClinicalNote {
 
     static CREATOR_TYPES = Object.freeze({
         DOCTOR: 'Doctor',
-        PARAMEDIC: 'Paramedic',
+        NURSE: 'Nurse',
         PHARMACIST: 'Pharmacist',
         MIDWIFE: 'Midwife',
         NUTRITIONIST: 'Nutritionist',
+        PARAMEDIC: 'Paramedic',
         UNKNOWN: 'Unknown',
     })
 
@@ -491,12 +492,11 @@ export class ClinicalNote {
         this.type = init.type || ClinicalNote.TYPES.SOAP
 
         this.content = {
-            // SOAP / SOAPI
+            // SOAP
             subjective: init.content?.subjective || '',
             objective: init.content?.objective || '',
             assessment: init.content?.assessment || '',
             planning: init.content?.planning || '',
-            instruction: init.content?.instruction || '',
             // SBAR
             situation: init.content?.situation || '',
             background: init.content?.background || '',
@@ -506,6 +506,8 @@ export class ClinicalNote {
             intervention: init.content?.intervention || '',
             monitoring: init.content?.monitoring || '',
             evaluation: init.content?.evaluation || '',
+            // I
+            instruction: init.content?.instruction || '',
         }
 
         this.creator = {
@@ -537,6 +539,7 @@ export class ClinicalNote {
             { label: 'Background (B)', key: 'background', valClass: 'val-background' },
             { label: 'Assessment (A)', key: 'assessment', valClass: 'val-assessment' },
             { label: 'Recommendation (R)', key: 'recommendation', valClass: 'val-recommendation' },
+            { label: 'Instruction (I)', key: 'instruction', valClass: 'val-instruction' },
         ],
         [ClinicalNote.TYPES.ADIME]: [
             { label: 'Assessment (A)', key: 'assessment', valClass: 'val-assessment' },
@@ -544,6 +547,7 @@ export class ClinicalNote {
             { label: 'Intervention (I)', key: 'intervention', valClass: 'val-intervention' },
             { label: 'Monitoring (M)', key: 'monitoring', valClass: 'val-monitoring' },
             { label: 'Evaluation (E)', key: 'evaluation', valClass: 'val-evaluation' },
+            { label: 'Instruction (I)', key: 'instruction', valClass: 'val-instruction' },
         ]
     }
 
@@ -553,26 +557,11 @@ export class ClinicalNote {
         const config = ClinicalNote.NOTE_TYPE_CONFIGS[note.type] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
 
         const dateVariants = Utils.formatDateVariants(note.timestamp)
-        const longDate = dateVariants.long
-        let timeStr = ''
-        try {
-            const dateObj = note.timestamp instanceof Date ? note.timestamp : new Date(note.timestamp)
-            if (!isNaN(dateObj.getTime())) {
-                timeStr = dateObj.toLocaleTimeString('en-GB', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                })
-            }
-        } catch {
-            timeStr = ''
-        }
-        const finalTimestampLine = (longDate !== '--' && timeStr) ? `Date: ${longDate} ${timeStr}` : 'Date: --'
+        const timestampLine = `Date: ${dateVariants.longtime}`
 
         const lines = [
             `[${note.type} Note by ${note.creator.name} (${note.creator.type})]`,
-            finalTimestampLine,
+            timestampLine,
         ]
 
         config.forEach(field => {

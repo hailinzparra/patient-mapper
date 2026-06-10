@@ -964,13 +964,6 @@ const G = {
                     const uploadDateObj = new Date(uploadTime)
                     const dateHeaderStr = uploadDateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
-                    const isPastTwoDays = (now - uploadTime) >= twoDaysMs
-                    if (isPastTwoDays) {
-                        targetedDeletions.push(Vault.discard(`previewlist/${timestampKey}`))
-                        targetedDeletions.push(Vault.discard(`getlist/${meta.id}`))
-                        return
-                    }
-
                     if (dateHeaderStr !== lastRenderedDate) {
                         lastRenderedDate = dateHeaderStr
                         validOptionsHtml.push(`
@@ -1010,6 +1003,12 @@ const G = {
                                 </span>
                             </label>
                         `)
+                    }
+
+                    const isPastTwoDays = (now - uploadTime) >= twoDaysMs
+                    if (isPastTwoDays) {
+                        targetedDeletions.push(Vault.discard(`previewlist/${timestampKey}`))
+                        targetedDeletions.push(Vault.discard(`getlist/${meta.id}`))
                     }
                 })
 

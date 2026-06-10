@@ -537,6 +537,7 @@ class SoehadiClinicalNotesContext {
                     background: raw.b_sbar || '',
                     assessment: raw.a_sbar || '',
                     recommendation: raw.r_sbar || '',
+                    instruction: raw.instruksi_ppa || '',
                 }
             case ClinicalNote.TYPES.ADIME:
                 return {
@@ -545,6 +546,7 @@ class SoehadiClinicalNotesContext {
                     intervention: raw.i_adime || '',
                     monitoring: raw.m_adime || '',
                     evaluation: raw.e_adime || '',
+                    instruction: raw.instruksi_ppa || '',
                 }
             default:
                 return {
@@ -563,7 +565,7 @@ class SoehadiClinicalNotesContext {
 
         const creatorTypeMap = {
             '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
-            '2': ClinicalNote.CREATOR_TYPES.PARAMEDIC,
+            '2': ClinicalNote.CREATOR_TYPES.NURSE,
             '3': ClinicalNote.CREATOR_TYPES.MIDWIFE,
             '14': ClinicalNote.CREATOR_TYPES.PHARMACIST,
             '19': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
