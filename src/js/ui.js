@@ -1509,10 +1509,32 @@ export class MyPatientsRenderer {
             ]),
         ])
 
+        const btnRefreshPatient = c('button', {
+            classes: 'btn-refresh-patient p-1 text-slate-400 bg-white border-slate-200 hover:text-blue-600 hover:bg-blue-50 active:scale-90 border rounded-full transition-all shadow-sm group'
+        }, [
+            c('svg', { attrs: { class: 'w-2.5 h-2.5 transition-transform duration-500', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } }),
+            ]),
+        ])
+        // const btnCopyPatient = c('button', {
+        //     classes: 'btn-copy-patient p-1 text-slate-400 bg-white border-slate-200 hover:text-blue-600 hover:bg-blue-50 active:scale-90 border rounded-full transition-all shadow-sm group'
+        // }, [
+        //     // c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+        //     //     c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
+        //     // ]),
+        //     c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+        //         // Background/Underneath sheet
+        //         c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M8 7v1a3 3 0 01-3 3H4a2 2 0 00-2 2v7a2 2 0 002 2h7a2 2 0 002-2v-1M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8' } }),
+        //         // Foreground/Top sheet
+        //         c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M16 7a2 2 0 012 2v7a2 2 0 01-2 2H9a2 2 0 01-2-2V9a2 2 0 012-2h7z' } }),
+        //     ]),
+        // ])
+
         const statusClasses = ui.status === Patient.STATUS.ACTIVE
             ? ['bg-emerald-50 border-emerald-100', 'bg-emerald-500 animate-pulse', 'text-emerald-600']
             : ['bg-slate-50 border-slate-200', 'bg-slate-400', 'text-slate-600']
         const metadataBlock = c('div', { classes: 'flex items-center justify-between mt-1' }, [
+            // Left side: Statuses tags container
             c('div', { classes: 'flex items-center gap-2 overflow-x-auto no-scrollbar' }, [
                 c('div', { classes: `flex items-center border px-2 py-0.5 rounded-full js-status-pill ${statusClasses[0]}` }, [
                     c('div', { classes: `w-1.5 h-1.5 rounded-full mr-1.5 js-status-dot ${statusClasses[1]}` }),
@@ -1527,11 +1549,10 @@ export class MyPatientsRenderer {
                     c('span', { classes: 'text-[8px] font-bold text-slate-600 whitespace-nowrap js-dis-date', text: ui.disText.short }),
                 ]),
             ]),
-            // hidden for WIP
-            c('button', { classes: 'refresh-patient-btn p-1 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-full transition-all shadow-sm group hidden' }, [
-                c('svg', { attrs: { class: 'w-2.5 h-2.5 transition-transform duration-500', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-                    c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } }),
-                ]),
+            // Right side: Action buttons wrapper
+            c('div', { classes: 'flex items-center gap-2 flex-shrink-0' }, [
+                btnRefreshPatient,
+                // btnCopyPatient,
             ]),
         ])
 
@@ -1545,7 +1566,7 @@ export class MyPatientsRenderer {
                     c('span', { classes: 'text-[8px] font-mono font-medium leading-none js-last-sync', text: ui.lastUp }),
                 ]),
             ]),
-            c('span', { classes: 'flex h-1.5 w-1.5 rounded-full bg-slate-200' })
+            c('span', { classes: 'flex h-1.5 w-1.5 rounded-full bg-slate-200' }),
         ])
 
         // hidden for WIP
@@ -2300,38 +2321,39 @@ class NotesSlideOutRenderer {
     static DEFAULT_TYPE_CLASS = 'bg-blue-50 text-blue-700'
     static getCreatorStyles(type) {
         const TYPES = ClinicalNote.CREATOR_TYPES
-        const defaultButtonClass = 'bg-slate-700 hover:bg-slate-800 text-white border-slate-900/20 shadow-sm'
+        // const defaultDupClass = 'text-white bg-emerald-500/40 hover:bg-emerald-500/60 border-emerald-500/50'
         switch (type) {
             case TYPES.DOCTOR:
                 return {
                     badgeColor: 'bg-blue-600',
-                    dupClass: 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600',
+                    // dupClass: defaultDupClass,
+                    // dupClass: 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600',
                 }
             case TYPES.NURSE:
                 return {
                     badgeColor: 'bg-emerald-600',
-                    dupClass: defaultButtonClass,
+                    // dupClass: defaultDupClass,
                 }
             case TYPES.PHARMACIST:
                 return {
                     badgeColor: 'bg-zinc-600',
-                    dupClass: defaultButtonClass,
+                    // dupClass: defaultDupClass,
                 }
             case TYPES.MIDWIFE:
                 return {
                     badgeColor: 'bg-teal-600',
-                    dupClass: defaultButtonClass,
+                    // dupClass: defaultDupClass,
                 }
             case TYPES.NUTRITIONIST:
                 return {
                     badgeColor: 'bg-purple-600',
-                    dupClass: defaultButtonClass,
+                    // dupClass: defaultDupClass,
                 }
             case TYPES.UNKNOWN:
             default:
                 return {
                     badgeColor: 'bg-slate-600',
-                    dupClass: defaultButtonClass,
+                    // dupClass: defaultDupClass,
                 }
         }
     }
@@ -2372,8 +2394,9 @@ class NotesSlideOutRenderer {
             return
         }
 
+        const actBtnClasses = 'text-[9px] font-bold px-2 py-0.5 rounded border transition-all tracking-wide'
         filteredNotes.forEach(note => {
-            const { badgeColor, dupClass } = NotesSlideOutRenderer.getCreatorStyles(note.creator.type)
+            const { badgeColor } = NotesSlideOutRenderer.getCreatorStyles(note.creator.type)
             const typeColorClass = NotesSlideOutRenderer.NOTE_TYPE_CLASSES[note.type] || NotesSlideOutRenderer.DEFAULT_TYPE_CLASS
 
             const canEdit = this.isCreator(note.creator.id)
@@ -2382,17 +2405,29 @@ class NotesSlideOutRenderer {
             // --- BUTTONS & TOGGLE WRAPPER ---
             const actionContainer = c('div', { classes: 'flex gap-1 items-center' })
 
-            const btnDup = c('button', { classes: `note-duplicate-btn ${dupClass} text-white text-[9px] font-bold px-2 py-0.5 rounded border transition-all`, text: 'Dup' })
-            const btnCopy = c('button', { classes: 'note-copy-btn bg-white/20 hover:bg-white/40 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all', text: 'Copy' })
-            const btnEdit = c('button', { classes: 'note-edit-btn bg-white hover:bg-slate-100 text-slate-700 text-[9px] font-bold px-2 py-0.5 rounded border border-white/30 transition-all', text: 'Edit' })
-            const btnDelete = c('button', { classes: 'note-delete-btn bg-red-500 hover:bg-red-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-red-600 transition-all', text: 'Del' })
-            const btnSave = c('button', { classes: 'note-save-btn bg-emerald-500 hover:bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-emerald-600 transition-all', text: 'Save' })
-            const btnCancel = c('button', { classes: 'note-cancel-btn bg-slate-500 hover:bg-slate-600 text-white text-[9px] font-bold px-2 py-0.5 rounded border border-slate-600 transition-all', text: 'Cancel' })
+            const btnDup = c('button', {
+                classes: `text-white bg-emerald-500/40 hover:bg-emerald-500/60 border-emerald-500/50 ${actBtnClasses} note-duplicate-btn`, text: 'Dup'
+            })
+            const btnCopy = c('button', {
+                classes: `text-white bg-white/20 hover:bg-white/40 border-white/30 ${actBtnClasses} note-copy-btn`, text: 'Copy'
+            })
+            const btnEdit = c('button', {
+                classes: `text-white bg-amber-500/40 hover:bg-amber-500/60 border-amber-500/50 ${actBtnClasses} note-edit-btn`, text: 'Edit'
+            })
+            const btnDelete = c('button', {
+                classes: `text-white bg-red-500/40 hover:bg-red-500/60 border-red-500/50 ${actBtnClasses} note-delete-btn`, text: 'Del'
+            })
+            const btnSave = c('button', {
+                classes: `text-white bg-amber-500/40 hover:bg-amber-500/60 border-amber-500/50 ${actBtnClasses} note-save-btn`, text: 'Save'
+            })
+            const btnCancel = c('button', {
+                classes: `text-white bg-slate-500/40 hover:bg-slate-500/60 border-slate-500/50 ${actBtnClasses} note-cancel-btn`, text: 'Cancel'
+            })
 
             // WORK IN PROGRESS (WIP)
-            btnDup.classList.add('hidden')
-            btnEdit.classList.add('hidden')
-            btnDelete.classList.add('hidden')
+            // btnDup.classList.add('hidden')
+            // btnEdit.classList.add('hidden')
+            // btnDelete.classList.add('hidden')
             // WIP WIP
 
             const showNormalActions = () => {
