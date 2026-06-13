@@ -70,7 +70,7 @@ class HospitalContextManager {
         return this.docLookup.get(`${hospitalId}_${doctorId}`) || null
     }
     getRoomName(hospitalId, roomId) {
-        if (!roomId) return 'Unknown Room'
+        if (!roomId) return 'No Room Assigned'
         const key = `${hospitalId}_${roomId}`
         const record = this.roomLookup.get(key)
         return record ? record.room.name : `(Room N/A) ${roomId}`

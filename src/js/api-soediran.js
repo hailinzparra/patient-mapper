@@ -1,5 +1,5 @@
 import { Utils } from './utils.js'
-import { ApiBase, ApiSettings } from './base.js'
+import { ApiBase, ApiSettings, BaseClinicalNotesContext } from './base.js'
 import { Patient, ClinicalNote } from './clinical.js'
 
 // ==========================================
@@ -272,18 +272,15 @@ class SoediranRequestPayload {
     }
 }
 
-class SoediranClinicalNotesContext {
+class SoediranClinicalNotesContext extends BaseClinicalNotesContext {
     constructor(driver, targetDomain, session) {
-        this.driver = driver
-        this.targetDomain = targetDomain
-        this.session = session
-        this.basePath = driver.PATHS.BASE
+        super(driver, targetDomain, session)
     }
+    /** @override */
     _url(endpoint) {
-        const dc = Date.now()
-        const delimiter = endpoint.includes('?') ? '&' : '?'
-        return `${this.targetDomain}${this.basePath}${endpoint}${delimiter}_dc=${dc}`
+        return super._url(endpoint, true)
     }
+    /** @override */
     extractContentByNoteType = (type, raw) => {
         switch (type) {
             case ClinicalNote.TYPES.SBAR:
@@ -300,7 +297,7 @@ class SoediranClinicalNotesContext {
                     diagnosis: raw.OBYEKTIF || '',
                     intervention: raw.ASSESMENT || '',
                     monitoring: raw.PLANNING || '',
-                    evaluation: '' || '',
+                    evaluation: '',
                     instruction: raw.INSTRUKSI || '',
                 }
             default:
@@ -313,11 +310,14 @@ class SoediranClinicalNotesContext {
                 }
         }
     }
-    async fetch(mrn, recId, signal) {
-        const url = this._url(`/medicalrecord/cppt?KUNJUNGAN=${recId}&STATUS=1&page=1&start=0&limit=25`)
-
-        const result = await this.driver.apiRequest(url, this.session, { signal })
-        const rawList = result.data || []
+    /**
+     * Translates a raw backend record data payload into a standardized ClinicalNote instance.
+     * @param {Object} raw - The raw database record object.
+     * @returns {ClinicalNote}
+     * @private
+     */
+    _parseRawNote(raw) {
+        if (!raw) return null
 
         const creatorTypeMap = {
             '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
@@ -327,65 +327,97 @@ class SoediranClinicalNotesContext {
             '8': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
         }
 
-        return rawList.map(raw => {
-            const creatorType = creatorTypeMap[raw.JENIS]
+        const creatorType = creatorTypeMap[raw.JENIS] || ClinicalNote.CREATOR_TYPES.UNKNOWN
 
-            const type = (raw.ADIME !== '0' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
-                ? ClinicalNote.TYPES.ADIME
-                : (raw.STATUS_SBAR !== '0'
-                    ? ClinicalNote.TYPES.SBAR
-                    : ClinicalNote.TYPES.SOAP)
+        const type = (raw.ADIME !== '0' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
+            ? ClinicalNote.TYPES.ADIME
+            : (raw.STATUS_SBAR !== '0' ? ClinicalNote.TYPES.SBAR : ClinicalNote.TYPES.SOAP)
 
-            const staff = raw.REFERENSI?.TENAGA_MEDIS
-            const staffName = `${staff?.GELAR_DEPAN ? `${staff.GELAR_DEPAN} ` : ''}${staff?.NAMA}${staff?.GELAR_BELAKANG ? `, ${staff.GELAR_BELAKANG}` : ''}`
+        const staff = raw.REFERENSI?.TENAGA_MEDIS
+        const staffName = `${staff?.GELAR_DEPAN ? `${staff.GELAR_DEPAN} ` : ''}${staff?.NAMA || ''}${staff?.GELAR_BELAKANG ? `, ${staff.GELAR_BELAKANG}` : ''}`
 
-            return new ClinicalNote({
-                id: String(raw.ID || ''),
-                recId: String(raw.KUNJUNGAN || ''),
-                roomId: raw.REFERENSI?.KUNJUNGAN?.RUANGAN,
-                roomName: raw.REFERENSI?.KUNJUNGAN?.REFERENSI?.RUANGAN?.DESKRIPSI,
-                type: type,
-                content: this.extractContentByNoteType(type, raw),
-                creator: {
-                    id: String(raw.TENAGA_MEDIS || ''),
-                    name: Utils.formatNameWithTitle(staffName),
-                    type: creatorType,
-                },
-                timestamp: Utils.toLocalISOString(new Date(raw.TANGGAL)),
-                verification: raw.VERIFIKASI !== '0' ? {
-                    isVerified: raw.REFERENSI?.VERIFIKASI?.STATUS === '1',
-                    id: String(raw.VERIFIKASI),
-                    verificatorName: (() => {
-                        const n = raw.REFERENSI?.VERIFIKASI?.REFERENSI?.PENGGUNA
-                        if (!n) return ''
-                        const a = n.GELAR_DEPAN ? `${n.GELAR_DEPAN} ` : ''
-                        const b = n.NAMA || ''
-                        const c = n.GELAR_BELAKANG ? `, ${n.GELAR_BELAKANG}` : ''
-                        return `${a}${b}${c}`.trim()
-                    })(),
-                    timestamp: Utils.toLocalISOString(new Date(raw.REFERENSI?.VERIFIKASI?.TANGGAL)),
-                } : null,
-            })
+        return new ClinicalNote({
+            id: String(raw.ID || ''),
+            recId: String(raw.KUNJUNGAN || ''),
+            roomId: raw.REFERENSI?.KUNJUNGAN?.RUANGAN,
+            roomName: raw.REFERENSI?.KUNJUNGAN?.REFERENSI?.RUANGAN?.DESKRIPSI,
+            type: type,
+            content: this.extractContentByNoteType(type, raw),
+            creator: {
+                id: String(raw.TENAGA_MEDIS || ''),
+                name: Utils.formatNameWithTitle(staffName),
+                type: creatorType,
+            },
+            timestamp: Utils.toLocalISOString(new Date(raw.TANGGAL)),
+            verification: raw.VERIFIKASI !== '0' ? {
+                isVerified: raw.REFERENSI?.VERIFIKASI?.STATUS === '1',
+                id: String(raw.VERIFIKASI),
+                verificatorName: (() => {
+                    const n = raw.REFERENSI?.VERIFIKASI?.REFERENSI?.PENGGUNA
+                    if (!n) return ''
+                    const a = n.GELAR_DEPAN ? `${n.GELAR_DEPAN} ` : ''
+                    const b = n.NAMA || ''
+                    const c = n.GELAR_BELAKANG ? `, ${n.GELAR_BELAKANG}` : ''
+                    return `${a}${b}${c}`.trim()
+                })(),
+                timestamp: Utils.toLocalISOString(new Date(raw.REFERENSI?.VERIFIKASI?.TANGGAL)),
+            } : null,
         })
     }
+    /** @override */
+    async fetch(mrn, recId, signal) {
+        const url = this._url(`/medicalrecord/cppt?KUNJUNGAN=${recId}&STATUS=1&page=1&start=0&limit=25`)
+
+        const result = await this.driver.apiRequest(url, this.session, { signal })
+        const rawList = result.data || []
+
+        return rawList.map(raw => this._parseRawNote(raw)).filter(Boolean)
+    }
+    /**
+     * @param {ClinicalNote} note 
+     * @returns {Promise<ClinicalNote>}
+     */
     async submit(note) {
-        if (!(note instanceof ClinicalNote)) {
-            throw new Error('Not a clinical note.')
-        }
+        if (!(note instanceof ClinicalNote)) throw new Error('Not a clinical note.')
 
         const cyclingNum = (Math.floor(Date.now() / 1000) % 100) + 1
         const modelId = `rekammedis.cppt.Model-${cyclingNum}`
         const timestamp = note.timestamp || ''
         const timeValue = timestamp.split(' ')[1] || '00:00:00'
 
+        let subyektif, obyektif, assesment, planning
+
+        switch (note.type) {
+            case ClinicalNote.TYPES.SBAR:
+                subyektif = note.content.situation || ''
+                obyektif = note.content.background || ''
+                assesment = note.content.assessment || ''
+                planning = note.content.recommendation || ''
+                break
+            case ClinicalNote.TYPES.ADIME:
+                subyektif = note.content.assessment || ''
+                obyektif = note.content.diagnosis || ''
+                assesment = note.content.intervention || ''
+                planning = [note.content.monitoring, note.content.evaluation]
+                    .filter(Boolean)
+                    .join('\n\n')
+                break
+            default: // SOAP
+                subyektif = note.content.subjective || ''
+                obyektif = note.content.objective || ''
+                assesment = note.content.assessment || ''
+                planning = note.content.planning || ''
+                break
+        }
+
         const payload = {
             'STATUS': 1,
-            'JENIS': note.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR ? 1 : 3,
-            'SUBYEKTIF': note.content.subjective,
-            'OBYEKTIF': note.content.objective,
-            'ASSESMENT': note.content.assessment,
-            'PLANNING': note.content.planning,
-            'INSTRUKSI': note.content.instruction,
+            'JENIS': note.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR ? 1 : 3, // figure out other type
+            'SUBYEKTIF': ClinicalNote.cleanPropertyForDb(subyektif),
+            'OBYEKTIF': ClinicalNote.cleanPropertyForDb(obyektif),
+            'ASSESMENT': ClinicalNote.cleanPropertyForDb(assesment),
+            'PLANNING': ClinicalNote.cleanPropertyForDb(planning),
+            'INSTRUKSI': ClinicalNote.cleanPropertyForDb(note.content.instruction || ''),
             'KUNJUNGAN': note.recId,
             'TANGGAL': timestamp,
             'WAKTU': timeValue,
@@ -406,11 +438,15 @@ class SoediranClinicalNotesContext {
         }
 
         const url = this._url('/medicalrecord/cppt')
-        return await this.driver.apiRequest(url, this.session, {
+        const response = await this.driver.apiRequest(url, this.session, {
             method: 'POST',
             body: JSON.stringify(payload),
         })
+
+        const rawNote = (response?.data) ? (Array.isArray(response.data) ? response.data[0] : response.data) : response
+        return this._parseRawNote(rawNote)
     }
+    /** @override */
     async amend(note) {
         const payload = {
             'ID': parseInt(note.id),
@@ -428,6 +464,9 @@ class SoediranClinicalNotesContext {
             body: JSON.stringify(payload),
         })
     }
+    /**
+     * @param {string | number} id 
+     */
     async archive(id) {
         const url = this._url(`/medicalrecord/cppt/${id}`)
         return await this.driver.apiRequest(url, this.session, {

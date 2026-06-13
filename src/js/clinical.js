@@ -481,6 +481,7 @@ export class ClinicalNote {
         MIDWIFE: 'Midwife',
         NUTRITIONIST: 'Nutritionist',
         PARAMEDIC: 'Paramedic',
+        PHYSIOTHERAPIST: 'Physiotherapist',
         UNKNOWN: 'Unknown',
     })
 
@@ -572,5 +573,22 @@ export class ClinicalNote {
         })
 
         return lines.join('\n\n')
+    }
+
+    /**
+     * Cleans an individual property string by escaping HTML characters 
+     * and converting newlines (\n) to <br> tags for database storage.
+     * @param {string} str 
+     * @returns {string}
+     */
+    static cleanPropertyForDb(str) {
+        if (!str) return ''
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;')
+            .replace(/\r?\n/g, '<br>')
     }
 }

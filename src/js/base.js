@@ -1,4 +1,5 @@
 // @ts-check
+import { ClinicalNote } from './clinical.js'
 
 // ==========================================
 // BASE CLASS
@@ -124,8 +125,16 @@ export class ApiBase {
     getWardTypeList(wardType) { throw new Error('Not implemented') }
     // @ts-ignore
     createPatientFromApiItem(item, hid) { throw new Error('Not implemented') }
-    // @ts-ignore
-    clinicalNotesContext(targetDomain, session) { throw new Error('Not implemented') }
+    /**
+     * Factory method to generate a hospital-specific Clinical Notes operations context handler.
+     * @param {string} targetDomain - Active base target URL/domain string.
+     * @param {Object} session - Active user extension authentication context.
+     * @returns {BaseClinicalNotesContext} An active instance derived from the Base Clinical Notes Context class.
+     * @throws {Error} If the subclass does not implement this method.
+     */
+    clinicalNotesContext(targetDomain, session) {
+        throw new Error(`Method 'clinicalNotesContext()' must be implemented by subclass.`);
+    }
 }
 
 /**
@@ -160,5 +169,89 @@ export class ApiSettings {
             canUpdate: overrides.notes?.canUpdate ?? false,
             canDelete: overrides.notes?.canDelete ?? false,
         }
+    }
+}
+
+/**
+ * @typedef {Object} ClinicalNotesDriver
+ * @property {Object} PATHS
+ * @property {string} PATHS.BASE
+ * @property {function(string, Object, Object=): Promise<any>} apiRequest
+ */
+
+export class BaseClinicalNotesContext {
+    /**
+     * @param {ClinicalNotesDriver} driver - The parent hospital API driver.
+     * @param {string} targetDomain - Active base target url/domain string.
+     * @param {Object} session - Active user extension authentication context.
+     */
+    constructor(driver, targetDomain, session) {
+        if (this.constructor === BaseClinicalNotesContext) {
+            throw new Error('BaseClinicalNotesContext cannot be instantiated directly.')
+        }
+
+        this.driver = driver
+        this.targetDomain = targetDomain
+        this.session = session
+        this.basePath = driver.PATHS.BASE
+    }
+
+    /**
+     * Utility to cleanly construct standard endpoint URLs
+     * @param {string} endpoint - The internal service path routing.
+     * @param {boolean} [appendCacheBuster=false] - True if target system requires an explicit timestamp parameter.
+     * @protected
+     */
+    _url(endpoint, appendCacheBuster = false) {
+        let base = `${this.targetDomain}${this.basePath}${endpoint}`
+        if (appendCacheBuster) {
+            const dc = Date.now()
+            const delimiter = endpoint.includes('?') ? '&' : '?'
+            base += `${delimiter}_dc=${dc}`
+        }
+        return base
+    }
+
+    /**
+     * @param {string} type - ClinicalNote type flag.
+     * @param {Object} raw - Raw unformatted API row dataset object.
+     * @returns {Object} Normalized unified note structural content payload object.
+     */
+    extractContentByNoteType(type, raw) {
+        throw new Error(`Method 'extractContentByNoteType()' must be implemented by subclass.`)
+    }
+
+    /**
+     * @param {string} mrn - Medical Record Number string.
+     * @param {string} recId - System registration encounter record transaction reference ID.
+     * @param {AbortSignal} [signal] - Optional browser networking cancel AbortSignal token wrapper wrapper.
+     * @returns {Promise<ClinicalNote[]>}
+     */
+    async fetch(mrn, recId, signal) {
+        throw new Error(`Method 'fetch()' must be implemented by subclass.`)
+    }
+
+    /**
+     * @param {ClinicalNote} note 
+     * @returns {Promise<ClinicalNote>}
+     */
+    async submit(note) {
+        throw new Error(`Method 'submit()' must be implemented by subclass.`)
+    }
+
+    /**
+     * @param {ClinicalNote} note
+     * @returns {Promise<any>}
+     */
+    async amend(note) {
+        throw new Error(`Method 'amend()' must be implemented by subclass.`)
+    }
+
+    /**
+     * @param {string | number} id 
+     * @returns {Promise<any>}
+     */
+    async archive(id) {
+        throw new Error(`Method 'archive()' must be implemented by subclass.`)
     }
 }

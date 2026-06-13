@@ -1,5 +1,5 @@
 import { Utils } from './utils.js'
-import { ApiBase, ApiSettings } from './base.js'
+import { ApiBase, ApiSettings, BaseClinicalNotesContext } from './base.js'
 import { Patient, ClinicalNote } from './clinical.js'
 
 // ==========================================
@@ -245,16 +245,11 @@ class SoehadiRequestPayload {
     }
 }
 
-class SoehadiClinicalNotesContext {
+class SoehadiClinicalNotesContext extends BaseClinicalNotesContext {
     constructor(driver, targetDomain, session) {
-        this.driver = driver
-        this.targetDomain = targetDomain
-        this.session = session
-        this.basePath = driver.PATHS.BASE
+        super(driver, targetDomain, session)
     }
-    _url(endpoint) {
-        return `${this.targetDomain}${this.basePath}${endpoint}`
-    }
+    /** @override */
     extractContentByNoteType(type, raw) {
         switch (type) {
             case ClinicalNote.TYPES.SBAR:
@@ -284,6 +279,7 @@ class SoehadiClinicalNotesContext {
                 }
         }
     }
+    /** @override */
     async fetch(mrn, recId, signal) {
         const url = this._url(`/emr/get-riwayatcppt-rajalranap-v2?nocm=${mrn}&noregistrasi=${recId}&pegawaiMultiple=`)
         const result = await this.driver.apiRequest(url, this.session, { signal })
@@ -295,6 +291,7 @@ class SoehadiClinicalNotesContext {
             '3': ClinicalNote.CREATOR_TYPES.MIDWIFE,
             '14': ClinicalNote.CREATOR_TYPES.PHARMACIST,
             '19': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
+            '26': ClinicalNote.CREATOR_TYPES.PHYSIOTHERAPIST,
         }
 
         return rawList.map(raw => {
@@ -302,9 +299,7 @@ class SoehadiClinicalNotesContext {
 
             const type = (raw.jenis_cppt === 'ADIME' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
                 ? ClinicalNote.TYPES.ADIME
-                : (raw.jenis_cppt === 'SBAR'
-                    ? ClinicalNote.TYPES.SBAR
-                    : ClinicalNote.TYPES.SOAP)
+                : (raw.jenis_cppt === 'SBAR' ? ClinicalNote.TYPES.SBAR : ClinicalNote.TYPES.SOAP)
 
             return new ClinicalNote({
                 id: String(raw.norec || ''),
@@ -328,11 +323,25 @@ class SoehadiClinicalNotesContext {
             })
         })
     }
+    /**
+     * @param {ClinicalNote} note 
+     * @returns {Promise<ClinicalNote>}
+     */
     async submit(note) {
+        // Implement when endpoint contracts are ready
+        return super.submit(note)
     }
+    /** @override */
     async amend(note) {
+        // Implement when endpoint contracts are ready
+        return super.amend(note)
     }
+    /**
+     * @param {string | number} id 
+     */
     async archive(id) {
+        // Implement when endpoint contracts are ready
+        return super.archive(id)
     }
 }
 

@@ -1239,7 +1239,7 @@ const G = {
             } else {
                 fullErrorPayload = String(err)
             }
-            G.swal.fire({
+            return G.swal.fire({
                 icon: 'error',
                 title: title,
                 html: `<p class="mb-3 text-sm font-medium text-slate-700">${preMessage}</p>

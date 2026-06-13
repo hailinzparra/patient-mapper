@@ -1600,8 +1600,7 @@ export class MyPatientsRenderer {
             c('span', { classes: 'flex h-1.5 w-1.5 rounded-full bg-slate-200' }),
         ])
 
-        // hidden for WIP
-        const notesCreateButton = c('button', { classes: 'notes-create-btn p-1 me-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all hidden' }, [
+        const notesCreateButton = c('button', { classes: 'notes-create-btn p-1 me-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-all' }, [
             c('svg', { classes: 'w-3.5 h-3.5', attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '3', d: 'M12 4v16m8-8H4' } }),
             ]),
@@ -1624,13 +1623,15 @@ export class MyPatientsRenderer {
         ])
 
         if (!apiSettings.patients.canRefresh) btnRefreshPatient.classList.add('hidden')
+        if (!apiSettings.notes.canCreate) notesCreateButton.classList.add('hidden')
 
-        btnRefreshPatient.addEventListener('click', () => { })
-        btnCopyPatient.addEventListener('click', () => this.handleCopyPatientData(p, btnCopyPatient))
-        btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes))
-        notesCloseButton.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes, false))
-        btnPatientUp.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'up'))
-        btnPatientDown.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'down'))
+        btnRefreshPatient.onclick = () => { }
+        btnCopyPatient.onclick = () => this.handleCopyPatientData(p, btnCopyPatient)
+        btnNotes.onclick = () => this.toggleNotesSlideOut(p, notesContainer, btnNotes)
+        notesCreateButton.onclick = () => this.openNoteCreationModal(p)
+        notesCloseButton.onclick = () => this.toggleNotesSlideOut(p, notesContainer, btnNotes, false)
+        btnPatientUp.onclick = () => this.handlePatientMove(p.id, p.roomId, 'up')
+        btnPatientDown.onclick = () => this.handlePatientMove(p.id, p.roomId, 'down')
 
         return c('div', {
             classes: 'js-patient-item patient-wrapper flex flex-col gap-2 w-full',
@@ -2187,7 +2188,7 @@ export class MyPatientsRenderer {
                 return
             }
 
-            const renderer = new NotesSlideOutRenderer(notesContainer, rawNotes, p, btnNotes)
+            const renderer = new NotesSlideOutRenderer(this, notesContainer, rawNotes, p, btnNotes)
             const renderersMap = this.G.store.temp.activeNotesSlideOutRenderers
             if (renderersMap.has(p.id)) {
                 const oldRenderer = renderersMap.get(p.id)
@@ -2250,6 +2251,472 @@ export class MyPatientsRenderer {
         closeBtn.classList.add('hover:text-red-500')
         closeBtn.classList.remove('opacity-50')
         closeBtn.disabled = false
+    }
+    /**
+     * Opens a dynamic clinical note modal supporting SOAP, SBAR, ADIME, etc.
+     * with quick-action workflow buttons for temporal manipulation.
+     * @param {Patient} p 
+     * @param {Object} [options] - Optional configurations for initializing the note.
+     * @param {string | undefined} [options.title]
+     * @param {string | undefined} [options.buttonText]
+     * @param {string | undefined} [options.loadingText]
+     * @param {string | undefined} [options.successText]
+     * @param {ClinicalNote['type'] | undefined} [options.type] - Pre-filled note type.
+     * @param {ClinicalNote['content'] | undefined} [options.content] - Pre-filled note content.
+     * @param {ClinicalNote['timestamp'] | undefined} [options.timestamp] - Pre-filled note timestamp.
+     */
+    async openNoteCreationModal(p, options = {}) {
+        const modalTitle = options.title || 'Create Note'
+        const modalConfirmButtonText = options.buttonText || 'Create Note'
+        const modalLoadingText = options.loadingText || 'Creating note...'
+        const modalSuccessText = options.successText || 'Note created successfully!'
+
+        const now = options.timestamp ? new Date(options.timestamp) : new Date()
+        const localDate = now.getFullYear() + '-' +
+            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+            String(now.getDate()).padStart(2, '0')
+        const localTime = String(now.getHours()).padStart(2, '0') + ':' +
+            String(now.getMinutes()).padStart(2, '0') + ':' +
+            String(now.getSeconds()).padStart(2, '0')
+
+        const userStaffId = hospitalContext.session.data.userData.staffId || 'Unknown ID'
+        const userDisplayName = hospitalContext.session.data.userData.displayName || 'Unknown Staff'
+
+        const newNote = new ClinicalNote({
+            type: options.type || ClinicalNote.TYPES.SOAP,
+            content: options.content || {},
+        })
+
+        const cls = {
+            label: 'block text-[9px] font-black text-slate-400 uppercase mb-1 text-left tracking-wider',
+            soapLabel: 'block text-[9px] font-black text-emerald-600 uppercase mb-1 tracking-wider text-left',
+            input: 'w-full border border-slate-200 rounded p-1.5 text-[11px] focus:ring-2 focus:ring-emerald-500/20 outline-none bg-white text-slate-800',
+            tabActive: 'is-active px-3 py-1.5 bg-emerald-600 text-white font-bold rounded shadow-sm text-[10px] uppercase tracking-wider cursor-pointer transition-all',
+            tabInactive: 'px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded text-[10px] uppercase tracking-wider cursor-pointer transition-all',
+            quickBtn: 'px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded text-[9px] font-bold uppercase tracking-tight cursor-pointer transition active:bg-slate-200 select-none',
+        }
+
+        const fieldMap = new Map()
+        Object.values(ClinicalNote.NOTE_TYPE_CONFIGS).forEach(configList => {
+            configList.forEach(f => {
+                if (!fieldMap.has(f.key)) {
+                    fieldMap.set(f.key, f.label)
+                }
+            })
+        })
+
+        const prepareContentForTextarea = (rawContent) => {
+            if (!rawContent) return ''
+            let clean = Utils.decodeHtmlEntities(rawContent)
+            return clean.replace(/<br\s*\/?>/gi, '\n')
+        }
+
+        const result = await this.G.swal.fire({
+            title: `<div class="flex flex-col gap-2 border-b border-slate-100 pb-2 text-left"><div class="truncate text-slate-700 font-black text-xs uppercase tracking-widest">${modalTitle}</div>`
+                + `<div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100/80 px-2 py-0.5 rounded text-[10px] text-emerald-700 font-semibold shrink-0"><div class="min-w-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div><span class="truncate line-clamp-1">AS: <strong>${userDisplayName}</strong> <span class="opacity-60">(${userStaffId})</span></span></div></div>`,
+            html: `
+<div class="text-left space-y-4 px-1 relative max-h-[60vh] overflow-y-auto">
+    <div class="pb-2 border-b border-slate-50 sticky top-0 bg-white z-10">
+        <label class="${cls.label}">Note Type</label>
+        <div id="swal-note-type-tabs" class="flex flex-wrap gap-1.5">${Object.values(ClinicalNote.TYPES).map(tName => `<button type="button" data-type="${tName}" class="${tName === newNote.type ? cls.tabActive : cls.tabInactive}">${tName}</button>`).join('')}</div>
+    </div>
+    <div class="space-y-2 pb-2 border-b border-slate-100">
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label for="swal-note-creation-date" class="${cls.label}">Entry Date</label>
+                <input type="date" id="swal-note-creation-date" value="${localDate}" class="${cls.input}">
+            </div>
+            <div>
+                <label for="swal-note-creation-time" class="${cls.label}">Entry Time</label>
+                <input type="time" id="swal-note-creation-time" step="1" value="${localTime}" class="${cls.input}">
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-1 pt-1">
+            <button type="button" id="swal-note-btn-quick-today" class="${cls.quickBtn}">Today</button>
+            <button type="button" id="swal-note-btn-quick-add-day" class="${cls.quickBtn}">+1 Day</button>
+            <button type="button" id="swal-note-btn-quick-0800" class="${cls.quickBtn}">08:00</button>
+            <button type="button" id="swal-note-btn-quick-add-hour" class="${cls.quickBtn}">+1 Hour</button>
+            <button type="button" id="swal-note-btn-quick-add-rand-min" class="${cls.quickBtn}">+15-30 Min</button>
+            <button type="button" id="swal-note-btn-quick-macro-tomorrow" class="${cls.quickBtn}">Tomorrow 🗲</button>
+        </div>
+    </div>
+    <div id="swal-dynamic-fields-container" class="space-y-4 pt-1">
+        ${Array.from(fieldMap.entries()).map(([key, label]) => `
+            <div id="wrapper-field-${key}" class="hidden-note-field hidden flex flex-col">
+                <label for="swal-note-field-${key}" class="${cls.soapLabel}">
+                    ${label}
+                </label>
+                <textarea 
+                    id="swal-note-field-${key}" 
+                    class="w-full h-48 border border-slate-200 rounded-md p-2 text-[11px] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-slate-800 resize-y" 
+                    placeholder="Enter details here..."
+                >${prepareContentForTextarea(newNote.content[key])}</textarea>
+            </div>
+        `).join('')}
+    </div>
+</div>
+            `,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showCancelButton: true,
+            confirmButtonText: modalConfirmButtonText,
+            cancelButtonText: 'Cancel',
+            customClass: {
+                ...this.G.baseSwalClasses,
+                confirmButton: 'inline-flex justify-center rounded-md bg-emerald-600 px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 transition ease-in-out duration-150 order-2 cursor-pointer',
+            },
+            didOpen: () => {
+                const confirmButton = this.G.swal.getConfirmButton()
+                const container = document.getElementById('swal-dynamic-fields-container')
+
+                const dateInput = document.getElementById('swal-note-creation-date')
+                const timeInput = document.getElementById('swal-note-creation-time')
+
+                let activeType = newNote.type
+
+                // --- HELPER TIME PARSERS & FORMATTERS ---
+                const formatISOWithoutZ = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+
+                const adjustTimeWithoutChangingDate = (minutesToAdd, secondsToAdd = 0) => {
+                    if (!timeInput) return
+                    const timeParts = timeInput.value.split(':')
+                    let hrs = parseInt(timeParts[0], 10) || 0
+                    let mins = parseInt(timeParts[1], 10) || 0
+                    let secs = parseInt(timeParts[2], 10) || 0
+
+                    // Convert everything to total seconds to handle smooth rolling overflows
+                    let totalSeconds = (hrs * 3600) + (mins * 60) + secs + (minutesToAdd * 60) + secondsToAdd
+
+                    // Protect against underflow/overflow within a single 24-hour block (86400 seconds)
+                    if (totalSeconds < 0) {
+                        totalSeconds = (totalSeconds % 86400) + 86400
+                    }
+
+                    const finalHrs = Math.floor(totalSeconds / 3600) % 24
+                    const finalMins = Math.floor((totalSeconds % 3600) / 60)
+                    const finalSecs = totalSeconds % 60
+
+                    timeInput.value = `${String(finalHrs).padStart(2, '0')}:${String(finalMins).padStart(2, '0')}:${String(finalSecs).padStart(2, '0')}`
+                }
+
+                // --- QUICK WORKFLOW BUTTON ACTIONS BINDINGS ---
+                document.getElementById('swal-note-btn-quick-today').onclick = () => {
+                    if (dateInput) dateInput.value = formatISOWithoutZ(new Date())
+                }
+
+                document.getElementById('swal-note-btn-quick-add-day').onclick = () => {
+                    if (!dateInput) return
+                    // Fall back to today if the current input text happens to be corrupt or unparseable
+                    const baseDate = dateInput.value ? new Date(dateInput.value) : new Date()
+                    baseDate.setDate(baseDate.getDate() + 1)
+                    dateInput.value = formatISOWithoutZ(baseDate)
+                }
+
+                document.getElementById('swal-note-btn-quick-0800').onclick = () => {
+                    if (timeInput) timeInput.value = '08:00:00'
+                }
+
+                // +1 Hour Button (Passes 60 minutes, 0 seconds)
+                document.getElementById('swal-note-btn-quick-add-hour').onclick = () => {
+                    adjustTimeWithoutChangingDate(60, 0)
+                }
+
+                // +15-30 Min Button (Passes random minutes and random seconds)
+                document.getElementById('swal-note-btn-quick-add-rand-min').onclick = () => {
+                    const randomMinutes = Math.floor(Math.random() * (30 - 15 + 1)) + 15
+                    const randomSeconds = Math.floor(Math.random() * 60)
+                    adjustTimeWithoutChangingDate(randomMinutes, randomSeconds)
+                }
+
+                document.getElementById('swal-note-btn-quick-macro-tomorrow').onclick = () => {
+                    if (!dateInput || !timeInput) return
+
+                    // STEP 1: Set date to today
+                    const targetDate = new Date()
+
+                    // STEP 2: Add 1 day (Making it Tomorrow)
+                    targetDate.setDate(targetDate.getDate() + 1)
+                    dateInput.value = formatISOWithoutZ(targetDate)
+
+                    // STEP 3: Force time baseline to exactly 08:00:00
+                    timeInput.value = '08:00:00'
+
+                    // STEP 4: Add random random 1-90 minutes and seconds
+                    const randomMinutes = Math.floor(Math.random() * (90 - 1 + 1)) + 1
+                    const randomSeconds = Math.floor(Math.random() * 60)
+                    adjustTimeWithoutChangingDate(randomMinutes, randomSeconds)
+                }
+
+                // --- DYNAMIC CONTENT VIEW & RE-ORDERING PIPELINE ---
+                const updateFieldVisibilityAndOrder = (selectedType) => {
+                    activeType = selectedType
+                    const currentConfig = ClinicalNote.NOTE_TYPE_CONFIGS[selectedType] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
+
+                    document.querySelectorAll('.hidden-note-field').forEach(el => el.classList.add('hidden'))
+
+                    currentConfig.forEach(f => {
+                        const targetWrapper = document.getElementById(`wrapper-field-${f.key}`)
+                        if (targetWrapper && container) {
+                            const labelEl = targetWrapper.querySelector('label')
+                            if (labelEl) labelEl.textContent = f.label
+
+                            container.appendChild(targetWrapper)
+                            targetWrapper.classList.remove('hidden')
+                        }
+                    })
+
+                    checkFormValidity()
+                }
+
+                const checkFormValidity = () => {
+                    const currentConfig = ClinicalNote.NOTE_TYPE_CONFIGS[activeType] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
+                    const hasContent = currentConfig.some(f => {
+                        const textarea = document.getElementById(`swal-note-field-${f.key}`)
+                        return textarea && textarea.value.trim().length > 0
+                    })
+
+                    if (confirmButton) {
+                        confirmButton.disabled = !hasContent
+                        confirmButton.style.opacity = hasContent ? '1' : '0.6'
+                    }
+                }
+
+                const tabButtons = document.querySelectorAll('#swal-note-type-tabs button')
+                tabButtons.forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const targetType = e.currentTarget.getAttribute('data-type')
+
+                        tabButtons.forEach(b => b.className = cls.tabInactive)
+                        e.currentTarget.className = cls.tabActive
+
+                        updateFieldVisibilityAndOrder(targetType)
+                    })
+                })
+
+                fieldMap.forEach((_, key) => {
+                    const txt = document.getElementById(`swal-note-field-${key}`)
+                    if (txt) txt.addEventListener('input', checkFormValidity)
+                })
+
+                updateFieldVisibilityAndOrder(activeType)
+            },
+            preConfirm: () => {
+                const dateVal = document.getElementById('swal-note-creation-date').value
+                const timeVal = document.getElementById('swal-note-creation-time').value
+
+                const activeTabBtn = document.querySelector(`#swal-note-type-tabs button.${cls.tabActive.split(' ')[0]}`)
+                const finalType = activeTabBtn ? activeTabBtn.getAttribute('data-type') : ClinicalNote.TYPES.SOAP
+
+                const currentConfig = ClinicalNote.NOTE_TYPE_CONFIGS[finalType] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
+
+                let hasData = false
+                const structuredContent = {}
+
+                fieldMap.forEach((_, key) => {
+                    const txt = document.getElementById(`swal-note-field-${key}`)
+                    if (txt) {
+                        const val = txt.value.trim()
+                        structuredContent[key] = val || ''
+
+                        if (currentConfig.some(cf => cf.key === key) && val) {
+                            hasData = true
+                        }
+                    }
+                })
+
+                if (!hasData) {
+                    this.G.swal.showValidationMessage(`Cannot submit an empty ${finalType} note.`)
+                    const validationMsg = this.G.swal.getValidationMessage()
+                    if (validationMsg) {
+                        validationMsg.className = 'mt-2 text-xs font-medium text-red-600 bg-red-50 p-2 border border-red-100 text-center rounded w-full'
+                        validationMsg.style = ''
+                    }
+                    return false
+                }
+
+                return {
+                    type: finalType,
+                    content: structuredContent,
+                    timestamp: `${dateVal} ${timeVal}`,
+                }
+            }
+        })
+
+        if (result.isConfirmed && result.value) {
+            this.G.swal.fire({
+                title: modalLoadingText,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showCloseButton: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    this.G.swal.showLoading()
+                }
+            })
+
+            const completedNote = new ClinicalNote({
+                recId: p.recId,
+                type: result.value.type,
+                content: result.value.content,
+                timestamp: result.value.timestamp,
+                creator: {
+                    id: userStaffId,
+                    name: userDisplayName,
+                    type: ClinicalNote.CREATOR_TYPES.DOCTOR,
+                }
+            })
+
+            try {
+                const clinicalNotesClient = hospitalContext.activeDriver.clinicalNotesContext(
+                    hospitalContext.activeDomain,
+                    hospitalContext.session.data,
+                )
+
+                // Submit note
+                const submittedNote = await clinicalNotesClient.submit(completedNote)
+
+                // Fetch the live renderer context from global states map if it is currently open
+                const renderersMap = this.G.store.temp.activeNotesSlideOutRenderers
+
+                if (renderersMap && renderersMap.has(p.id)) {
+                    const myRenderer = renderersMap.get(p.id)
+
+                    if (myRenderer) {
+                        // Push the brand new node instance cleanly into the existing array model cache
+                        myRenderer.notes.push(submittedNote)
+
+                        // Re-process raw object arrays through your grouping sort functions
+                        myRenderer.notesByDate = myRenderer.groupNotesByDate(myRenderer.notes)
+
+                        // Refresh tracking state so the date index array captures the new entry date string layout instantly
+                        myRenderer.availableDates = Object.keys(myRenderer.notesByDate).sort((a, b) => b.localeCompare(a))
+
+                        // Force the view switch focus directly to the target chart timeline of the new record entry
+                        const newlyAddedDateStr = myRenderer.formatDate(submittedNote.timestamp)
+                        myRenderer.activeDate = newlyAddedDateStr
+
+                        // Run structural rebuild lifecycles to refresh DOM components live on screen
+                        myRenderer.renderPaginationTrack(myRenderer.availableDates)
+                        myRenderer.render()
+                    }
+                }
+
+                this.G.ui.swalSuccessShort(modalSuccessText)
+
+            } catch (err) {
+                await this.G.ui.swalFatalError(
+                    err,
+                    'Create Failed',
+                    'The application encountered a fatal creation error:',
+                )
+                this.openNoteCreationModal(p, {
+                    ...options,
+                    type: completedNote.type,
+                    content: completedNote.content,
+                    timestamp: completedNote.timestamp,
+                })
+            }
+        }
+    }
+    /**
+     * @param {Patient} p
+     * @param {ClinicalNote} note - The target ClinicalNote instance to delete.
+     */
+    async promptDeleteNote(p, note) {
+        if (!note) return
+
+        // Parse timestamp into readable parts for the confirmation layout
+        let displayDate = 'Unknown Date'
+        let displayTime = ''
+        if (note.timestamp) {
+            const [datePart, timePart] = note.timestamp.split('T')
+            displayDate = datePart
+            displayTime = timePart ? timePart.slice(0, 5) : ''
+        }
+
+        const creatorLabel = note.creator.name
+        const roomLabel = note.roomName
+        const idLabel = note.id || '-'
+
+        let shouldDelete = false
+
+        const confirmDelete = await this.G.swal.fire({
+            icon: 'warning',
+            title: 'Delete note?',
+            html: `
+                    <div class="text-center mb-4">
+                        This will <strong>permanently delete "<span class="text-red-600">${note.type} note (ID: ${idLabel})</span>"</strong> created by <strong>${creatorLabel}</strong>.
+                    </div>
+                    <div class="text-left bg-slate-50 border border-slate-200 rounded p-3 text-[10px] space-y-1 text-slate-500">
+                        <div><span class="text-slate-400 inline-block w-16">ID:</span> <span class="text-slate-500 font-bold">${idLabel}</span></div>
+                        <div><span class="text-slate-400 inline-block w-16">Creator:</span> <span class="text-slate-500 font-bold">${creatorLabel}</span></div>
+                        <div><span class="text-slate-400 inline-block w-16">Room:</span> <span class="text-slate-500 font-bold">${roomLabel}</span></div>
+                        <div><span class="text-slate-400 inline-block w-16">Date:</span> <span class="text-slate-500 font-bold">${displayDate} ${displayTime}</span></div>
+                    </div>
+                `,
+            showDenyButton: true,
+            showCancelButton: true,
+            showConfirmButton: false,
+            denyButtonText: 'Yes, delete it',
+            cancelButtonText: 'Cancel',
+        })
+
+        shouldDelete = confirmDelete.isDenied
+
+        if (!shouldDelete) return
+
+        this.G.swal.fire({
+            title: 'Deleting note...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showCloseButton: false,
+            showConfirmButton: false,
+            didOpen: () => {
+                this.G.swal.showLoading();
+            }
+        })
+
+        try {
+            const clinicalNotesClient = hospitalContext.activeDriver.clinicalNotesContext(
+                hospitalContext.activeDomain,
+                hospitalContext.session.data,
+            )
+
+            await clinicalNotesClient.archive(note.id)
+
+            const renderersMap = this.G.store.temp.activeNotesSlideOutRenderers
+
+            if (renderersMap && renderersMap.has(p.id)) {
+                const myRenderer = renderersMap.get(p.id)
+
+                if (myRenderer) {
+                    // Filter out the deleted note from the active dataset array list 
+                    myRenderer.notes = myRenderer.notes.filter(n => String(n.id) !== String(note.id))
+
+                    // Recalculate structural time buckets map indices
+                    myRenderer.notesByDate = myRenderer.groupNotesByDate(myRenderer.notes)
+                    myRenderer.availableDates = Object.keys(myRenderer.notesByDate).sort((a, b) => b.localeCompare(a))
+
+                    // Reset active tab focus if current displayed calendar track day became completely empty
+                    if (!myRenderer.notesByDate[myRenderer.activeDate]) {
+                        myRenderer.activeDate = myRenderer.availableDates.length > 0 ? myRenderer.availableDates[0] : myRenderer.todayStr
+                    }
+
+                    // Force interactive layout layers to refresh dynamically on screen
+                    myRenderer.renderPaginationTrack(myRenderer.availableDates)
+                    myRenderer.render()
+                }
+            }
+
+            this.G.ui.swalSuccessShort('Deleted successfully!')
+
+        } catch (err) {
+            await this.G.ui.swalFatalError(
+                err,
+                'Delete Failed',
+                'The application encountered a fatal deletion error:',
+            )
+        }
     }
     openPDFConfigDrawer() {
         const activeListName = this.patientList?.name
@@ -2383,12 +2850,14 @@ export class MyPatientsRenderer {
 
 class NotesSlideOutRenderer {
     /**
+     * @param {MyPatientsRenderer} myPatientsRenderer
      * @param {HTMLDivElement} container
      * @param {ClinicalNote[]} notes
      * @param {Patient} p
      * @param {HTMLButtonElement} btnNotes
      */
-    constructor(container, notes, p, btnNotes) {
+    constructor(myPatientsRenderer, container, notes, p, btnNotes) {
+        this.myPatientsRenderer = myPatientsRenderer
         this.p = p
         this.ui = this.p.getUIDisplayData()
         this.notes = notes
@@ -2496,39 +2965,39 @@ class NotesSlideOutRenderer {
     static DEFAULT_TYPE_CLASS = 'bg-blue-50 text-blue-700'
     static getCreatorStyles(type) {
         const TYPES = ClinicalNote.CREATOR_TYPES
-        // const defaultDupClass = 'text-white bg-emerald-500/40 hover:bg-emerald-500/60 border-emerald-500/50'
         switch (type) {
             case TYPES.DOCTOR:
                 return {
                     badgeColor: 'bg-blue-600',
-                    // dupClass: defaultDupClass,
-                    // dupClass: 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600',
                 }
             case TYPES.NURSE:
                 return {
                     badgeColor: 'bg-emerald-600',
-                    // dupClass: defaultDupClass,
                 }
             case TYPES.PHARMACIST:
                 return {
                     badgeColor: 'bg-zinc-600',
-                    // dupClass: defaultDupClass,
                 }
             case TYPES.MIDWIFE:
                 return {
                     badgeColor: 'bg-teal-600',
-                    // dupClass: defaultDupClass,
                 }
             case TYPES.NUTRITIONIST:
                 return {
                     badgeColor: 'bg-purple-600',
-                    // dupClass: defaultDupClass,
+                }
+            case TYPES.PARAMEDIC:
+                return {
+                    badgeColor: 'bg-emerald-600',
+                }
+            case TYPES.PHYSIOTHERAPIST:
+                return {
+                    badgeColor: 'bg-zinc-600',
                 }
             case TYPES.UNKNOWN:
             default:
                 return {
                     badgeColor: 'bg-slate-600',
-                    // dupClass: defaultDupClass,
                 }
         }
     }
@@ -2579,7 +3048,7 @@ class NotesSlideOutRenderer {
             const { datePart, timePart } = this.getTimestampParts(note.timestamp)
 
             // --- BUTTONS & TOGGLE WRAPPER ---
-            const actionContainer = c('div', { classes: 'flex gap-1 items-center' })
+            const actionContainer = c('div', { classes: 'flex gap-1 items-center ml-1' })
 
             const btnDup = c('button', {
                 classes: `text-white bg-emerald-500/40 hover:bg-emerald-500/60 border-emerald-500/50 ${actBtnClasses} note-duplicate-btn`, text: 'Dup'
@@ -2593,12 +3062,6 @@ class NotesSlideOutRenderer {
             const btnDelete = c('button', {
                 classes: `text-white bg-red-500/40 hover:bg-red-500/60 border-red-500/50 ${actBtnClasses} note-delete-btn`, text: 'Del'
             })
-            const btnSave = c('button', {
-                classes: `text-white bg-amber-500/40 hover:bg-amber-500/60 border-amber-500/50 ${actBtnClasses} note-save-btn`, text: 'Save'
-            })
-            const btnCancel = c('button', {
-                classes: `text-white bg-slate-500/40 hover:bg-slate-500/60 border-slate-500/50 ${actBtnClasses} note-cancel-btn`, text: 'Cancel'
-            })
 
             if (!apiSettings.notes.canCreate) btnDup.classList.add('hidden')
             if (!apiSettings.notes.canUpdate) btnEdit.classList.add('hidden')
@@ -2607,44 +3070,20 @@ class NotesSlideOutRenderer {
             const showNormalActions = () => {
                 actionContainer.replaceChildren(btnDup, btnCopy, ...(canEdit ? [btnEdit, btnDelete] : []))
             }
-            const showEditingActions = () => {
-                actionContainer.replaceChildren(btnSave, btnCancel)
-            }
+            // const showEditingActions = () => {
+            //     actionContainer.replaceChildren(btnSave, btnCancel)
+            // }
 
-            btnDup.addEventListener('click', () => this.handleDuplicate(note))
-            btnCopy.addEventListener('click', async (e) => {
+            btnDup.onclick = () => this.handleDuplicate(note)
+            btnCopy.onclick = async (e) => {
                 const textOutput = ClinicalNote.formatToText(note)
                 await Utils.executeNativeClipboardCopy(textOutput, e.currentTarget)
-            })
-
-            if (canEdit) {
-                btnDelete.addEventListener('click', () => this.handleDelete(note))
-                btnEdit.addEventListener('click', () => {
-                    showEditingActions()
-                    this.handleStartEditing(note)
-                })
-                btnCancel.addEventListener('click', () => {
-                    showNormalActions()
-                    this.handleCancelEditing(note)
-                })
-                btnSave.addEventListener('click', async () => {
-                    btnSave.disabled = true
-                    btnCancel.disabled = true
-                    btnSave.classList.add('opacity-50', 'cursor-not-allowed')
-                    try {
-                        await this.handleSave(note)
-                        showNormalActions()
-                    }
-                    catch (err) {
-                        console.error(err)
-                    }
-                    finally {
-                        btnSave.disabled = false
-                        btnCancel.disabled = false
-                        btnSave.classList.remove('opacity-50', 'cursor-not-allowed')
-                    }
-                })
             }
+            if (canEdit) {
+                btnDelete.onclick = () => this.handleDelete(note)
+                btnEdit.onclick = () => this.handleStartEditing(note)
+            }
+
             showNormalActions()
 
             // --- VERIFICATION STATUS NODE WORKFLOW ---
@@ -2671,7 +3110,7 @@ class NotesSlideOutRenderer {
             // --- CONTENT PROCESSOR ---
             const currentConfig = ClinicalNote.NOTE_TYPE_CONFIGS[note.type] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
             const contentRows = currentConfig.map(field => {
-                const rawContent = note.content[field.key] || '-'
+                const rawContent = note.content[field.key] || ''
                 const decodedContent = Utils.decodeHtmlEntities(rawContent)
                 const textSegments = decodedContent.split(/(?:<br\s*\/?>|\n)/i)
 
@@ -2694,8 +3133,8 @@ class NotesSlideOutRenderer {
             const noteCard = c('div', { classes: 'note-card bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col mb-4' }, [
                 // UNIFIED STICKY HEADER (Contains: Creator Info, Role Badge, ID & Controls)
                 c('div', { classes: `px-4 py-2 flex justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm overflow-hidden` }, [
-                    c('div', { classes: 'flex flex-col gap-1.5' }, [
-                        c('h4', { classes: 'text-white text-[11px] font-black tracking-wide leading-none line-clamp-1', text: note.creator.name }),
+                    c('div', { classes: 'flex flex-col' }, [
+                        c('h4', { classes: 'text-white text-[11px] font-black tracking-wide line-clamp-1', text: note.creator.name }),
                         c('div', { classes: 'flex items-center gap-1 opacity-90' }, [
                             // Note type tag (SOAP, SBAR, ADIME)
                             c('span', {
@@ -2746,6 +3185,14 @@ class NotesSlideOutRenderer {
      * @param {ClinicalNote} note 
      */
     handleDuplicate(note) {
+        this.myPatientsRenderer.openNoteCreationModal(this.p, {
+            title: 'Duplicate Note',
+            buttonText: 'Create Duplicate',
+            loadingText: 'Duplicating note...',
+            successText: 'Duplicate created successfully!',
+            type: note.type,
+            content: note.content,
+        })
     }
     /**
      * @param {ClinicalNote} note 
@@ -2755,12 +3202,8 @@ class NotesSlideOutRenderer {
     /**
      * @param {ClinicalNote} note 
      */
-    handleCancelEditing(note) {
-    }
-    /**
-     * @param {ClinicalNote} note 
-     */
     handleDelete(note) {
+        this.myPatientsRenderer.promptDeleteNote(this.p, note)
     }
     /**
      * @param {ClinicalNote} note 
