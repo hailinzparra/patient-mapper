@@ -135,3 +135,24 @@ body {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
+
+.dropdown-content {
+    display: none;
+    transform-origin: top right;
+}
+
+.dropdown-content.show {
+    display: block;
+    animation: dropdownFade 0.2s ease-out forwards;
+}
+
+@keyframes dropdownFade {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}

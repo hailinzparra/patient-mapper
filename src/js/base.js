@@ -132,6 +132,7 @@ export class ApiBase {
  * @typedef {Object} ApiSettingsOverrides
  * @property {Object} [patients] - Optional configuration overrides for patient settings.
  * @property {boolean} [patients.canRefresh] - Allow refreshing patient list.
+ * @property {boolean} [patients.canOpenDetails] - Allow open patient's details.
  * @property {Object} [notes] - Optional configuration overrides for clinical notes permissions.
  * @property {boolean} [notes.canCreate] - Permission to create notes.
  * @property {boolean} [notes.canRead] - Permission to view notes.
@@ -144,10 +145,11 @@ export class ApiSettings {
      * @param {ApiSettingsOverrides} [overrides={}] - Configuration flags to default toggle settings features.
      */
     constructor(overrides = {}) {
-        /** * @type {{ canRefresh: boolean }} 
+        /** * @type {{ canRefresh: boolean, canOpenDetails: boolean }} 
          */
         this.patients = {
             canRefresh: overrides.patients?.canRefresh ?? false,
+            canOpenDetails: overrides.patients?.canOpenDetails ?? false,
         }
 
         /** * @type {{ canCreate: boolean, canRead: boolean, canUpdate: boolean, canDelete: boolean }} 

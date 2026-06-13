@@ -1315,15 +1315,50 @@ export class MyPatientsRenderer {
             ]),
         ])
 
-        const svgCopyIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-all', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-            c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
+        const svgMenuIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-400', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+            c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 6h16M4 12h16m-7 6h7' } }),
         ])
-        const btnCopy = c('button', { classes: 'copy-room-data p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all mr-1' }, [
-            svgCopyIcon,
+        const svgCopyIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-700 transition-colors', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+            c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
         ])
         const svgToggleIcon = c('svg', { attrs: { class: 'w-4 h-4 text-slate-400 transition-transform', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
             c('path', { attrs: { d: 'M19 9l-7 7-7-7', 'stroke-width': '2.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } }),
         ])
+
+        const btnCopy = c('button', {
+            classes: 'btn-copy-room w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors',
+        }, [
+            c('span', { text: 'Copy Room Data' }),
+            svgCopyIcon,
+        ])
+
+        const btnRemoveAll = c('button', {
+            classes: 'btn-remove-all w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors',
+        }, [
+            c('span', { text: 'Remove All Records' }),
+            c('svg', { attrs: { class: 'w-4 h-4 group-hover:scale-110 transition-transform', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' } }),
+            ]),
+        ])
+
+        const dropdownMenu = c('div', {
+            classes: 'dropdown-menu dropdown-content absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden',
+        }, [
+            c('div', { classes: 'p-2 border-t border-slate-100' }, [
+                btnCopy,
+                btnRemoveAll,
+            ]),
+        ])
+
+        const btnMenu = c('button', { classes: 'menu-toggle p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all', }, [
+            svgMenuIcon,
+        ])
+
+        const contextMenuContainer = c('div', { classes: 'relative' }, [
+            btnMenu,
+            dropdownMenu,
+        ])
+
         const btnToggle = c('button', { classes: 'toggle-room p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all' }, [
             svgToggleIcon,
         ])
@@ -1331,7 +1366,7 @@ export class MyPatientsRenderer {
         const patientSlots = c('div', { classes: 'patient-list p-2 space-y-2' })
 
         const cardWrapper = c('div', {
-            classes: 'room-group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-2 self-start w-full',
+            classes: 'room-group bg-white rounded-xl border border-slate-200 shadow-sm mb-2 self-start w-full',
             attrs: { 'data-room-id': roomId },
         }, [
             // Header
@@ -1346,7 +1381,10 @@ export class MyPatientsRenderer {
                         })
                     ])
                 ]),
-                c('div', { classes: 'flex items-center gap-1' }, [btnCopy, btnToggle])
+                c('div', { classes: 'flex items-center gap-1' }, [
+                    contextMenuContainer,
+                    btnToggle,
+                ]),
             ]),
             // Body
             patientSlots,
@@ -1354,21 +1392,26 @@ export class MyPatientsRenderer {
 
         cardWrapper.patientSlotsContainer = patientSlots
 
-        btnCopy.addEventListener('click', () => {
-            this.handleCopyRoomData(roomId, roomName, recordCount, svgCopyIcon)
-        })
-
         if (recordCount > 0) {
-            btnUp.addEventListener('click', () => this.handleRoomMove(roomId, 'up'))
-            btnDown.addEventListener('click', () => this.handleRoomMove(roomId, 'down'))
+            btnUp.onclick = () => this.handleRoomMove(roomId, 'up')
+            btnDown.onclick = () => this.handleRoomMove(roomId, 'down')
+            btnCopy.onclick = () => {
+                this.handleCopyRoomData(roomId, roomName, recordCount, svgCopyIcon)
+                dropdownMenu.classList.remove('show')
+            }
+            btnRemoveAll.onclick = () => {
+                this.promptDeleteEntireRoom(roomId, roomName)
+                dropdownMenu.classList.remove('show')
+            }
         }
-        btnToggle.addEventListener('click', () => {
+        btnToggle.onclick = () => {
             patientSlots.classList.toggle('hidden')
             const isHidden = patientSlots.classList.contains('hidden')
             svgToggleIcon.style.transform = isHidden ? 'rotate(-90deg)' : 'rotate(0deg)'
-        })
+        }
         if (recordCount === 0) {
             btnToggle.click()
+            contextMenuContainer.classList.add('hidden')
         }
 
         return cardWrapper
@@ -1377,15 +1420,17 @@ export class MyPatientsRenderer {
         const c = Utils.DOM.createElement
         const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
         const ui = p.getUIDisplayData() || {}
+        const apiSettings = hospitalContext.getHospitalById(p.hid).driver.SETTINGS
+        const canOpenDetails = apiSettings.patients.canOpenDetails
 
         const createBaseButtons = () => {
-            // hidden for WIP
-            const btnOpenDetails = c('button', { classes: 'patient-open-details-btn p-2 bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white rounded-lg transition-all hidden' }, [
+            const btnOpenDetails = c('button', { classes: 'patient-open-details-btn p-2 bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white rounded-lg transition-all' }, [
                 c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                     c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' } }),
                 ]),
             ])
             btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
+            if (!canOpenDetails) btnOpenDetails.classList.add('hidden')
 
             const btnDelete = c('button', { classes: 'patient-delete-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all' }, [
                 c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
@@ -1578,6 +1623,8 @@ export class MyPatientsRenderer {
             c('div', { classes: 'notes-body p-3 min-h-[400px] max-h-[400px] overflow-y-auto transition-opacity duration-300 ease-in-out' }),
         ])
 
+        if (!apiSettings.patients.canRefresh) btnRefreshPatient.classList.add('hidden')
+
         btnRefreshPatient.addEventListener('click', () => { })
         btnCopyPatient.addEventListener('click', () => this.handleCopyPatientData(p, btnCopyPatient))
         btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes))
@@ -1697,6 +1744,82 @@ export class MyPatientsRenderer {
             this.buildListContainerDOM()
         }
     }
+    async promptDeleteEntireRoom(roomId, roomName) {
+        const patientIds = this.patientList.patientOrderMap[roomId] || []
+        const totalCount = patientIds.length
+        if (totalCount === 0) return
+
+        const totalCountText = `${totalCount} record${totalCount === 1 ? '' : 's'}`
+        if (this.G) {
+            const roomNameText = roomName ? `${roomName}/` : ''
+            const confirmDelete = await this.G.swal.fire({
+                icon: 'warning',
+                title: 'Remove all records?',
+                html: `This will <strong>remove "<span class="text-red-600">${roomNameText}all ${totalCountText}</span>"</strong> from this list.`,
+                showDenyButton: true,
+                showCancelButton: true,
+                showConfirmButton: false,
+                denyButtonText: 'Yes, remove all',
+                cancelButtonText: 'Cancel',
+            })
+            if (confirmDelete.isDenied) {
+                this.executeBulkRoomDeletion(roomId)
+                this.G.ui.swalSuccessShort('Removed all successfully!')
+            }
+        } else {
+            const confirmMessage = `Are you sure you want to remove all ${totalCountText} from "${roomName}"?`
+            if (window.confirm(confirmMessage)) {
+                this.executeBulkRoomDeletion(roomId)
+            }
+        }
+    }
+    executeBulkRoomDeletion(roomId) {
+        const patientIds = [...(this.patientList.patientOrderMap[roomId] || [])]
+        if (patientIds.length === 0) return
+
+        patientIds.forEach(patientId => {
+            this.patientList.removePatient(patientId)
+        })
+        this.savePatientsData()
+
+        const roomCard = document.querySelector(`[data-room-id="${roomId}"]`)
+        if (roomCard) {
+            const countLabel = roomCard.querySelector('.room-count')
+            if (countLabel) {
+                countLabel.textContent = '0 Records'
+            }
+            const slotsContainer = roomCard.patientSlotsContainer
+            if (slotsContainer) {
+                slotsContainer.innerHTML = ''
+                const c = Utils.DOM.createElement
+                slotsContainer.append(
+                    c('p', { classes: 'text-[10px] italic text-slate-400 text-center py-2', text: 'No patients assigned' })
+                )
+            }
+            const upBtn = roomCard.querySelector('.move-room-up')
+            const downBtn = roomCard.querySelector('.move-room-down')
+            const menuBtn = roomCard.querySelector('.menu-toggle')
+            if (upBtn) upBtn.remove()
+            if (downBtn) downBtn.remove()
+            if (menuBtn) menuBtn.remove()
+        }
+
+        const newTotalPatients = this.patientList.patients.length || 0
+        const recordCounterText = `${newTotalPatients} record${newTotalPatients === 1 ? '' : 's'}`
+        if (this.#nodes.assignedRoomsContainer) {
+            const totalPatientsBadge = this.#nodes.assignedRoomsContainer.querySelector('.room-header-counter')
+            if (totalPatientsBadge) {
+                totalPatientsBadge.textContent = recordCounterText
+            }
+        }
+        if (this.#nodes.headerCounter) {
+            this.#nodes.headerCounter.textContent = recordCounterText
+        }
+
+        if (this.patientList.patients.length === 0) {
+            this.buildListContainerDOM()
+        }
+    }
     handleRoomMove(roomId, direction) {
         const orderArray = this.patientList.roomOrder
         const currentIndex = orderArray.indexOf(roomId)
@@ -1786,7 +1909,7 @@ export class MyPatientsRenderer {
 
         const toast = Utils.UI.toast
 
-        const originalColor = 'text-slate-400'
+        const originalColor = 'text-slate-700'
         const successColor = 'text-green-500'
         const errorColor = 'text-red-500'
 
@@ -2412,6 +2535,7 @@ class NotesSlideOutRenderer {
     render() {
         if (!this.container) return
         const c = Utils.DOM.createElement
+        const apiSettings = hospitalContext.getHospitalById(this.p.hid).driver.SETTINGS
 
         const notesForDate = this.notesByDate[this.activeDate] || []
         const filteredNotes = this.getRoleFilteredNotes(notesForDate)
@@ -2476,11 +2600,9 @@ class NotesSlideOutRenderer {
                 classes: `text-white bg-slate-500/40 hover:bg-slate-500/60 border-slate-500/50 ${actBtnClasses} note-cancel-btn`, text: 'Cancel'
             })
 
-            // WORK IN PROGRESS (WIP)
-            // btnDup.classList.add('hidden')
-            // btnEdit.classList.add('hidden')
-            // btnDelete.classList.add('hidden')
-            // WIP WIP
+            if (!apiSettings.notes.canCreate) btnDup.classList.add('hidden')
+            if (!apiSettings.notes.canUpdate) btnEdit.classList.add('hidden')
+            if (!apiSettings.notes.canDelete) btnDelete.classList.add('hidden')
 
             const showNormalActions = () => {
                 actionContainer.replaceChildren(btnDup, btnCopy, ...(canEdit ? [btnEdit, btnDelete] : []))
@@ -2573,7 +2695,7 @@ class NotesSlideOutRenderer {
                 // UNIFIED STICKY HEADER (Contains: Creator Info, Role Badge, ID & Controls)
                 c('div', { classes: `px-4 py-2 flex justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm overflow-hidden` }, [
                     c('div', { classes: 'flex flex-col gap-1.5' }, [
-                        c('h4', { classes: 'text-white text-[11px] font-black tracking-wide leading-none', text: note.creator.name }),
+                        c('h4', { classes: 'text-white text-[11px] font-black tracking-wide leading-none line-clamp-1', text: note.creator.name }),
                         c('div', { classes: 'flex items-center gap-1 opacity-90' }, [
                             // Note type tag (SOAP, SBAR, ADIME)
                             c('span', {

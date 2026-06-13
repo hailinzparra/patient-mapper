@@ -25,6 +25,7 @@ class ApiSoediranClass extends ApiBase {
             SETTINGS: new ApiSettings({
                 patients: {
                     canRefresh: true,
+                    // canOpenDetails: true,
                 },
                 notes: {
                     canCreate: true,

@@ -1364,11 +1364,12 @@ const G = {
                     const payloadSummary = `[MRN: ${payload.mrn || '*'}] [Name: ${payload.name || '*'}] [Doc: ${q.doc || '*'}] [Room: ${q.room || '*'}] [Ward: ${q.ward || '*'}]`
 
                     if (status === 'success') {
+                        const totalNewRecords = data ? data.length : 0
                         successCount++
-                        totalRecords += (data ? data.length : 0)
+                        totalRecords += totalNewRecords
                         targetDot.className = 'h-1 w-1 rounded-full bg-emerald-500 flex-shrink-0'
                         targetText.className = 'text-emerald-600 font-medium truncate'
-                        targetText.textContent = `${payloadSummary} · DONE (${data.length} records)`
+                        targetText.textContent = `${payloadSummary} · DONE (${totalNewRecords} record${totalNewRecords === 1 ? '' : 's'})`
                     } else if (status === 'error') {
                         failCount++
                         targetDot.className = 'h-1 w-1 rounded-full bg-rose-500 flex-shrink-0'
@@ -1867,6 +1868,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (document.visibilityState === 'visible') {
             Events.emit('visible')
         }
+    })
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.menu-toggle')) {
+            const clickedButton = e.target.closest('.menu-toggle')
+            const currentDropdown = clickedButton.nextElementSibling
+            if (currentDropdown) {
+                currentDropdown.classList.toggle('show')
+            }
+            document.querySelectorAll('.dropdown-content.show').forEach(dropdown => {
+                if (dropdown !== currentDropdown) {
+                    dropdown.classList.remove('show')
+                }
+            })
+            return
+        }
+        document.querySelectorAll('.dropdown-content.show').forEach(dropdown => {
+            if (!dropdown.contains(e.target)) {
+                dropdown.classList.remove('show')
+            }
+        })
     })
     api.tabs.onRemoved.addListener((tabId, removeInfo) => {
         if (tabId === G.store.temp.activeTargetTabId) {

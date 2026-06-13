@@ -22,13 +22,14 @@ class ApiSoehadiClass extends ApiBase {
             DATABASE: SOEHADI_DATABASE,
             SETTINGS: new ApiSettings({
                 patients: {
-                    canRefresh: false,
+                    // canRefresh: true,
+                    // canOpenDetails: true,
                 },
                 notes: {
-                    canCreate: false,
+                    // canCreate: true,
                     canRead: true,
-                    canUpdate: false,
-                    canDelete: false,
+                    // canUpdate: true,
+                    // canDelete: true,
                 },
             }),
         })
