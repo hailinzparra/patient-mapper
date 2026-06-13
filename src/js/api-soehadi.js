@@ -1,6 +1,339 @@
 import { Utils } from './utils.js'
+import { ApiBase, ApiSettings } from './base.js'
 import { Patient, ClinicalNote } from './clinical.js'
-import { PatientLookup } from './ui.js'
+
+// ==========================================
+// SOEHADI DRIVER CLASS
+// ==========================================
+class ApiSoehadiClass extends ApiBase {
+    constructor() {
+        super({
+            HID: 1,
+            NAME: 'RSUD Soehadi',
+            SYSTEM_NAME: 'Soehadi',
+            DOMAINS: [
+                'https://apirssoehadi.sragenkab.go.id',
+                'http://172.166.182.12',
+            ],
+            PATHS: {
+                HOME: '/app/',
+                BASE: '/service/medifirst2000',
+            },
+            DATABASE: SOEHADI_DATABASE,
+            SETTINGS: new ApiSettings({
+                patients: {
+                    canRefresh: false,
+                },
+                notes: {
+                    canCreate: false,
+                    canRead: true,
+                    canUpdate: false,
+                    canDelete: false,
+                },
+            }),
+        })
+    }
+    async apiRequest(url, session, options = {}) {
+        const headers = {
+            'X-AUTH-TOKEN': session.authToken || '',
+            'Accept': 'application/json, text/plain, */*',
+            'Content-Type': 'application/json',
+            ...options.headers,
+        }
+
+        let response
+        try {
+            response = await fetch(url, { ...options, headers })
+        } catch (err) {
+            throw new Error(`Connection failed: Please check your internet or site permissions.`)
+        }
+
+        if (!response.ok) {
+            let errorMsg = `HTTP Error ${response.status}`
+            try {
+                const errorData = await response.json()
+                errorMsg = errorData.message || errorData.detail || errorMsg
+            } catch { }
+            throw new Error(errorMsg)
+        }
+
+        let result
+        try {
+            result = await response.json()
+        } catch (jsonError) {
+            throw new Error('The server returned an invalid data format.')
+        }
+
+        if (result.success === false || result.statResponse === false) {
+            throw new Error(result.message || result.detail || 'The API returned an unsuccessful status.')
+        }
+
+        return result
+    }
+    async getSession(targetDomain, api, store) {
+        const matchPattern = `${targetDomain}/*`
+        const allTabs = await api.tabs.query({ url: matchPattern })
+        const targetTab = allTabs[0]
+
+        if (!targetTab || !targetTab.id) throw new Error('Portal tab not found.')
+
+        store.temp.activeTargetTabId = targetTab.id
+
+        const injectionResults = await api.scripting.executeScript({
+            target: { tabId: targetTab.id },
+            func: () => {
+                const rawUserLogin = localStorage.getItem('datauserlogin')
+                const rawPegawai = localStorage.getItem('pegawai')
+                const cookieArray = document.cookie.split(';')
+                let authorizationToken = ''
+
+                for (let i = 0; i < cookieArray.length; i++) {
+                    const element = cookieArray[i].trim().split('=')
+                    if (element[0].indexOf('authorization') > -1) {
+                        authorizationToken = element[1] || ''
+                        break
+                    }
+                }
+
+                return {
+                    authToken: authorizationToken,
+                    userLogin: rawUserLogin ? JSON.parse(rawUserLogin) : null,
+                    pegawai: rawPegawai ? JSON.parse(rawPegawai) : null,
+                }
+            },
+        })
+
+        const result = injectionResults?.[0]?.result
+        if (!result || !result.authToken || !result.userLogin || !result.pegawai) throw new Error('Session not found.')
+
+        return {
+            authToken: result.authToken,
+            userData: {
+                username: result.userLogin.kdUser,
+                displayName: result.pegawai.namaLengkap,
+                userId: result.pegawai.id,
+                staffId: result.pegawai.id,
+            },
+        }
+    }
+    async syncUserData(targetDomain, session) {
+        if (!session.userData) throw new Error('Not Authenticated')
+        return session.userData
+    }
+    async handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, onProgress) {
+        const results = []
+        const queryList = this.buildFinalQueryList(docGroups, roomGroups, payload.wardType)
+        const payloadManager = new SoehadiRequestPayload(payload, this.SYSTEM_NAME)
+        for (let i = 0; i < queryList.length; i++) {
+            const q = queryList[i]
+            const detailPath = this.getWardPath(q.ward)
+            payloadManager.reset()
+            payloadManager.update({
+                dokId2: q.doc,
+                ruangId: q.room,
+            })
+            if (q.ward === 'in') {
+                const p = payload
+                if (!p.dateFilterEnabled || (p.dateFilterEnabled && (!p.dateRange.start || !p.dateRange.end))) {
+                    payloadManager.update({
+                        tglAwal: null,
+                        tglAkhir: null,
+                    })
+                }
+            }
+            const url = Utils.buildUrl(targetDomain, this.PATHS.BASE, detailPath,
+                payloadManager.toQueryString(),
+            )
+            try {
+                const result = await this.apiRequest(url, session)
+                const data = result || []
+                const newPatients = data.map(item => this.createPatientFromApiItem(item, hid))
+                results.push(...newPatients)
+                if (typeof onProgress === 'function') {
+                    onProgress({ index: i, status: 'success', data: newPatients })
+                }
+            } catch (err) {
+                console.warn(`Search ${i + 1} failed:`, err.message)
+                if (typeof onProgress === 'function') {
+                    onProgress({ index: i, status: 'error', error: err.message })
+                }
+            }
+            if (i < queryList.length - 1) {
+                const delay = Utils.randomRange(200, 500)
+                await Utils.sleep(delay)
+            }
+        }
+        return results
+    }
+    getWardTypeList(wardType) {
+        switch (wardType) {
+            case 'in':
+                return ['in']
+            case 'out':
+                return ['out']
+            case '':
+            default:
+                return ['in', 'out']
+        }
+    }
+    getWardPath(wardType) {
+        const inPath = '/rawatinap/get-daftar-antrian-ranap'
+        const outPath = '/rawatjalan/get-daftar-antrian-rajal-dokter'
+        switch (wardType) {
+            case 'out':
+                return outPath
+            case 'in':
+            default:
+                return inPath
+        }
+    }
+    createPatientFromApiItem(item, hid) {
+        const g = item?.jeniskelamin === 'PEREMPUAN'
+            ? Patient.FEMALE
+            : item?.jeniskelamin === 'LAKI-LAKI' ? Patient.MALE : null
+        const v = Utils.getValidValue
+        return new Patient({
+            hid: hid,
+            recId: v(item?.noregistrasi, null),
+            mrn: v(item?.nocm, null),
+            name: v(item?.namapasien, null),
+            dob: v(item?.tgllahir, null),
+            gender: v(g, null),
+            dx: v(item?.ketklinis, null),
+            roomId: v(item?.objectruanganfk || item?.namaruangan, null),
+            bedName: v(item?.namabed, null),
+            docId: v(item?.objectpegawaifk || item?.namadokter, null),
+            admDate: v(item?.tglregistrasi, null),
+            disDate: v(item?.tglselesaiperiksa, null),
+        })
+    }
+    clinicalNotesContext(targetDomain, session) {
+        return new SoehadiClinicalNotesContext(this, targetDomain, session)
+    }
+}
+
+class SoehadiRequestPayload {
+    #initialState = {}
+    constructor(p, systemName) {
+        const s = p[systemName]
+        const v = Utils.getValidValue
+        this.raw = {
+            tglAwal: p.dateFilterEnabled && p.dateRange?.start ? p.dateRange.start.replace('T', ' ') : `${Utils.toLocalISOString(new Date()).split('T')[0]} 00:00:00`,
+            tglAkhir: p.dateFilterEnabled && p.dateRange?.end ? p.dateRange.end.replace('T', ' ') : `${Utils.toLocalISOString(new Date()).split('T')[0]} 23:59:59`,
+            norm: v(p.mrn, null),
+            noreg: v(s?.noReg, null),
+            nama: v(p.name, null),
+            ruangId: null,
+            dokId2: null,
+        }
+        this.#initialState = { ...this.raw }
+    }
+    update(fields = {}) {
+        Object.assign(this.raw, fields)
+        return this
+    }
+    reset() {
+        this.raw = { ...this.#initialState }
+        return this
+    }
+    toQueryString() {
+        const cleanEntries = Object.entries(this.raw).filter(
+            ([_, val]) => val !== null && val !== undefined && val !== ''
+        )
+        return new URLSearchParams(Object.fromEntries(cleanEntries)).toString()
+    }
+}
+
+class SoehadiClinicalNotesContext {
+    constructor(driver, targetDomain, session) {
+        this.driver = driver
+        this.targetDomain = targetDomain
+        this.session = session
+        this.basePath = driver.PATHS.BASE
+    }
+    _url(endpoint) {
+        return `${this.targetDomain}${this.basePath}${endpoint}`
+    }
+    extractContentByNoteType(type, raw) {
+        switch (type) {
+            case ClinicalNote.TYPES.SBAR:
+                return {
+                    situation: raw.s_sbar || '',
+                    background: raw.b_sbar || '',
+                    assessment: raw.a_sbar || '',
+                    recommendation: raw.r_sbar || '',
+                    instruction: raw.instruksi_ppa || '',
+                }
+            case ClinicalNote.TYPES.ADIME:
+                return {
+                    assessment: raw.a_adime || '',
+                    diagnosis: raw.d_adime || '',
+                    intervention: raw.i_adime || '',
+                    monitoring: raw.m_adime || '',
+                    evaluation: raw.e_adime || '',
+                    instruction: raw.instruksi_ppa || '',
+                }
+            default:
+                return {
+                    subjective: raw.s_soap || '',
+                    objective: raw.o_soap || '',
+                    assessment: raw.a_soap || '',
+                    planning: raw.p_soap || '',
+                    instruction: raw.instruksi_ppa || '',
+                }
+        }
+    }
+    async fetch(mrn, recId, signal) {
+        const url = this._url(`/emr/get-riwayatcppt-rajalranap-v2?nocm=${mrn}&noregistrasi=${recId}&pegawaiMultiple=`)
+        const result = await this.driver.apiRequest(url, this.session, { signal })
+        const rawList = result?.data?.data || []
+
+        const creatorTypeMap = {
+            '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
+            '2': ClinicalNote.CREATOR_TYPES.NURSE,
+            '3': ClinicalNote.CREATOR_TYPES.MIDWIFE,
+            '14': ClinicalNote.CREATOR_TYPES.PHARMACIST,
+            '19': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
+        }
+
+        return rawList.map(raw => {
+            const creatorType = creatorTypeMap[String(raw.profesional_pemberi_asuhan_fk)]
+
+            const type = (raw.jenis_cppt === 'ADIME' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
+                ? ClinicalNote.TYPES.ADIME
+                : (raw.jenis_cppt === 'SBAR'
+                    ? ClinicalNote.TYPES.SBAR
+                    : ClinicalNote.TYPES.SOAP)
+
+            return new ClinicalNote({
+                id: String(raw.norec || ''),
+                recId: String(raw.noregistrasi || ''),
+                roomId: '',
+                roomName: raw.namaruangan || '',
+                type: type,
+                content: this.extractContentByNoteType(type, raw),
+                creator: {
+                    id: String(raw.paraf_soap_adime_fk || ''),
+                    name: Utils.formatNameWithTitle(raw.paraf_soap_adime || ''),
+                    type: creatorType,
+                },
+                timestamp: Utils.toLocalISOString(new Date(raw.tanggal_jam)),
+                verification: raw.review_dpjp ? {
+                    isVerified: !!raw.review_tanggal,
+                    id: String(raw.review_dpjp_fk || ''),
+                    verificatorName: Utils.formatNameWithTitle(raw.review_dpjp),
+                    timestamp: raw.review_tanggal ? Utils.toLocalISOString(new Date(raw.review_tanggal)) : '',
+                } : null,
+            })
+        })
+    }
+    async submit(note) {
+    }
+    async amend(note) {
+    }
+    async archive(id) {
+    }
+}
 
 export const SOEHADI_DATABASE = {
     doctorDatabase: [
@@ -286,326 +619,4 @@ export const SOEHADI_DATABASE = {
     ],
 }
 
-export const ApiSoehadiDriver = {
-    HID: 1,
-    NAME: 'RSUD Soehadi',
-    SYSTEM_NAME: 'Soehadi',
-    DOMAINS: [
-        'https://apirssoehadi.sragenkab.go.id',
-        'http://172.166.182.12',
-    ],
-    PATHS: {
-        HOME: '/app/',
-        BASE: '/service/medifirst2000',
-    },
-    async apiRequest(url, session, options = {}) {
-        const headers = {
-            'X-AUTH-TOKEN': session.authToken || '',
-            'Accept': 'application/json, text/plain, */*',
-            'Content-Type': 'application/json',
-            ...options.headers,
-        }
-
-        let response
-        try {
-            response = await fetch(url, { ...options, headers })
-        } catch (err) {
-            throw new Error(`Connection failed: Please check your internet or site permissions.`)
-        }
-
-        if (!response.ok) {
-            let errorMsg = `HTTP Error ${response.status}`
-            try {
-                const errorData = await response.json()
-                errorMsg = errorData.message || errorData.detail || errorMsg
-            } catch { }
-            throw new Error(errorMsg)
-        }
-
-        let result
-        try {
-            result = await response.json()
-        } catch (jsonError) {
-            throw new Error('The server returned an invalid data format.')
-        }
-
-        if (result.success === false || result.statResponse === false) {
-            throw new Error(result.message || result.detail || 'The API returned an unsuccessful status.')
-        }
-
-        return result
-    },
-    async getSession(targetDomain, api, store) {
-        const matchPattern = `${targetDomain}/*`
-        const allTabs = await api.tabs.query({ url: matchPattern })
-        const targetTab = allTabs[0]
-
-        if (!targetTab || !targetTab.id) throw new Error('Portal tab not found.')
-
-        store.temp.activeTargetTabId = targetTab.id
-
-        const injectionResults = await api.scripting.executeScript({
-            target: { tabId: targetTab.id },
-            func: () => {
-                const rawUserLogin = localStorage.getItem('datauserlogin')
-                const rawPegawai = localStorage.getItem('pegawai')
-                const cookieArray = document.cookie.split(';')
-                let authorizationToken = ''
-
-                for (let i = 0; i < cookieArray.length; i++) {
-                    const element = cookieArray[i].trim().split('=')
-                    if (element[0].indexOf('authorization') > -1) {
-                        authorizationToken = element[1] || ''
-                        break
-                    }
-                }
-
-                return {
-                    authToken: authorizationToken,
-                    userLogin: rawUserLogin ? JSON.parse(rawUserLogin) : null,
-                    pegawai: rawPegawai ? JSON.parse(rawPegawai) : null,
-                }
-            },
-        })
-
-        const result = injectionResults?.[0]?.result
-        if (!result || !result.authToken || !result.userLogin || !result.pegawai) throw new Error('Session not found.')
-
-        return {
-            authToken: result.authToken,
-            userData: {
-                username: result.userLogin.kdUser,
-                displayName: result.pegawai.namaLengkap,
-                userId: result.pegawai.id,
-                staffId: result.pegawai.id,
-            },
-        }
-    },
-    async syncUserData(targetDomain, session) {
-        if (!session.userData) throw new Error('Not Authenticated')
-        return session.userData
-    },
-    async handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, onProgress) {
-        const results = []
-        const queryList = this.buildFinalQueryList(docGroups, roomGroups, payload.wardType)
-        const payloadManager = new SoehadiRequestPayload(payload, this.SYSTEM_NAME)
-        for (let i = 0; i < queryList.length; i++) {
-            const q = queryList[i]
-            const detailPath = this.getWardPath(q.ward)
-            payloadManager.reset()
-            payloadManager.update({
-                dokId2: q.doc,
-                ruangId: q.room,
-            })
-            if (q.ward === 'in') {
-                const p = payload
-                if (!p.dateFilterEnabled || (p.dateFilterEnabled && (!p.dateRange.start || !p.dateRange.end))) {
-                    payloadManager.update({
-                        tglAwal: null,
-                        tglAkhir: null,
-                    })
-                }
-            }
-            const url = Utils.buildUrl(targetDomain, this.PATHS.BASE, detailPath,
-                payloadManager.toQueryString(),
-            )
-            try {
-                const result = await this.apiRequest(url, session)
-                const data = result || []
-                const newPatients = data.map(item => this.createPatientFromApiItem(item, hid))
-                results.push(...newPatients)
-                if (typeof onProgress === 'function') {
-                    onProgress({ index: i, status: 'success', data: newPatients })
-                }
-            } catch (err) {
-                console.warn(`Search ${i + 1} failed:`, err.message)
-                if (typeof onProgress === 'function') {
-                    onProgress({ index: i, status: 'error', error: err.message })
-                }
-            }
-            if (i < queryList.length - 1) {
-                const delay = Utils.randomRange(200, 500)
-                await Utils.sleep(delay)
-            }
-        }
-        return results
-    },
-    buildFinalQueryList(docGroups, roomGroups, wardType) {
-        const baseQueryList = PatientLookup.buildQueryList(docGroups, roomGroups)
-        const wardTypeList = this.getWardTypeList(wardType)
-        return wardTypeList.flatMap(item =>
-            baseQueryList.map(query => ({
-                ...query,
-                ward: item,
-            }))
-        )
-    },
-    getWardTypeList(wardType) {
-        switch (wardType) {
-            case 'in':
-                return ['in']
-            case 'out':
-                return ['out']
-            case '':
-            default:
-                return ['in', 'out']
-        }
-    },
-    getWardPath(wardType) {
-        const inPath = '/rawatinap/get-daftar-antrian-ranap'
-        const outPath = '/rawatjalan/get-daftar-antrian-rajal-dokter'
-        switch (wardType) {
-            case 'out':
-                return outPath
-            case 'in':
-            default:
-                return inPath
-        }
-    },
-    createPatientFromApiItem(item, hid) {
-        const g = item?.jeniskelamin === 'PEREMPUAN'
-            ? Patient.FEMALE
-            : item?.jeniskelamin === 'LAKI-LAKI' ? Patient.MALE : null
-        const v = Utils.getValidValue
-        return new Patient({
-            hid: hid,
-            recId: v(item?.noregistrasi, null),
-            mrn: v(item?.nocm, null),
-            name: v(item?.namapasien, null),
-            dob: v(item?.tgllahir, null),
-            gender: v(g, null),
-            dx: v(item?.ketklinis, null),
-            roomId: v(item?.objectruanganfk || item?.namaruangan, null),
-            bedName: v(item?.namabed, null),
-            docId: v(item?.objectpegawaifk || item?.namadokter, null),
-            admDate: v(item?.tglregistrasi, null),
-            disDate: v(item?.tglselesaiperiksa, null),
-        })
-    },
-    clinicalNotesContext(targetDomain, session) {
-        return new SoehadiClinicalNotesContext(this, targetDomain, session)
-    },
-}
-
-class SoehadiRequestPayload {
-    #initialState = {}
-    constructor(p, systemName) {
-        const s = p[systemName]
-        const v = Utils.getValidValue
-        this.raw = {
-            tglAwal: p.dateFilterEnabled && p.dateRange?.start ? p.dateRange.start.replace('T', ' ') : `${Utils.toLocalISOString(new Date()).split('T')[0]} 00:00:00`,
-            tglAkhir: p.dateFilterEnabled && p.dateRange?.end ? p.dateRange.end.replace('T', ' ') : `${Utils.toLocalISOString(new Date()).split('T')[0]} 23:59:59`,
-            norm: v(p.mrn, null),
-            noreg: v(s?.noReg, null),
-            nama: v(p.name, null),
-            ruangId: null,
-            dokId2: null,
-        }
-        this.#initialState = { ...this.raw }
-    }
-    update(fields = {}) {
-        Object.assign(this.raw, fields)
-        return this
-    }
-    reset() {
-        this.raw = { ...this.#initialState }
-        return this
-    }
-    toQueryString() {
-        const cleanEntries = Object.entries(this.raw).filter(
-            ([_, val]) => val !== null && val !== undefined && val !== ''
-        )
-        return new URLSearchParams(Object.fromEntries(cleanEntries)).toString()
-    }
-}
-
-class SoehadiClinicalNotesContext {
-    constructor(driver, targetDomain, session) {
-        this.driver = driver
-        this.targetDomain = targetDomain
-        this.session = session
-        this.basePath = driver.PATHS.BASE
-    }
-    _url(endpoint) {
-        return `${this.targetDomain}${this.basePath}${endpoint}`
-    }
-    extractContentByNoteType(type, raw) {
-        switch (type) {
-            case ClinicalNote.TYPES.SBAR:
-                return {
-                    situation: raw.s_sbar || '',
-                    background: raw.b_sbar || '',
-                    assessment: raw.a_sbar || '',
-                    recommendation: raw.r_sbar || '',
-                    instruction: raw.instruksi_ppa || '',
-                }
-            case ClinicalNote.TYPES.ADIME:
-                return {
-                    assessment: raw.a_adime || '',
-                    diagnosis: raw.d_adime || '',
-                    intervention: raw.i_adime || '',
-                    monitoring: raw.m_adime || '',
-                    evaluation: raw.e_adime || '',
-                    instruction: raw.instruksi_ppa || '',
-                }
-            default:
-                return {
-                    subjective: raw.s_soap || '',
-                    objective: raw.o_soap || '',
-                    assessment: raw.a_soap || '',
-                    planning: raw.p_soap || '',
-                    instruction: raw.instruksi_ppa || '',
-                }
-        }
-    }
-    async fetch(mrn, recId, signal) {
-        const url = this._url(`/emr/get-riwayatcppt-rajalranap-v2?nocm=${mrn}&noregistrasi=${recId}&pegawaiMultiple=`)
-        const result = await this.driver.apiRequest(url, this.session, { signal })
-        const rawList = result?.data?.data || []
-
-        const creatorTypeMap = {
-            '1': ClinicalNote.CREATOR_TYPES.DOCTOR,
-            '2': ClinicalNote.CREATOR_TYPES.NURSE,
-            '3': ClinicalNote.CREATOR_TYPES.MIDWIFE,
-            '14': ClinicalNote.CREATOR_TYPES.PHARMACIST,
-            '19': ClinicalNote.CREATOR_TYPES.NUTRITIONIST,
-        }
-
-        return rawList.map(raw => {
-            const creatorType = creatorTypeMap[String(raw.profesional_pemberi_asuhan_fk)]
-
-            const type = (raw.jenis_cppt === 'ADIME' || creatorType === ClinicalNote.CREATOR_TYPES.NUTRITIONIST)
-                ? ClinicalNote.TYPES.ADIME
-                : (raw.jenis_cppt === 'SBAR'
-                    ? ClinicalNote.TYPES.SBAR
-                    : ClinicalNote.TYPES.SOAP)
-
-            return new ClinicalNote({
-                id: String(raw.norec || ''),
-                recId: String(raw.noregistrasi || ''),
-                roomId: '',
-                roomName: raw.namaruangan || '',
-                type: type,
-                content: this.extractContentByNoteType(type, raw),
-                creator: {
-                    id: String(raw.paraf_soap_adime_fk || ''),
-                    name: Utils.formatNameWithTitle(raw.paraf_soap_adime || ''),
-                    type: creatorType,
-                },
-                timestamp: Utils.toLocalISOString(new Date(raw.tanggal_jam)),
-                verification: raw.review_dpjp ? {
-                    isVerified: !!raw.review_tanggal,
-                    id: String(raw.review_dpjp_fk || ''),
-                    verificatorName: Utils.formatNameWithTitle(raw.review_dpjp),
-                    timestamp: raw.review_tanggal ? Utils.toLocalISOString(new Date(raw.review_tanggal)) : '',
-                } : null,
-            })
-        })
-    }
-    async submit(note) {
-    }
-    async amend(note) {
-    }
-    async archive(id) {
-    }
-}
+export const ApiSoehadiDriver = new ApiSoehadiClass()

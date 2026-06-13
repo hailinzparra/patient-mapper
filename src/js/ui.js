@@ -682,20 +682,6 @@ export class PatientLookup {
             return items.length > 0 ? items : [null]
         })
     }
-    static buildQueryList(docGroups = [], roomGroups = []) {
-        const queryList = []
-        const maxGroups = Math.max(docGroups.length, roomGroups.length)
-        for (let i = 0; i < maxGroups; i++) {
-            const currentDocGroup = docGroups[i] || [null]
-            const currentRoomGroup = roomGroups[i] || [null]
-            currentDocGroup.forEach(d => {
-                currentRoomGroup.forEach(r => {
-                    queryList.push({ doc: d, room: r })
-                })
-            })
-        }
-        return queryList
-    }
 }
 
 export class MyPatientsRenderer {
