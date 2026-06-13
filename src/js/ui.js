@@ -1516,19 +1516,19 @@ export class MyPatientsRenderer {
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } }),
             ]),
         ])
-        // const btnCopyPatient = c('button', {
-        //     classes: 'btn-copy-patient p-1 text-slate-400 bg-white border-slate-200 hover:text-blue-600 hover:bg-blue-50 active:scale-90 border rounded-full transition-all shadow-sm group'
-        // }, [
-        //     // c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-        //     //     c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
-        //     // ]),
-        //     c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
-        //         // Background/Underneath sheet
-        //         c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M8 7v1a3 3 0 01-3 3H4a2 2 0 00-2 2v7a2 2 0 002 2h7a2 2 0 002-2v-1M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8' } }),
-        //         // Foreground/Top sheet
-        //         c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M16 7a2 2 0 012 2v7a2 2 0 01-2 2H9a2 2 0 01-2-2V9a2 2 0 012-2h7z' } }),
-        //     ]),
-        // ])
+        const btnCopyPatient = c('button', {
+            classes: 'btn-copy-patient p-1 text-slate-400 bg-white border-slate-200 hover:text-blue-600 hover:bg-blue-50 active:scale-90 border rounded-full transition-all shadow-sm group'
+        }, [
+            // c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+            //     c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' } }),
+            // ]),
+            c('svg', { attrs: { class: 'w-2.5 h-2.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
+                // Background/Underneath sheet
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M8 7v1a3 3 0 01-3 3H4a2 2 0 00-2 2v7a2 2 0 002 2h7a2 2 0 002-2v-1M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8' } }),
+                // Foreground/Top sheet
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M16 7a2 2 0 012 2v7a2 2 0 01-2 2H9a2 2 0 01-2-2V9a2 2 0 012-2h7z' } }),
+            ]),
+        ])
 
         const statusClasses = ui.status === Patient.STATUS.ACTIVE
             ? ['bg-emerald-50 border-emerald-100', 'bg-emerald-500 animate-pulse', 'text-emerald-600']
@@ -1550,9 +1550,9 @@ export class MyPatientsRenderer {
                 ]),
             ]),
             // Right side: Action buttons wrapper
-            c('div', { classes: 'flex items-center gap-2 flex-shrink-0' }, [
+            c('div', { classes: 'flex items-center gap-1 flex-shrink-0' }, [
                 btnRefreshPatient,
-                // btnCopyPatient,
+                btnCopyPatient,
             ]),
         ])
 
@@ -1592,6 +1592,8 @@ export class MyPatientsRenderer {
             c('div', { classes: 'notes-body p-3 min-h-[400px] max-h-[400px] overflow-y-auto transition-opacity duration-300 ease-in-out' }),
         ])
 
+        btnRefreshPatient.addEventListener('click', () => { })
+        btnCopyPatient.addEventListener('click', () => this.handleCopyPatientData(p, btnCopyPatient))
         btnNotes.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes))
         notesCloseButton.addEventListener('click', () => this.toggleNotesSlideOut(p, notesContainer, btnNotes, false))
         btnPatientUp.addEventListener('click', () => this.handlePatientMove(p.id, p.roomId, 'up'))
@@ -1826,6 +1828,70 @@ export class MyPatientsRenderer {
             })
             .catch(err => {
                 toast.pop(`Copy failed (${roomName})`, toast.type.error)
+                if (feedbackEl) {
+                    const classToRemove = feedbackEl._currentColorState === successColor ? successColor : originalColor
+                    feedbackEl.classList.replace(classToRemove, errorColor)
+                    feedbackEl._currentColorState = errorColor
+                    feedbackEl._copyTimeout = setTimeout(() => {
+                        feedbackEl.classList.replace(errorColor, originalColor)
+                        delete feedbackEl._copyTimeout
+                        delete feedbackEl._currentColorState
+                    }, 1000)
+                }
+            })
+    }
+    /**
+     * 
+     * @param {Patient} p 
+     */
+    handleCopyPatientData(p, feedbackEl) {
+        if (!p) return
+
+        const ui = p.getUIDisplayData() || {}
+        const docName = this.#patientDocMap.get(p.id)
+
+        // const renderer = this.G.store.temp.activeNotesSlideOutRenderers.get(p.id)
+        // const latestNote = renderer?.getLatestActiveNote()
+        // const formattedText = ClinicalNote.formatToText(latestNote, '[No active notes]')
+
+        const textOutput = [
+            `${p.toClipboardString()}`,
+            `Physician in charge: ${docName}`,
+            `Admission date: ${ui.admText.longtime}`,
+            `Discharge date: ${ui.disText.longtime}`,
+            // `\n${formattedText}`,
+        ].join('\n')
+
+        const toast = Utils.UI.toast
+
+        const originalColor = 'text-slate-400'
+        const successColor = 'text-green-500'
+        const errorColor = 'text-red-500'
+
+        if (feedbackEl) {
+            if (feedbackEl._copyTimeout) {
+                clearTimeout(feedbackEl._copyTimeout)
+            } else {
+                feedbackEl._currentColorState = successColor
+            }
+        }
+
+        navigator.clipboard.writeText(textOutput.trim())
+            .then(() => {
+                toast.pop(`Copied! (${ui.name})`, toast.type.success)
+                if (feedbackEl) {
+                    const classToRemove = feedbackEl._currentColorState === errorColor ? errorColor : originalColor
+                    feedbackEl.classList.replace(classToRemove, successColor)
+                    feedbackEl._currentColorState = successColor
+                    feedbackEl._copyTimeout = setTimeout(() => {
+                        feedbackEl.classList.replace(successColor, originalColor)
+                        delete feedbackEl._copyTimeout
+                        delete feedbackEl._currentColorState
+                    }, 1000)
+                }
+            })
+            .catch(err => {
+                toast.pop(`Copy failed (${ui.name})`, toast.type.error)
                 if (feedbackEl) {
                     const classToRemove = feedbackEl._currentColorState === successColor ? successColor : originalColor
                     feedbackEl.classList.replace(classToRemove, errorColor)

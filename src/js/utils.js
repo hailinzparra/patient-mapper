@@ -270,7 +270,7 @@ export const Utils = {
                 if (!container) {
                     container = document.createElement('div')
                     container.id = 'extension-toast-container'
-                    container.className = 'fixed bottom-5 left-5 z-[9999] flex flex-col gap-2 pointer-events-none'
+                    container.className = 'fixed bottom-5 left-5 z-[9999] flex flex-col items-start gap-2 pointer-events-none'
                     document.body.appendChild(container)
                 }
 
