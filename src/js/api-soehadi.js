@@ -331,7 +331,10 @@ class SoehadiClinicalNotesContext extends BaseClinicalNotesContext {
         // Implement when endpoint contracts are ready
         return super.submit(note)
     }
-    /** @override */
+    /**
+     * @param {ClinicalNote} note 
+     * @returns {Promise<ClinicalNote>}
+     */
     async amend(note) {
         // Implement when endpoint contracts are ready
         return super.amend(note)

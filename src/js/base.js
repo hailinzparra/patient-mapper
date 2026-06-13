@@ -241,7 +241,7 @@ export class BaseClinicalNotesContext {
 
     /**
      * @param {ClinicalNote} note
-     * @returns {Promise<any>}
+     * @returns {Promise<ClinicalNote>}
      */
     async amend(note) {
         throw new Error(`Method 'amend()' must be implemented by subclass.`)

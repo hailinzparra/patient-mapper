@@ -2264,12 +2264,15 @@ export class MyPatientsRenderer {
      * @param {ClinicalNote['type'] | undefined} [options.type] - Pre-filled note type.
      * @param {ClinicalNote['content'] | undefined} [options.content] - Pre-filled note content.
      * @param {ClinicalNote['timestamp'] | undefined} [options.timestamp] - Pre-filled note timestamp.
+     * @param {boolean} [options.isEditMode]
+     * @param {ClinicalNote['id'] | undefined} [options.targetNoteId]
      */
     async openNoteCreationModal(p, options = {}) {
         const modalTitle = options.title || 'Create Note'
         const modalConfirmButtonText = options.buttonText || 'Create Note'
         const modalLoadingText = options.loadingText || 'Creating note...'
         const modalSuccessText = options.successText || 'Note created successfully!'
+        const isEditMode = !!options.isEditMode
 
         const now = options.timestamp ? new Date(options.timestamp) : new Date()
         const localDate = now.getFullYear() + '-' +
@@ -2374,7 +2377,6 @@ export class MyPatientsRenderer {
 
                 let activeType = newNote.type
 
-                // --- HELPER TIME PARSERS & FORMATTERS ---
                 const formatISOWithoutZ = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
 
                 const adjustTimeWithoutChangingDate = (minutesToAdd, secondsToAdd = 0) => {
@@ -2384,10 +2386,8 @@ export class MyPatientsRenderer {
                     let mins = parseInt(timeParts[1], 10) || 0
                     let secs = parseInt(timeParts[2], 10) || 0
 
-                    // Convert everything to total seconds to handle smooth rolling overflows
                     let totalSeconds = (hrs * 3600) + (mins * 60) + secs + (minutesToAdd * 60) + secondsToAdd
 
-                    // Protect against underflow/overflow within a single 24-hour block (86400 seconds)
                     if (totalSeconds < 0) {
                         totalSeconds = (totalSeconds % 86400) + 86400
                     }
@@ -2399,14 +2399,12 @@ export class MyPatientsRenderer {
                     timeInput.value = `${String(finalHrs).padStart(2, '0')}:${String(finalMins).padStart(2, '0')}:${String(finalSecs).padStart(2, '0')}`
                 }
 
-                // --- QUICK WORKFLOW BUTTON ACTIONS BINDINGS ---
                 document.getElementById('swal-note-btn-quick-today').onclick = () => {
                     if (dateInput) dateInput.value = formatISOWithoutZ(new Date())
                 }
 
                 document.getElementById('swal-note-btn-quick-add-day').onclick = () => {
                     if (!dateInput) return
-                    // Fall back to today if the current input text happens to be corrupt or unparseable
                     const baseDate = dateInput.value ? new Date(dateInput.value) : new Date()
                     baseDate.setDate(baseDate.getDate() + 1)
                     dateInput.value = formatISOWithoutZ(baseDate)
@@ -2416,12 +2414,10 @@ export class MyPatientsRenderer {
                     if (timeInput) timeInput.value = '08:00:00'
                 }
 
-                // +1 Hour Button (Passes 60 minutes, 0 seconds)
                 document.getElementById('swal-note-btn-quick-add-hour').onclick = () => {
                     adjustTimeWithoutChangingDate(60, 0)
                 }
 
-                // +15-30 Min Button (Passes random minutes and random seconds)
                 document.getElementById('swal-note-btn-quick-add-rand-min').onclick = () => {
                     const randomMinutes = Math.floor(Math.random() * (30 - 15 + 1)) + 15
                     const randomSeconds = Math.floor(Math.random() * 60)
@@ -2430,24 +2426,15 @@ export class MyPatientsRenderer {
 
                 document.getElementById('swal-note-btn-quick-macro-tomorrow').onclick = () => {
                     if (!dateInput || !timeInput) return
-
-                    // STEP 1: Set date to today
                     const targetDate = new Date()
-
-                    // STEP 2: Add 1 day (Making it Tomorrow)
                     targetDate.setDate(targetDate.getDate() + 1)
                     dateInput.value = formatISOWithoutZ(targetDate)
-
-                    // STEP 3: Force time baseline to exactly 08:00:00
                     timeInput.value = '08:00:00'
-
-                    // STEP 4: Add random random 1-90 minutes and seconds
                     const randomMinutes = Math.floor(Math.random() * (90 - 1 + 1)) + 1
                     const randomSeconds = Math.floor(Math.random() * 60)
                     adjustTimeWithoutChangingDate(randomMinutes, randomSeconds)
                 }
 
-                // --- DYNAMIC CONTENT VIEW & RE-ORDERING PIPELINE ---
                 const updateFieldVisibilityAndOrder = (selectedType) => {
                     activeType = selectedType
                     const currentConfig = ClinicalNote.NOTE_TYPE_CONFIGS[selectedType] || ClinicalNote.NOTE_TYPE_CONFIGS[ClinicalNote.TYPES.SOAP]
@@ -2555,6 +2542,7 @@ export class MyPatientsRenderer {
             })
 
             const completedNote = new ClinicalNote({
+                id: options.targetNoteId || undefined, // Populates original node primary key ID if modifying
                 recId: p.recId,
                 type: result.value.type,
                 content: result.value.content,
@@ -2572,30 +2560,40 @@ export class MyPatientsRenderer {
                     hospitalContext.session.data,
                 )
 
-                // Submit note
-                const submittedNote = await clinicalNotesClient.submit(completedNote)
+                // --- 1. ROUTE TO THE CORRECT API CLIENT ACTION ---
+                const submittedNote = isEditMode
+                    ? await clinicalNotesClient.amend(completedNote)
+                    : await clinicalNotesClient.submit(completedNote)
 
-                // Fetch the live renderer context from global states map if it is currently open
                 const renderersMap = this.G.store.temp.activeNotesSlideOutRenderers
 
                 if (renderersMap && renderersMap.has(p.id)) {
                     const myRenderer = renderersMap.get(p.id)
 
                     if (myRenderer) {
-                        // Push the brand new node instance cleanly into the existing array model cache
-                        myRenderer.notes.push(submittedNote)
+                        // --- 2. UPDATED IN-PLACE RENDERER MODEL MUTATION ---
+                        if (isEditMode) {
+                            const index = myRenderer.notes.findIndex(n => String(n.id) === String(submittedNote.id))
+                            if (index !== -1) {
+                                myRenderer.notes[index] = submittedNote // Swap element position safely
+                            } else {
+                                myRenderer.notes.push(submittedNote) // Fallback just in case reference dropped
+                            }
+                        } else {
+                            myRenderer.notes.push(submittedNote) // Insertion fallback behavior
+                        }
 
-                        // Re-process raw object arrays through your grouping sort functions
+                        // Re-process raw object arrays through sorting pipeline
                         myRenderer.notesByDate = myRenderer.groupNotesByDate(myRenderer.notes)
 
-                        // Refresh tracking state so the date index array captures the new entry date string layout instantly
+                        // Refresh time tracking indexes
                         myRenderer.availableDates = Object.keys(myRenderer.notesByDate).sort((a, b) => b.localeCompare(a))
 
-                        // Force the view switch focus directly to the target chart timeline of the new record entry
-                        const newlyAddedDateStr = myRenderer.formatDate(submittedNote.timestamp)
-                        myRenderer.activeDate = newlyAddedDateStr
+                        // Target the timeline view straight to the record entry's date
+                        const targetDateStr = myRenderer.formatDate(submittedNote.timestamp)
+                        myRenderer.activeDate = targetDateStr
 
-                        // Run structural rebuild lifecycles to refresh DOM components live on screen
+                        // Force live layout canvas redraw components
                         myRenderer.renderPaginationTrack(myRenderer.availableDates)
                         myRenderer.render()
                     }
@@ -2606,8 +2604,8 @@ export class MyPatientsRenderer {
             } catch (err) {
                 await this.G.ui.swalFatalError(
                     err,
-                    'Create Failed',
-                    'The application encountered a fatal creation error:',
+                    isEditMode ? 'Update Failed' : 'Create Failed',
+                    `The application encountered a fatal transaction error:`,
                 )
                 this.openNoteCreationModal(p, {
                     ...options,
@@ -2617,6 +2615,43 @@ export class MyPatientsRenderer {
                 })
             }
         }
+    }
+    /**
+     * Opens a modal to duplicate a note.
+     * @param {Patient} p
+     * @param {ClinicalNote} note - The target ClinicalNote instance to duplicate.
+     */
+    async promptDuplicateNote(p, note) {
+        if (!note) return
+
+        return this.openNoteCreationModal(p, {
+            title: 'Duplicate Note',
+            buttonText: 'Create Duplicate',
+            loadingText: 'Duplicating note...',
+            successText: 'Duplicate created successfully!',
+            type: note.type,
+            content: note.content,
+        })
+    }
+    /**
+     * Opens a modal to edit an existing note.
+     * @param {Patient} p
+     * @param {ClinicalNote} note - The target ClinicalNote instance to edit.
+     */
+    async promptEditNote(p, note) {
+        if (!note) return
+
+        return await this.openNoteCreationModal(p, {
+            title: `Edit ${note.type} Note`,
+            buttonText: 'Save Changes',
+            loadingText: 'Saving changes...',
+            successText: 'Saved successfully!',
+            type: note.type,
+            content: note.content,
+            timestamp: note.timestamp,
+            isEditMode: true,
+            targetNoteId: note.id,
+        })
     }
     /**
      * @param {Patient} p
@@ -3081,7 +3116,7 @@ class NotesSlideOutRenderer {
             }
             if (canEdit) {
                 btnDelete.onclick = () => this.handleDelete(note)
-                btnEdit.onclick = () => this.handleStartEditing(note)
+                btnEdit.onclick = () => this.handleEdit(note)
             }
 
             showNormalActions()
@@ -3185,36 +3220,19 @@ class NotesSlideOutRenderer {
      * @param {ClinicalNote} note 
      */
     handleDuplicate(note) {
-        this.myPatientsRenderer.openNoteCreationModal(this.p, {
-            title: 'Duplicate Note',
-            buttonText: 'Create Duplicate',
-            loadingText: 'Duplicating note...',
-            successText: 'Duplicate created successfully!',
-            type: note.type,
-            content: note.content,
-        })
+        this.myPatientsRenderer.promptDuplicateNote(this.p, note)
     }
     /**
      * @param {ClinicalNote} note 
      */
-    handleStartEditing(note) {
+    handleEdit(note) {
+        this.myPatientsRenderer.promptEditNote(this.p, note)
     }
     /**
      * @param {ClinicalNote} note 
      */
     handleDelete(note) {
         this.myPatientsRenderer.promptDeleteNote(this.p, note)
-    }
-    /**
-     * @param {ClinicalNote} note 
-     */
-    async handleSave(note) {
-        const confirmed = await confirm('save?')
-        if (!confirmed) {
-            throw new Error('User cancelled modal')
-        }
-        // await apiupdatenote(note.id, note.content) blabla
-        // await refreshnotesdata() blabla
     }
     destroy() {
         if (this.filterRoleButtons) {

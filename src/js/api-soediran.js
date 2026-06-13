@@ -446,23 +446,59 @@ class SoediranClinicalNotesContext extends BaseClinicalNotesContext {
         const rawNote = (response?.data) ? (Array.isArray(response.data) ? response.data[0] : response.data) : response
         return this._parseRawNote(rawNote)
     }
-    /** @override */
+    /**
+     * @param {ClinicalNote} note 
+     * @returns {Promise<ClinicalNote>}
+     */
     async amend(note) {
+        if (!(note instanceof ClinicalNote)) throw new Error('Not a clinical note.')
+
+        let subyektif, obyektif, assesment, planning
+
+        switch (note.type) {
+            case ClinicalNote.TYPES.SBAR:
+                subyektif = note.content.situation || ''
+                obyektif = note.content.background || ''
+                assesment = note.content.assessment || ''
+                planning = note.content.recommendation || ''
+                break
+            case ClinicalNote.TYPES.ADIME:
+                subyektif = note.content.assessment || ''
+                obyektif = note.content.diagnosis || ''
+                assesment = note.content.intervention || ''
+                planning = [note.content.monitoring, note.content.evaluation]
+                    .filter(Boolean)
+                    .join('\n\n')
+                break
+            default: // SOAP
+                subyektif = note.content.subjective || ''
+                obyektif = note.content.objective || ''
+                assesment = note.content.assessment || ''
+                planning = note.content.planning || ''
+                break
+        }
+
         const payload = {
             'ID': parseInt(note.id),
-            'SUBYEKTIF': note.content.subjective,
-            'OBYEKTIF': note.content.objective,
-            'ASSESMENT': note.content.assessment,
-            'PLANNING': note.content.planning,
-            'TANGGAL': note.timestamp,
+            'SUBYEKTIF': ClinicalNote.cleanPropertyForDb(subyektif),
+            'OBYEKTIF': ClinicalNote.cleanPropertyForDb(obyektif),
+            'ASSESMENT': ClinicalNote.cleanPropertyForDb(assesment),
+            'PLANNING': ClinicalNote.cleanPropertyForDb(planning),
+            'INSTRUKSI': ClinicalNote.cleanPropertyForDb(note.content.instruction || ''),
+            'TANGGAL': note.timestamp || '',
+            'STATUS_SBAR': note.type === ClinicalNote.TYPES.SBAR ? 1 : 0,
             'DOKTER_TBAK_OR_SBAR': null, // figure out if needed
             'SELESAI_RAWAT_BERSAMA': '0',
         }
+
         const url = this._url(`/medicalrecord/cppt/${note.id}`)
-        return await this.driver.apiRequest(url, this.session, {
+        const response = await this.driver.apiRequest(url, this.session, {
             method: 'PUT',
             body: JSON.stringify(payload),
         })
+
+        const rawNote = (response?.data) ? (Array.isArray(response.data) ? response.data[0] : response.data) : response
+        return this._parseRawNote(rawNote)
     }
     /**
      * @param {string | number} id 
