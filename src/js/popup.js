@@ -1692,7 +1692,7 @@ const G = {
 
             if (!Array.isArray(listArray) || listArray.length === 0) {
                 G.swal.fire({
-                    icon: 'warning',
+                    icon: 'info',
                     title: 'No Lists Found',
                     text: 'Please create a list first.',
                 })

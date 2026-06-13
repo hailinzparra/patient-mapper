@@ -900,9 +900,10 @@ export class MyPatientsRenderer {
         // ==========================================
         // BATCH OPERATIONS SECTION
         // ==========================================
-        const batchOperationsLabel = c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1.5 ml-1', text: 'Batch Operations (WIP)' })
+        const batchOperationsLabel = c('label', { classes: 'block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1.5 ml-1', text: 'Batch Operations' })
 
-        const btnBatchRefresh = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors group' }, [
+        const btnBatchClasses = 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors'
+        const btnBatchRefresh = c('button', { classes: btnBatchClasses }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Refresh' }),
                 c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Refresh multiple records' }),
@@ -912,7 +913,7 @@ export class MyPatientsRenderer {
             ]),
         ])
 
-        const btnBatchNotes = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors' }, [
+        const btnBatchNotes = c('button', { classes: btnBatchClasses }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Open Notes' }),
                 c('span', { classes: 'text-[8px] font-medium text-slate-400', text: "Open multiple records' notes" }),
@@ -922,7 +923,7 @@ export class MyPatientsRenderer {
             ]),
         ])
 
-        const btnBatchOpen = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors' }, [
+        const btnBatchOpen = c('button', { classes: btnBatchClasses }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Open Tabs' }),
                 c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Open multiple records in tabs' }),
@@ -932,21 +933,22 @@ export class MyPatientsRenderer {
             ]),
         ])
 
-        const btnBatchRemove = c('button', { classes: 'flex items-center justify-between px-3 py-2 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors' }, [
+        const btnBatchPreRound = c('button', { classes: btnBatchClasses }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
-                c('span', { text: 'Batch Remove' }),
-                c('span', { classes: 'text-[8px] font-medium text-slate-400 group-hover:text-red-300', text: 'Remove multiple records' }),
+                c('span', { text: 'Batch Pre-Round' }),
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: "Prepare multiple records' notes" }),
             ]),
             c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
-                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' } }),
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' } }),
             ]),
         ])
 
         const batchButtonsGrid = c('div', { classes: 'grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4' }, [
             btnBatchRefresh,
             btnBatchNotes,
-            btnBatchOpen,
-            btnBatchRemove,
+            // WIP HIDDEN
+            // btnBatchOpen,
+            // btnBatchPreRound,
         ])
 
         const batchOperationsWrapper = c('div', { classes: 'relative' }, [
@@ -986,23 +988,20 @@ export class MyPatientsRenderer {
             filtersGridContainer,
         ])
 
-        // settingsBody.append(batchOperationsWrapper)
+        settingsBody.append(batchOperationsWrapper)
         settingsBody.append(globalSettingsWrapper)
 
         // ==========================================
         // EVENT LISTENERS
         // ==========================================
-        btnBatchRefresh.addEventListener('click', () => {
-        })
+        btnBatchRefresh.onclick = () => this.handleBatchRefresh()
+        btnBatchNotes.onclick = () => this.handleBatchOpenNotes()
 
-        btnBatchNotes.addEventListener('click', () => {
-        })
+        btnBatchOpen.onclick = () => {
+        }
 
-        btnBatchOpen.addEventListener('click', () => {
-        })
-
-        btnBatchRemove.addEventListener('click', () => {
-        })
+        btnBatchPreRound.onclick = () => {
+        }
 
         roleFilterGroup.querySelectorAll('button[data-role]').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -1541,7 +1540,7 @@ export class MyPatientsRenderer {
         ])
 
         const btnRefreshPatient = c('button', {
-            classes: 'btn-refresh-patient p-1 text-slate-400 bg-white border-slate-200 hover:text-blue-600 hover:bg-blue-50 active:scale-90 border rounded-full transition-all shadow-sm group'
+            classes: 'btn-refresh-patient p-1 text-slate-400 bg-white border-slate-200 hover:text-blue-600 hover:bg-blue-50 active:scale-90 border rounded-full transition-all shadow-sm group disabled:opacity-50 disabled:pointer-events-none'
         }, [
             c('svg', { attrs: { class: 'w-2.5 h-2.5 transition-transform duration-500', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' } }),
@@ -1625,7 +1624,7 @@ export class MyPatientsRenderer {
         if (!apiSettings.patients.canRefresh) btnRefreshPatient.classList.add('hidden')
         if (!apiSettings.notes.canCreate) notesCreateButton.classList.add('hidden')
 
-        btnRefreshPatient.onclick = () => { }
+        btnRefreshPatient.onclick = async () => await this.handleRefreshPatientData(p, btnRefreshPatient)
         btnCopyPatient.onclick = () => this.handleCopyPatientData(p, btnCopyPatient)
         btnNotes.onclick = () => this.toggleNotesSlideOut(p, notesContainer, btnNotes)
         notesCreateButton.onclick = () => this.openNoteCreationModal(p)
@@ -1951,6 +1950,142 @@ export class MyPatientsRenderer {
             })
     }
     /**
+     * Performs surgical DOM updates on a target patient block container
+     * @param {HTMLElement} rootEl - The `.js-patient-item` top wrapper container.
+     * @param {Object} ui - Data from p.getUIDisplayData().
+     * @param {Patient} p - The Patient instance.
+     */
+    updatePatientCardUI(rootEl, ui, p) {
+        // --- Bed and Length of Stay (LOS) updates ---
+        const bedNameEl = rootEl.querySelector('.bed-info span:nth-child(2)')
+        if (bedNameEl) bedNameEl.textContent = ui.bedName
+
+        const losEl = rootEl.querySelector('.los-text')
+        if (losEl) {
+            losEl.textContent = ui.los.text
+            // Toggle fresh/amber visual states
+            if (ui.los.isFresh) {
+                losEl.className = 'los-text text-[9px] font-bold text-amber-700 leading-none'
+                losEl.closest('.bed-info').className = 'bed-info flex flex-col items-center justify-center min-w-[55px] px-1 py-2 rounded-lg border bg-amber-50 border-amber-200 transition-colors duration-500'
+            } else {
+                losEl.className = 'los-text text-[9px] font-bold text-slate-500 leading-none'
+                losEl.closest('.bed-info').className = 'bed-info flex flex-col items-center justify-center min-w-[55px] px-1 py-2 rounded-lg border bg-slate-100 border-slate-200 transition-colors duration-500'
+            }
+        }
+
+        // --- Core Information updates ---
+        const metaTextEl = rootEl.querySelector('p.font-mono')
+        if (metaTextEl) {
+            metaTextEl.textContent = `${ui.mrn} • ${ui.age} • ${ui.recId}`
+        }
+
+        const dxEl = rootEl.querySelector('p.italic')
+        if (dxEl) {
+            dxEl.textContent = ui.dx
+        }
+
+        // --- Status Badges (Pills) modifications ---
+        const statusPill = rootEl.querySelector('.js-status-pill')
+        const statusDot = rootEl.querySelector('.js-status-dot')
+        const statusLabel = rootEl.querySelector('.js-status-label')
+
+        if (statusLabel) statusLabel.textContent = ui.status
+
+        if (p.status === Patient.STATUS.ACTIVE) {
+            if (statusPill) statusPill.className = 'flex items-center border px-2 py-0.5 rounded-full js-status-pill bg-emerald-50 border-emerald-100'
+            if (statusDot) statusDot.className = 'w-1.5 h-1.5 rounded-full mr-1.5 js-status-dot bg-emerald-500 animate-pulse'
+            if (statusLabel) statusLabel.className = 'text-[8px] font-black tracking-tight js-status-label text-emerald-600'
+        } else {
+            if (statusPill) statusPill.className = 'flex items-center border px-2 py-0.5 rounded-full js-status-pill bg-slate-50 border-slate-200'
+            if (statusDot) statusDot.className = 'w-1.5 h-1.5 rounded-full mr-1.5 js-status-dot bg-slate-400'
+            if (statusLabel) statusLabel.className = 'text-[8px] font-black tracking-tight js-status-label text-slate-600'
+        }
+
+        // --- Datetime stamps ---
+        const admDateEl = rootEl.querySelector('.js-adm-date')
+        if (admDateEl) admDateEl.textContent = ui.admText.short
+
+        const disDateEl = rootEl.querySelector('.js-dis-date')
+        if (disDateEl) disDateEl.textContent = ui.disText.short
+
+        // --- Last Sync Indicator ---
+        const lastSyncEl = rootEl.querySelector('.js-last-sync')
+        if (lastSyncEl) {
+            lastSyncEl.textContent = ui.lastUp
+        }
+    }
+    /**
+     * @param {Patient} p 
+     * @param {HTMLButtonElement} feedbackEl
+     * @returns {Promise<boolean>} Resolves to true if successful, false if failed/empty
+     */
+    async handleRefreshPatientData(p, feedbackEl) {
+        if (!p || !feedbackEl) return false
+
+        const uiBefore = p.getUIDisplayData() || {}
+        const toast = Utils.UI.toast
+        const svgIcon = feedbackEl.querySelector('svg')
+
+        const nameText = `${uiBefore.name} / ${uiBefore.mrn}`
+
+        toast.pop(`Refreshing... (${nameText})`, toast.type.default)
+        feedbackEl.disabled = true
+        if (svgIcon) svgIcon.classList.add('animate-spin-reverse')
+
+        await Utils.sleep(1000)
+
+        try {
+            const activeHospital = hospitalContext.activeConfig
+            if (!activeHospital) return false
+
+            if (activeHospital.id !== p.hid) {
+                throw new Error('Hospital mismatch')
+            }
+
+            const session = hospitalContext.session.data
+            const targetDomain = hospitalContext.activeDomain
+
+            const freshData = await activeHospital.driver.fetchPatientStatus(
+                targetDomain,
+                session,
+                p.mrn,
+                p.recId,
+            )
+
+            if (freshData) {
+                p.update({
+                    dx: freshData.dx || p.dx,
+                    bedName: freshData.bedName || p.bedName,
+                    docId: freshData.docId || p.docId,
+                    admDate: freshData.admDate || p.admDate,
+                    disDate: freshData.disDate || p.disDate,
+                })
+
+                await this.savePatientsData()
+
+                const ui = p.getUIDisplayData()
+                const rootEl = document.querySelector(`.js-patient-item[data-id="${p.id}"]`)
+                if (rootEl) {
+                    this.updatePatientCardUI(rootEl, ui, p)
+                }
+
+                toast.pop(`Refreshed! (${nameText})`, toast.type.success)
+                return true // Flag Success
+            } else {
+                toast.pop(`No data found (${nameText})`, toast.type.error)
+                return false // Flag Failure (Empty Response)
+            }
+        } catch (err) {
+            console.error(err)
+            toast.pop(`Refresh failed (${nameText})`, toast.type.error)
+            return false // Flag Failure (Network/Server Crash)
+        }
+        finally {
+            feedbackEl.disabled = false
+            if (svgIcon) svgIcon.classList.remove('animate-spin-reverse')
+        }
+    }
+    /**
      * 
      * @param {Patient} p 
      */
@@ -2118,7 +2253,10 @@ export class MyPatientsRenderer {
     async toggleNotesSlideOut(p, notesContainer, btnNotes, forceState = null) {
         const c = Utils.DOM.createElement
         const ui = p.getUIDisplayData()
-        const isOpen = forceState !== null ? forceState : !!notesContainer.classList.contains('hidden')
+
+        const isCurrentlyHidden = notesContainer.classList.contains('hidden')
+        const isOpen = forceState !== null ? forceState : !!isCurrentlyHidden
+
         const createBtn = notesContainer.querySelector('.notes-create-btn')
         const closeBtn = notesContainer.querySelector('.notes-close-inner')
         const filterGroup = notesContainer.querySelector('.role-filter-group')
@@ -2136,6 +2274,7 @@ export class MyPatientsRenderer {
         closeBtn.classList.add('opacity-50')
         closeBtn.disabled = true
 
+        // CASE A: The panel is visible. We close it down immediately.
         if (!isOpen) {
             filterButtons.forEach(b => {
                 b.onclick = null
@@ -2145,9 +2284,10 @@ export class MyPatientsRenderer {
             btnNotes.classList.add('hover:bg-blue-600', 'hover:text-white')
             btnNotes.classList.remove('opacity-50')
             btnNotes.disabled = false
-            return
+            return true // Successfully closed
         }
 
+        // CASE B: Panel is closed. We initialize an asymmetric open layout routine.
         notesContainer.classList.remove('hidden')
         btnNotes.classList.remove('hover:bg-blue-600', 'hover:text-white')
         btnNotes.classList.add('opacity-50')
@@ -2171,8 +2311,7 @@ export class MyPatientsRenderer {
                 const currentHospitalText = hospitalContext.activeConfig.name
                 const targetHospitalText = hospitalContext.getHospitalById(p.hid)?.name || 'the correct hospital'
                 throw new Error(
-                    `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view this record's notes.`
-                    // `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view or edit this record's notes.` HIDDEN FOR WIP ('or edit')
+                    `Hospital mismatch: You must select ${targetHospitalText} (current: ${currentHospitalText}) to view or edit this record's notes.`
                 )
             }
 
@@ -2183,9 +2322,7 @@ export class MyPatientsRenderer {
             const rawNotes = await clinicalNotesClient.fetch(p.mrn, p.recId)
 
             if (NotesSlideOutRenderer.isForceCancelled(p.id, notesContainer)) {
-                // The container was replaced or removed while fetching
-                // We exit here, no instantiate
-                return
+                return false // Execution chain halted/cancelled
             }
 
             const renderer = new NotesSlideOutRenderer(this, notesContainer, rawNotes, p, btnNotes)
@@ -2196,19 +2333,15 @@ export class MyPatientsRenderer {
             }
             renderersMap.set(p.id, renderer)
 
-            // clear loading
             notesBody.innerHTML = ''
             notesBody.classList.remove('flex', 'flex-col', 'justify-center')
 
-            // reload settings just to be safe
             this.reloadSettingsData()
             const defaultFilterRole = this.#notesFilterRole
             const defaultFilterDay = this.#notesFilterDay
 
-            // start first render
             renderer.init(defaultFilterRole, defaultFilterDay)
 
-            // render filter role elements
             filterGroup.classList.remove('opacity-50')
             filterButtons.forEach((btn, btnIndex) => {
                 btn.className = this.notesGetTabClass(btn.dataset.role === defaultFilterRole, btn.dataset.role === MyPatientsRenderer.FILTERS.ROLE_ALL ? 'text-slate-600' : 'text-blue-600')
@@ -2222,7 +2355,6 @@ export class MyPatientsRenderer {
                     })
                     if (btnIndex !== currentIndex) {
                         currentIndex = btnIndex
-                        // re-render on filter role change
                         renderer.changeFilter(btn.dataset.role)
                     }
                 }
@@ -2230,6 +2362,15 @@ export class MyPatientsRenderer {
             createBtn.classList.add('hover:bg-emerald-600', 'hover:text-white')
             createBtn.classList.remove('opacity-50')
             createBtn.disabled = false
+
+            btnNotes.classList.add('hover:bg-blue-600', 'hover:text-white')
+            btnNotes.classList.remove('opacity-50')
+            btnNotes.disabled = false
+            closeBtn.classList.add('hover:text-red-500')
+            closeBtn.classList.remove('opacity-50')
+            closeBtn.disabled = false
+
+            return true // Successfully loaded and established notes UI
         }
         catch (err) {
             console.error(err)
@@ -2243,14 +2384,16 @@ export class MyPatientsRenderer {
             ])
             notesBody.classList.add('flex', 'flex-col', 'justify-center')
             notesBody.appendChild(errorDiv)
-        }
 
-        btnNotes.classList.add('hover:bg-blue-600', 'hover:text-white')
-        btnNotes.classList.remove('opacity-50')
-        btnNotes.disabled = false
-        closeBtn.classList.add('hover:text-red-500')
-        closeBtn.classList.remove('opacity-50')
-        closeBtn.disabled = false
+            btnNotes.classList.add('hover:bg-blue-600', 'hover:text-white')
+            btnNotes.classList.remove('opacity-50')
+            btnNotes.disabled = false
+            closeBtn.classList.add('hover:text-red-500')
+            closeBtn.classList.remove('opacity-50')
+            closeBtn.disabled = false
+
+            return false // Failure state
+        }
     }
     /**
      * Opens a dynamic clinical note modal supporting SOAP, SBAR, ADIME, etc.
@@ -2752,6 +2895,286 @@ export class MyPatientsRenderer {
                 'The application encountered a fatal deletion error:',
             )
         }
+    }
+    async handleBatchRefresh() {
+        const currentViewMode = this.#viewMode
+        if (currentViewMode !== MyPatientsRenderer.VIEWS.FULL) {
+            this.G.swal.fire({
+                icon: 'info',
+                title: 'Switch View to Refresh',
+                html: `<div class="text-slate-600 space-y-2 text-center"><p>Batch refresh requires extended information that is only loaded in the full layout view.</p></div>`,
+            })
+            return
+        }
+
+        const refreshButtons = Array.from(document.querySelectorAll('.btn-refresh-patient'))
+        const totalCount = refreshButtons.length
+
+        if (totalCount === 0) {
+            this.G.swal.fire({
+                icon: 'info',
+                title: 'No records found',
+                text: 'There are no records available to refresh.',
+            })
+            return
+        }
+
+        const ss = totalCount === 1 ? '' : 's'
+        const estimatedMinutes = Math.ceil(((totalCount * 1.5) / 60) * 100) / 100
+
+        const confirmResult = await this.G.swal.fire({
+            title: 'Confirm Batch Refresh?',
+            html: `
+            <div class="text-slate-600 space-y-2 text-center">
+                <p>You are about to <strong>refresh data</strong> for <strong>${totalCount}</strong> record${ss} sequentially.</p>
+                <p class="bg-amber-50 text-amber-800 border border-amber-200 p-2 rounded font-medium">
+                    Estimated sequence time: ~<strong>${estimatedMinutes} mins</strong>.
+                </p>
+            </div>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, start refresh',
+            cancelButtonText: 'Cancel',
+        })
+
+        if (!confirmResult.isConfirmed) return
+
+        let successCount = 0
+        let failCount = 0
+
+        this.G.swal.fire({
+            title: 'Processing Batch Refresh...',
+            position: 'top',
+            backdrop: 'rgba(0, 0, 0, 0.25)',
+            html: `
+            <div class="text-sm text-slate-600">
+                <div id="batch-refresh-progress-text">
+                    Preparing to process <strong>${totalCount}</strong> records...
+                </div>
+                <div id="batch-refresh-counter-text" class="text-xs text-slate-400 mt-1">
+                    Success: 0 | Failed: 0
+                </div>
+                <div class="text-xs text-slate-400 mt-1">To abort, refresh the page.</div>
+            </div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showCloseButton: false,
+            showConfirmButton: false,
+            didOpen: () => {
+                this.G.swal.showLoading()
+            }
+        })
+
+        const progressTextEl = document.getElementById('batch-refresh-progress-text')
+        const counterTextEl = document.getElementById('batch-refresh-counter-text')
+
+        for (let i = 0; i < totalCount; i++) {
+            const btn = refreshButtons[i]
+
+            const patientWrapper = btn.closest('.js-patient-item')
+
+            if (!patientWrapper) {
+                failCount++
+                continue
+            }
+
+            patientWrapper.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            })
+
+            if (progressTextEl) {
+                progressTextEl.innerHTML = `Processing <strong>${i + 1}</strong> of <strong>${totalCount}</strong> record${ss}...`
+            }
+
+            if (i < totalCount - 1) {
+                await Utils.sleep(200)
+            }
+
+            try {
+                if (typeof btn.onclick === 'function') {
+                    const isSuccess = await btn.onclick()
+                    if (isSuccess) {
+                        successCount++
+                    } else {
+                        failCount++
+                    }
+                } else {
+                    failCount++
+                }
+            } catch (singleError) {
+                console.error(`Batch item index ${i} failed:`, singleError)
+                failCount++
+            }
+
+            if (counterTextEl) {
+                counterTextEl.innerHTML = `Success: <span class="text-emerald-600 font-bold">${successCount}</span> | Failed: <span class="text-rose-500 font-bold">${failCount}</span>`
+            }
+        }
+
+        this.G.swal.fire({
+            icon: failCount > 0 ? 'info' : 'success',
+            title: 'Batch Refresh Completed!',
+            html: `
+            <div class="text-sm text-slate-600 space-y-1">
+                <p>Processed total <b>${totalCount}</b> entries.</p>
+                <div class="flex justify-center gap-4 text-xs pt-2">
+                    <span class="bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100">Success: <b>${successCount}</b></span>
+                    <span class="bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-100">Failed: <b>${failCount}</b></span>
+                </div>
+            </div>`
+        })
+    }
+    async handleBatchOpenNotes() {
+        const currentViewMode = this.#viewMode
+        if (currentViewMode !== MyPatientsRenderer.VIEWS.FULL) {
+            this.G.swal.fire({
+                icon: 'info',
+                title: 'Switch View to Open Notes',
+                html: `<div class="text-slate-600 space-y-2 text-center"><p>Batch open notes requires extended information that is only loaded in the full layout view.</p></div>`,
+            })
+            return
+        }
+
+        const notesButtons = Array.from(document.querySelectorAll('.patient-notes-btn'))
+        const totalCount = notesButtons.length
+
+        if (totalCount === 0) {
+            this.G.swal.fire({
+                icon: 'info',
+                title: 'No records found',
+                text: 'There are no records available to process.',
+            })
+            return
+        }
+
+        const ss = totalCount === 1 ? '' : 's'
+        const estimatedMinutes = Math.ceil(((totalCount * 1.6) / 60) * 100) / 100
+
+        const confirmResult = await this.G.swal.fire({
+            title: 'Confirm Batch Open Notes?',
+            html: `
+            <div class="text-slate-600 space-y-2 text-center">
+                <p>You are about to <strong>open notes</strong> for <strong>${totalCount}</strong> record${ss} sequentially.</p>
+                <p class="bg-amber-50 text-amber-800 border border-amber-200 p-2 rounded font-medium">
+                    Estimated sequence time: ~<strong>${estimatedMinutes} mins</strong>.
+                </p>
+            </div>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, start open notes',
+            cancelButtonText: 'Cancel',
+        })
+
+        if (!confirmResult.isConfirmed) return
+
+        let successCount = 0
+        let failCount = 0
+
+        this.G.swal.fire({
+            title: 'Processing Batch Open Notes...',
+            position: 'top',
+            backdrop: 'rgba(0, 0, 0, 0.25)',
+            html: `
+            <div class="text-sm text-slate-600">
+                <div id="batch-notes-progress-text">
+                    Preparing to process <strong>${totalCount}</strong> records...
+                </div>
+                <div id="batch-notes-counter-text" class="text-xs text-slate-400 mt-1">
+                    Success: 0 | Failed: 0
+                </div>
+                <div class="text-xs text-slate-400 mt-1">To abort, refresh the page.</div>
+            </div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showCloseButton: false,
+            showConfirmButton: false,
+            didOpen: () => {
+                this.G.swal.showLoading()
+            }
+        })
+
+        const progressTextEl = document.getElementById('batch-notes-progress-text')
+        const counterTextEl = document.getElementById('batch-notes-counter-text')
+
+        for (let i = 0; i < totalCount; i++) {
+            const btn = notesButtons[i]
+            const patientWrapper = btn.closest('.js-patient-item')
+
+            if (!patientWrapper) {
+                failCount++
+                continue
+            }
+
+            patientWrapper.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            })
+
+            if (progressTextEl) {
+                progressTextEl.innerHTML = `Processing <strong>${i + 1}</strong> of <strong>${totalCount}</strong> record${ss}...`
+            }
+
+            const patientId = patientWrapper.dataset.id
+            const patientInstance = this.patientList.getPatient(patientId) || null
+            const notesContainer = patientWrapper.querySelector('.patient-notes-container')
+
+            if (!notesContainer) {
+                failCount++
+                continue
+            }
+
+            try {
+                const isAlreadyOpen = !notesContainer.classList.contains('hidden')
+                let processingResult = false
+
+                if (isAlreadyOpen) {
+                    // Step 1: Run the close sequence action
+                    const closeAction = await this.toggleNotesSlideOut(patientInstance, notesContainer, btn, false)
+
+                    if (closeAction) {
+                        // Throttled pacing pause between action calls to let animation complete
+                        await Utils.sleep(300)
+                        // Step 2: Open it back up to force clear cache and download fresh network notes
+                        processingResult = await this.toggleNotesSlideOut(patientInstance, notesContainer, btn, true)
+                    }
+                } else {
+                    // Simple path: Element is hidden, trigger a single open sequence
+                    processingResult = await this.toggleNotesSlideOut(patientInstance, notesContainer, btn, true)
+                }
+
+                if (processingResult) {
+                    successCount++
+                } else {
+                    failCount++
+                }
+            } catch (singleError) {
+                console.error(`Batch open notes item index ${i} failed:`, singleError)
+                failCount++
+            }
+
+            if (counterTextEl) {
+                counterTextEl.innerHTML = `Success: <span class="text-emerald-600 font-bold">${successCount}</span> | Failed: <span class="text-rose-500 font-bold">${failCount}</span>`
+            }
+
+            // Standard loop throttle protection interval limit
+            if (i < totalCount - 1) {
+                await Utils.sleep(400)
+            }
+        }
+
+        this.G.swal.fire({
+            icon: failCount > 0 ? 'info' : 'success',
+            title: 'Batch Open Notes Completed!',
+            html: `
+            <div class="text-sm text-slate-600 space-y-1">
+                <p>Processed total <b>${totalCount}</b> entries.</p>
+                <div class="flex justify-center gap-4 text-xs pt-2">
+                    <span class="bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100">Success: <b>${successCount}</b></span>
+                    <span class="bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-100">Failed: <b>${failCount}</b></span>
+                </div>
+            </div>`
+        })
     }
     openPDFConfigDrawer() {
         const activeListName = this.patientList?.name

@@ -184,6 +184,60 @@ class ApiSoediranClass extends ApiBase {
         }
         return results
     }
+    /**
+     * @returns {Promise<{ dx: string|null, bedName: string|null, docId: string|null, admDate: string|null, disDate: string|null, isStillActive: boolean }>}
+     */
+    async fetchPatientStatus(targetDomain, session, mrn, recId) {
+        const dc = Date.now()
+        const statusParams = encodeURIComponent('[1,2]')
+        const path = `/pendaftaran/kunjungan?_dc=${dc}&NORM=${mrn}&STATUS=${statusParams}&start=0&limit=10&page=1`
+        const url = `${targetDomain}${this.PATHS.BASE}${path}`
+
+        try {
+            const result = await this.apiRequest(url, session)
+
+            if (result && result.data && result.data.length > 0) {
+                const myVisit = result.data.find(item => item.NOMOR === recId)
+                if (myVisit) {
+                    const a = myVisit.REFERENSI
+                    return {
+                        // Extracting critical shifting parameters matching createPatientFromApiItem structure
+                        dx: myVisit.DIAGNOSAMASUK?.REFERENSI?.DIAGNOSA
+                            ? `${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.CODE, '??')} - ${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.STR, '??')}`
+                            : null,
+                        bedName: Utils.getValidValue(a?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR, null),
+                        docId: Utils.getValidValue(a?.DPJP?.ID, null),
+                        admDate: Utils.getValidValue(myVisit.MASUK, null),
+                        disDate: Utils.getValidValue(myVisit.KELUAR, null),
+                        isStillActive: !myVisit.KELUAR,
+                    }
+                } else {
+                    // Visit record id not present in latest history -> implies room change or discharge
+                    return {
+                        dx: null,
+                        bedName: null,
+                        docId: null,
+                        admDate: null,
+                        disDate: Utils.getValidValue(result.data[0].KELUAR, new Date().toISOString()),
+                        isStillActive: false,
+                    }
+                }
+            }
+
+            // nothing happened
+            return {
+                dx: null,
+                bedName: null,
+                docId: null,
+                admDate: null,
+                disDate: null,
+                isStillActive: true,
+            }
+        } catch (err) {
+            console.error(`Failed to fetch latest status for MRN ${mrn}:`, err.message)
+            throw err
+        }
+    }
     getWardTypeList(wardType) {
         switch (wardType) {
             case 'er':
@@ -311,6 +365,39 @@ class SoediranClinicalNotesContext extends BaseClinicalNotesContext {
         }
     }
     /**
+     * Translates structured ClinicalNote contents back into database field mappings based on note type.
+     * @param {string} type - The ClinicalNote structure type (SOAP, SBAR, ADIME).
+     * @param {Object} content - The clinical note inner content object.
+     * @returns {{ subyektif: string, obyektif: string, assesment: string, planning: string }}
+     */
+    preparePayloadFromNoteType = (type, content = {}) => {
+        switch (type) {
+            case ClinicalNote.TYPES.SBAR:
+                return {
+                    subyektif: content.situation || '',
+                    obyektif: content.background || '',
+                    assesment: content.assessment || '',
+                    planning: content.recommendation || '',
+                }
+            case ClinicalNote.TYPES.ADIME:
+                return {
+                    subyektif: content.assessment || '',
+                    obyektif: content.diagnosis || '',
+                    assesment: content.intervention || '',
+                    planning: [content.monitoring, content.evaluation]
+                        .filter(Boolean)
+                        .join('\n\n'),
+                }
+            default: // SOAP / Fallback
+                return {
+                    subyektif: content.subjective || '',
+                    obyektif: content.objective || '',
+                    assesment: content.assessment || '',
+                    planning: content.planning || '',
+                }
+        }
+    }
+    /**
      * Translates a raw backend record data payload into a standardized ClinicalNote instance.
      * @param {Object} raw - The raw database record object.
      * @returns {ClinicalNote}
@@ -385,38 +472,15 @@ class SoediranClinicalNotesContext extends BaseClinicalNotesContext {
         const timestamp = note.timestamp || ''
         const timeValue = timestamp.split(' ')[1] || '00:00:00'
 
-        let subyektif, obyektif, assesment, planning
-
-        switch (note.type) {
-            case ClinicalNote.TYPES.SBAR:
-                subyektif = note.content.situation || ''
-                obyektif = note.content.background || ''
-                assesment = note.content.assessment || ''
-                planning = note.content.recommendation || ''
-                break
-            case ClinicalNote.TYPES.ADIME:
-                subyektif = note.content.assessment || ''
-                obyektif = note.content.diagnosis || ''
-                assesment = note.content.intervention || ''
-                planning = [note.content.monitoring, note.content.evaluation]
-                    .filter(Boolean)
-                    .join('\n\n')
-                break
-            default: // SOAP
-                subyektif = note.content.subjective || ''
-                obyektif = note.content.objective || ''
-                assesment = note.content.assessment || ''
-                planning = note.content.planning || ''
-                break
-        }
+        const fields = this.preparePayloadFromNoteType(note.type, note.content)
 
         const payload = {
             'STATUS': 1,
             'JENIS': note.creator.type === ClinicalNote.CREATOR_TYPES.DOCTOR ? 1 : 3, // figure out other type
-            'SUBYEKTIF': ClinicalNote.cleanPropertyForDb(subyektif),
-            'OBYEKTIF': ClinicalNote.cleanPropertyForDb(obyektif),
-            'ASSESMENT': ClinicalNote.cleanPropertyForDb(assesment),
-            'PLANNING': ClinicalNote.cleanPropertyForDb(planning),
+            'SUBYEKTIF': ClinicalNote.cleanPropertyForDb(fields.subyektif),
+            'OBYEKTIF': ClinicalNote.cleanPropertyForDb(fields.obyektif),
+            'ASSESMENT': ClinicalNote.cleanPropertyForDb(fields.assesment),
+            'PLANNING': ClinicalNote.cleanPropertyForDb(fields.planning),
             'INSTRUKSI': ClinicalNote.cleanPropertyForDb(note.content.instruction || ''),
             'KUNJUNGAN': note.recId,
             'TANGGAL': timestamp,
@@ -453,37 +517,14 @@ class SoediranClinicalNotesContext extends BaseClinicalNotesContext {
     async amend(note) {
         if (!(note instanceof ClinicalNote)) throw new Error('Not a clinical note.')
 
-        let subyektif, obyektif, assesment, planning
-
-        switch (note.type) {
-            case ClinicalNote.TYPES.SBAR:
-                subyektif = note.content.situation || ''
-                obyektif = note.content.background || ''
-                assesment = note.content.assessment || ''
-                planning = note.content.recommendation || ''
-                break
-            case ClinicalNote.TYPES.ADIME:
-                subyektif = note.content.assessment || ''
-                obyektif = note.content.diagnosis || ''
-                assesment = note.content.intervention || ''
-                planning = [note.content.monitoring, note.content.evaluation]
-                    .filter(Boolean)
-                    .join('\n\n')
-                break
-            default: // SOAP
-                subyektif = note.content.subjective || ''
-                obyektif = note.content.objective || ''
-                assesment = note.content.assessment || ''
-                planning = note.content.planning || ''
-                break
-        }
+        const fields = this.preparePayloadFromNoteType(note.type, note.content)
 
         const payload = {
             'ID': parseInt(note.id),
-            'SUBYEKTIF': ClinicalNote.cleanPropertyForDb(subyektif),
-            'OBYEKTIF': ClinicalNote.cleanPropertyForDb(obyektif),
-            'ASSESMENT': ClinicalNote.cleanPropertyForDb(assesment),
-            'PLANNING': ClinicalNote.cleanPropertyForDb(planning),
+            'SUBYEKTIF': ClinicalNote.cleanPropertyForDb(fields.subyektif),
+            'OBYEKTIF': ClinicalNote.cleanPropertyForDb(fields.obyektif),
+            'ASSESMENT': ClinicalNote.cleanPropertyForDb(fields.assesment),
+            'PLANNING': ClinicalNote.cleanPropertyForDb(fields.planning),
             'INSTRUKSI': ClinicalNote.cleanPropertyForDb(note.content.instruction || ''),
             'TANGGAL': note.timestamp || '',
             'STATUS_SBAR': note.type === ClinicalNote.TYPES.SBAR ? 1 : 0,

@@ -118,6 +118,8 @@ export class ApiBase {
     async syncUserData(targetDomain, session) { throw new Error('Not implemented') }
     // @ts-ignore
     async handleFetch(hid, targetDomain, payload, docGroups, roomGroups, session, onProgress) { throw new Error('Not implemented') }
+    // @ts-ignore
+    async fetchPatientStatus(targetDomain, session, mrn, recId) { throw new Error('Not implemented') }
     /**
      * @param {string} wardType 
      * @returns {string[] | null[]}

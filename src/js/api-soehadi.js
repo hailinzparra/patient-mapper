@@ -166,6 +166,13 @@ class ApiSoehadiClass extends ApiBase {
         }
         return results
     }
+    /**
+     * @returns {Promise<{ dx: string|null, bedName: string|null, docId: string|null, admDate: string|null, disDate: string|null, isStillActive: boolean }>}
+     */
+    async fetchPatientStatus(targetDomain, session, mrn, recId) {
+        // Implement when endpoint contracts are ready
+        return super.fetchPatientStatus(targetDomain, session, mrn, recId)
+    }
     getWardTypeList(wardType) {
         switch (wardType) {
             case 'in':
