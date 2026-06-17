@@ -127,6 +127,13 @@ export const Utils = {
             hour12: false,
         }).format(d).replace(',', '')
     },
+    formatLeadingZeros(val, pad = 3) {
+        const numStr = String(val)
+        if (numStr.startsWith('-')) {
+            return '-' + numStr.slice(1).padStart(pad, '0')
+        }
+        return numStr.padStart(pad, '0')
+    },
     toLocalISOString(date = new Date()) {
         if (!(date instanceof Date) || isNaN(date.getTime())) {
             throw new Error('Invalid Date object provided')

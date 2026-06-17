@@ -3506,7 +3506,7 @@ class NotesSlideOutRenderer {
             const { datePart, timePart } = this.getTimestampParts(note.timestamp)
 
             // --- BUTTONS & TOGGLE WRAPPER ---
-            const actionContainer = c('div', { classes: 'flex gap-1 items-center ml-1' })
+            const actionContainer = c('div', { classes: 'flex gap-1 items-center ml-auto' })
 
             const btnDup = c('button', {
                 classes: `text-white bg-emerald-500/40 hover:bg-emerald-500/60 border-emerald-500/50 ${actBtnClasses} note-duplicate-btn`, text: 'Dup'
@@ -3590,7 +3590,7 @@ class NotesSlideOutRenderer {
             // --- STRUCTURAL LAYOUT BUILD ---
             const noteCard = c('div', { classes: 'note-card bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col mb-4' }, [
                 // UNIFIED STICKY HEADER (Contains: Creator Info, Role Badge, ID & Controls)
-                c('div', { classes: `px-4 py-2 flex justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm overflow-hidden` }, [
+                c('div', { classes: `px-4 py-2 flex flex-wrap gap-y-1 justify-between items-center ${badgeColor} sticky -top-3 z-10 rounded-t-lg shadow-sm overflow-hidden` }, [
                     c('div', { classes: 'flex flex-col' }, [
                         c('h4', { classes: 'text-white text-[11px] font-black tracking-wide line-clamp-1', text: note.creator.name }),
                         c('div', { classes: 'flex items-center gap-1 opacity-90' }, [
@@ -3663,8 +3663,9 @@ class NotesSlideOutRenderer {
                 btn.onclick = null
             })
         }
-        if (this.createBtn) this.createBtn.onclick = null
-        if (this.closeBtn) this.closeBtn.onclick = null
+        // fix unclickable create and close button because it initiated outside the scope
+        // if (this.createBtn) this.createBtn.onclick = null
+        // if (this.closeBtn) this.closeBtn.onclick = null
         this.container = null
         this.body = null
         this.createBtn = null

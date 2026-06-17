@@ -200,12 +200,16 @@ class ApiSoediranClass extends ApiBase {
                 const myVisit = result.data.find(item => item.NOMOR === recId)
                 if (myVisit) {
                     const a = myVisit.REFERENSI
+                    const rawQueueNum = Utils.getValidValue(a?.PENDAFTARAN?.TUJUAN?.REFERENSI?.ANTRIAN?.NOMOR, null)
+                    const queueNum = (rawQueueNum !== null && !isNaN(rawQueueNum) && rawQueueNum !== '')
+                        ? Utils.formatLeadingZeros(rawQueueNum)
+                        : rawQueueNum
                     return {
                         // Extracting critical shifting parameters matching createPatientFromApiItem structure
                         dx: myVisit.DIAGNOSAMASUK?.REFERENSI?.DIAGNOSA
                             ? `${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.CODE, '??')} - ${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.STR, '??')}`
                             : null,
-                        bedName: Utils.getValidValue(a?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR, null),
+                        bedName: Utils.getValidValue(a?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR, null) || queueNum,
                         docId: Utils.getValidValue(a?.DPJP?.ID, null),
                         admDate: Utils.getValidValue(myVisit.MASUK, null),
                         disDate: Utils.getValidValue(myVisit.KELUAR, null),
@@ -267,6 +271,11 @@ class ApiSoediranClass extends ApiBase {
             : c?.JENIS_KELAMIN == '1' ? Patient.MALE : null
         const v = Utils.getValidValue
 
+        const rawQueueNum = v(b?.TUJUAN?.REFERENSI?.ANTRIAN?.NOMOR, null)
+        const queueNum = (rawQueueNum !== null && !isNaN(rawQueueNum) && rawQueueNum !== '')
+            ? Utils.formatLeadingZeros(rawQueueNum)
+            : rawQueueNum
+
         return new Patient({
             hid: hid,
             recId: v(item?.NOMOR, null),
@@ -276,7 +285,7 @@ class ApiSoediranClass extends ApiBase {
             gender: v(g, null),
             dx: d ? `${v(d.CODE, '??')} - ${v(d.STR, '??')}` : null,
             roomId: v(item?.RUANGAN, null),
-            bedName: v(a?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR, null),
+            bedName: v(a?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR, null) || queueNum,
             docId: v(a?.DPJP?.ID, null),
             admDate: v(item?.MASUK, null),
             disDate: v(item?.KELUAR, null),
@@ -719,9 +728,10 @@ export const SOEDIRAN_DATABASE = {
         { name: 'drg. Qumara', id: '106' },
     ],
     roomDatabase: [
+        { name: 'Poli Mata', id: '101010102' },
         { name: 'Poli Dalam', id: '101010104' },
         { name: 'Poli Anak', id: '101010107' },
-        { name: 'Poli Syaraf', id: '101010111' },
+        { name: 'Poli Saraf', id: '101010111' },
         { name: 'Poli Jantung', id: '101010114' },
         { name: 'Poli Kebidanan dan Kandungan', id: '101010116' },
         { name: 'Poli VCT', id: '101010122' },
