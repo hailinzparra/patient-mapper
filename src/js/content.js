@@ -222,7 +222,11 @@
         document.addEventListener('mousedown', allowSelectionOverride, true)
 
         const initEngine = async () => {
-            const settingsDriver = new VaultDriver('settings')
+            const settingsDriver = new VaultDriver('settings', {
+                devMode: false,
+                allowCopy: true,
+                showPrice: true,
+            })
 
             await settingsDriver.load()
             activeSettings = settingsDriver.data
