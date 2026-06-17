@@ -65,6 +65,8 @@ const G = {
         }),
         settings: new VaultDriver('settings', {
             devMode: false,
+            allowCopy: true,
+            showPrice: true,
             activeHospitalId: 0,
             activeDomainIndex: 0,
             isSidebarCollapsed: false,
@@ -118,6 +120,7 @@ const G = {
         growthChartBtn: null,
         pregnancyWheelBtn: null,
         calculatorBtn: null,
+        contentSettingsBtn: null,
         devModeBtn: null,
         checkReleasesBtn: null,
         // Collapsible list / Accordion components
@@ -155,6 +158,7 @@ const G = {
             this.growthChartBtn = document.getElementById('sidebar-growth-chart')
             this.pregnancyWheelBtn = document.getElementById('sidebar-pregnancy-wheel')
             this.calculatorBtn = document.getElementById('sidebar-calculator')
+            this.contentSettingsBtn = document.getElementById('sidebar-content-settings')
             this.devModeBtn = document.getElementById('sidebar-dev-mode')
             this.checkReleasesBtn = document.getElementById('sidebar-check-releases')
             this.myPatientsCollapsedBadge = document.getElementById('sidebar-my-patients-collapsed-badge')
@@ -333,6 +337,96 @@ const G = {
                     showCancelButton: true,
                     focusConfirm: false,
                 })
+            })
+
+            this.contentSettingsBtn.addEventListener('click', async () => {
+                await G.store.settings.load()
+                const currentSettings = G.store.settings.data
+                const c = Utils.DOM.createElement
+
+                const settingsBody = c('div')
+                const settingsDOMElement = c('div', { classes: 'p-2 bg-white rounded-xl text-start' }, [
+                    settingsBody,
+                ])
+
+                const createSubHeader = (text) => c('div', {
+                    classes: 'text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-4 mb-2 border-b border-slate-100 pb-1'
+                }, [c('span', { text })])
+
+                const createToggleRow = (id, title, subtitle, isChecked) => {
+                    const checkbox = c('input', { attrs: { id: id, type: 'checkbox' }, classes: 'w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500' })
+                    checkbox.checked = isChecked
+
+                    return c('label', { classes: 'flex items-center justify-between border-b border-slate-100 pb-2 mb-2', attrs: { for: id } }, [
+                        c('div', { classes: 'flex flex-col' }, [
+                            c('span', { classes: 'text-[10px] font-bold text-slate-700', text: title }),
+                            c('span', { classes: 'text-[8px] font-medium text-slate-400', text: subtitle }),
+                        ]),
+                        checkbox,
+                    ])
+                }
+
+                const soediranHeader = createSubHeader('Soediran Settings')
+                const devHeader = createSubHeader('Developer Settings')
+
+                const toggleCopyRow = createToggleRow('swal-csettings-allow-copy', 'Allow Text Selection', 'Allow copy text easily.', currentSettings.allowCopy === true)
+                const togglePriceRow = createToggleRow('swal-csettings-show-price', 'Display Price', 'Show or hide some item prices.', currentSettings.showPrice === true)
+                const toggleDevModeRow = createToggleRow('swal-csettings-show-dev-mode', 'Developer Logs', 'Traces background logs live below.', currentSettings.devMode === true)
+
+                const devModeBeaconContainer = c('div', { id: 'swal-beacon-container', classes: 'mt-2' })
+
+                const settingsWrapper = c('div', { classes: 'relative' }, [
+                    soediranHeader,
+                    toggleCopyRow,
+                    togglePriceRow,
+                    devHeader,
+                    toggleDevModeRow,
+                    devModeBeaconContainer,
+                ])
+
+                settingsBody.append(settingsWrapper)
+
+                const toggleDevBeaconUi = (isActive) => {
+                    if (isActive) {
+                        devModeBeaconContainer.className = 'max-h-32 text-start overflow-y-auto border border-slate-100 rounded p-1.5'
+                        devModeBeaconContainer.innerHTML = ''
+                        if (typeof Beacon !== 'undefined') Beacon.render(devModeBeaconContainer)
+                    } else {
+                        devModeBeaconContainer.className = 'bg-[#1e1e1e] text-gray-400 font-mono text-[9px] py-2 px-2 text-center rounded'
+                        devModeBeaconContainer.innerHTML = '<div>Developer mode offline. Logs closed.</div>'
+                    }
+                }
+                toggleDevBeaconUi(currentSettings.devMode === true)
+
+                toggleDevModeRow.querySelector('input').addEventListener('change', (e) => {
+                    toggleDevBeaconUi(e.target.checked)
+                })
+
+                const dialogResult = await G.swal.fire({
+                    title: 'Patient Mapper Settings',
+                    html: settingsDOMElement,
+                    showCancelButton: true,
+                    confirmButtonText: 'Save Settings',
+                    cancelButtonText: 'Close',
+                    preConfirm: () => {
+                        return {
+                            allowCopy: document.getElementById('swal-csettings-allow-copy').checked,
+                            showPrice: document.getElementById('swal-csettings-show-price').checked,
+                            devMode: document.getElementById('swal-csettings-show-dev-mode').checked,
+                        }
+                    }
+                })
+
+                if (dialogResult.isConfirmed && dialogResult.value) {
+                    const payload = dialogResult.value
+
+                    await G.store.settings.update(payload)
+                    G.ui.swalSuccessShort('Settings updated!')
+
+                    if (payload.devMode && typeof Beacon !== 'undefined' && !Beacon.isActive) {
+                        Beacon.init()
+                    }
+                }
             })
 
             this.devModeBtn.addEventListener('click', async () => {

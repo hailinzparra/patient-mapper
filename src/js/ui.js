@@ -2459,7 +2459,7 @@ export class MyPatientsRenderer {
 
         const result = await this.G.swal.fire({
             title: `<div class="flex flex-col gap-2 border-b border-slate-100 pb-2 text-left"><div class="truncate text-slate-700 font-black text-xs uppercase tracking-widest">${modalTitle}</div>`
-                + `<div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100/80 px-2 py-0.5 rounded text-[10px] text-emerald-700 font-semibold shrink-0"><div class="min-w-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div><span class="truncate line-clamp-1">AS: <strong>${userDisplayName}</strong> <span class="opacity-60">(${userStaffId})</span></span></div></div>`,
+                + `<div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100/80 px-2 py-0.5 rounded text-[10px] text-emerald-700 font-semibold shrink-0"><div class="min-w-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div><span class="truncate line-clamp-1">AS: <strong>${userDisplayName}</strong> <span class="opacity-60">(ID: ${userStaffId})</span></span></div></div>`,
             html: `
 <div class="text-left space-y-4 px-1 relative max-h-[60vh] overflow-y-auto">
     <div class="pb-2 border-b border-slate-50 sticky top-0 bg-white z-10">

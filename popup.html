@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Patient Mapper v3.7.1</title>
+        <title>Patient Mapper v3.7.2</title>
         <script src="/src/js/beacon.js"></script>
         <script src="/src/js/lib/tailwind.min.js"></script>
         <script src="/src/js/lib/lz-string.min.js"></script>
@@ -362,11 +362,11 @@
                                 </button>
                                 <button
                                     id="sidebar-dev-mode"
-                                    class="nav-item w-full flex items-center px-3 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-md transition-all cursor-pointer"
+                                    class="nav-item w-full flex items-center px-3 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-md transition-all cursor-pointer hidden"
                                 >
                                     <span
                                         class="nav-text whitespace-nowrap truncate"
-                                        >Developer Mode</span
+                                        >DevMode (moved to settings)</span
                                     >
                                 </button>
                                 <button
@@ -376,6 +376,15 @@
                                     <span
                                         class="nav-text whitespace-nowrap truncate"
                                         >Check New Releases</span
+                                    >
+                                </button>
+                                <button
+                                    id="sidebar-content-settings"
+                                    class="nav-item w-full flex items-center px-3 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-md transition-all cursor-pointer"
+                                >
+                                    <span
+                                        class="nav-text whitespace-nowrap truncate"
+                                        >Settings</span
                                     >
                                 </button>
                             </div>
