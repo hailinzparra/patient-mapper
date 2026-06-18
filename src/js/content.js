@@ -1,6 +1,7 @@
 (async () => {
     try {
         const api = typeof browser !== 'undefined' ? browser : chrome
+        const __DEBOUNCE_TIME = 250
 
         let contentEngine = null
         const startEngine = () => {
@@ -55,7 +56,7 @@
                         window.requestAnimationFrame(() => {
                             this.updateOnDebounce()
                         })
-                    }, 250)
+                    }, __DEBOUNCE_TIME)
                 })
                 this.observer.observe(document.body, { childList: true, subtree: true, characterData: true })
             }
@@ -300,6 +301,9 @@
                     }
 
                     if (existingSummary && existingSummary.dataset.summaryState === expectedSummaryState) {
+                        if (activeTableScroller.lastChild !== existingSummary) {
+                            activeTableScroller.appendChild(existingSummary)
+                        }
                         return
                     }
 
