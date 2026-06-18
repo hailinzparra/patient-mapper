@@ -1,26 +1,38 @@
 {
     "manifest_version": 3,
-    "name": "Patient Mapper v3.7.5",
-    "version": "3.7.5",
+    "name": "Patient Mapper v3.7.6",
+    "version": "3.7.6",
     "description": "Maps hospital patients.",
     "permissions": ["tabs", "storage", "scripting", "activeTab"],
     "host_permissions": [
         "https://api.rsudsoediranms.com/*",
         "https://apirssoehadi.sragenkab.go.id/*",
+        "http://192.168.13.3/*",
+        "http://192.168.13.4/*",
+        "http://192.168.13.5/*",
         "http://192.168.13.6/*",
         "http://192.168.13.7/*",
-        "http://192.168.13.8/*"
+        "http://192.168.13.8/*",
+        "http://192.168.13.9/*",
+        "http://192.168.13.10/*",
+        "http://172.166.182.12/*"
     ],
     "content_scripts": [
         {
             "matches": [
                 "https://api.rsudsoediranms.com/*",
                 "https://apirssoehadi.sragenkab.go.id/*",
+                "http://192.168.13.3/*",
+                "http://192.168.13.4/*",
+                "http://192.168.13.5/*",
                 "http://192.168.13.6/*",
                 "http://192.168.13.7/*",
-                "http://192.168.13.8/*"
+                "http://192.168.13.8/*",
+                "http://192.168.13.9/*",
+                "http://192.168.13.10/*",
+                "http://172.166.182.12/*"
             ],
-            "js": ["/src/js/content.js"],
+            "js": ["/src/js/database.min.js", "/src/js/content.js"],
             "run_at": "document_end"
         }
     ],

@@ -366,7 +366,7 @@ const G = {
                     ])
                 }
 
-                const soediranHeader = createSubHeader('Soediran Settings')
+                const soediranHeader = createSubHeader('Soediran Content Settings')
                 const devHeader = createSubHeader('Developer Settings')
 
                 const toggleCopyRow = createToggleRow('swal-csettings-allow-copy', 'Allow Text Selection', 'Allow copy text easily.', currentSettings.allowCopy === true)
@@ -403,7 +403,7 @@ const G = {
                 })
 
                 const dialogResult = await G.swal.fire({
-                    title: 'Patient Mapper Settings',
+                    title: 'Extension Settings',
                     html: settingsDOMElement,
                     showCancelButton: true,
                     confirmButtonText: 'Save Settings',
@@ -460,8 +460,18 @@ const G = {
                 }
             })
 
-            this.checkReleasesBtn.addEventListener('click', () => {
-                window.open('https://github.com/hailinzparra/patient-mapper/releases', '_blank', 'noopener,noreferrer')
+            this.checkReleasesBtn.addEventListener('click', async () => {
+                const confirmText = `Check New Releases`
+                const dialogResult = await G.swal.fire({
+                    title: confirmText,
+                    html: `<div class="text-sm text-gray-500 mt-2">This will open the download page in a new tab.</div>`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Open Page',
+                })
+
+                if (dialogResult.isConfirmed) {
+                    window.open('https://github.com/hailinzparra/patient-mapper/releases', '_blank', 'noopener,noreferrer')
+                }
             })
 
             this.myPatientsListsContainer.addEventListener('click', (e) => {
