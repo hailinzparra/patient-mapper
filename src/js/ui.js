@@ -1850,6 +1850,97 @@ export class MyPatientsRenderer {
             this.buildListContainerDOM()
         }
     }
+    getUserId() {
+        return hospitalContext?.session?.data?.userData?.staffId
+    }
+    isPIC(docId) {
+        const currentUserId = this.getUserId()
+        if (!docId || !currentUserId) return false
+        return String(docId).trim() === String(currentUserId).trim()
+    }
+    getCurrentDateTime() {
+        const now = new Date()
+        const pad = (num) => String(num).padStart(2, '0')
+
+        const year = now.getFullYear()
+        const month = pad(now.getMonth() + 1)
+        const day = pad(now.getDate())
+        const hours = pad(now.getHours())
+        const minutes = pad(now.getMinutes())
+        const seconds = pad(now.getSeconds())
+
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    }
+    async addVisite(kunjunganId) {
+        if (!kunjunganId) {
+            console.error('addVisite requires a valid KUNJUNGAN ID.')
+            return null
+        }
+
+        const payload = {
+            ID: "data.model.TindakanMedis-2",
+            KUNJUNGAN: kunjunganId,
+            TINDAKAN: 8393,
+            TANGGAL: this.getCurrentDateTime(),
+            VERIFIKASI: 0,
+            VERIFIKASI_OLEH: 0,
+            VERIFIKASI_TANGGAL: null,
+            OLEH: 0,
+            STATUS: 1,
+            SIMPAN: true
+        }
+
+        const dc = Date.now()
+        const url = `${hospitalContext.activeDomain}${hospitalContext.activeDriver.PATHS.BASE}/layanan/tindakanmedis?_dc=${dc}`
+
+        try {
+            const requestOptions = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }
+
+            const result = await hospitalContext.activeDriver.apiRequest(url, hospitalContext.session.data, requestOptions)
+            return result?.data || result
+        } catch (err) {
+            console.error('Failed to post tindakan medis:', err)
+            throw err
+        }
+    }
+    async addVerification(kunjunganId) {
+        if (!kunjunganId) {
+            console.error('addVerification requires a valid KUNJUNGAN ID.')
+            return null
+        }
+
+        const payload = {
+            KUNJUNGAN: kunjunganId,
+            STATUS: 1,
+            BATAS_TANGGAL: this.getCurrentDateTime(),
+            ID: "rekammedis.cppt.verifikasi.Model-4",
+            OLEH: 0
+        }
+
+        const dc = Date.now()
+        const url = `${hospitalContext.activeDomain}${hospitalContext.activeDriver.PATHS.BASE}/medicalrecord/cppt/verifikasi?_dc=${dc}`
+
+        try {
+            const requestOptions = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }
+
+            const result = await hospitalContext.activeDriver.apiRequest(url, hospitalContext.session.data, requestOptions)
+            return result?.data || result
+        } catch (err) {
+            console.error('Failed to post CPPT verification:', err)
+            throw err
+        }
+    }
+    // ==========================================
+    // MODAL & HANDLER METHODS
+    // ==========================================
     async openServicesModal(patientInstance) {
         const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
         const ui = p.getUIDisplayData() || {}
@@ -1873,12 +1964,12 @@ export class MyPatientsRenderer {
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Add Service',
                 cancelButtonText: 'Cancel',
-                confirmButtonColor: '#2563eb' // Tailwind blue-600
+                confirmButtonColor: '#2563eb'
             })
 
             if (confirmService.isConfirmed) {
                 try {
-                    await window.addVisite({ KUNJUNGAN: p.recId })
+                    await this.addVisite(p.recId)
                     this.G.ui.swalSuccessShort('Service added successfully!')
                 } catch (err) {
                     console.error('Error adding service:', err)
@@ -1889,7 +1980,7 @@ export class MyPatientsRenderer {
             const confirmMessage = `Are you sure you want to add medical service for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
             if (window.confirm(confirmMessage)) {
                 try {
-                    await window.addVisite({ KUNJUNGAN: p.recId })
+                    await this.addVisite(p.recId)
                     alert('Service added successfully!')
                 } catch (err) {
                     console.error('Error adding service:', err)
@@ -1897,14 +1988,6 @@ export class MyPatientsRenderer {
                 }
             }
         }
-    }
-    getUserId() {
-        return hospitalContext?.session?.data?.userData?.staffId
-    }
-    isPIC(docId) {
-        const currentUserId = this.getUserId()
-        if (!docId || !currentUserId) return false
-        return String(docId).trim() === String(currentUserId).trim()
     }
     async verifyPatient(patientInstance) {
         const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
@@ -1940,12 +2023,12 @@ export class MyPatientsRenderer {
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Verify',
                 cancelButtonText: 'Cancel',
-                confirmButtonColor: '#059669' // Tailwind emerald-600
+                confirmButtonColor: '#059669'
             })
 
             if (confirmVerify.isConfirmed) {
                 try {
-                    await window.addVerification({ KUNJUNGAN: p.recId })
+                    await this.addVerification(p.recId)
                     this.G.ui.swalSuccessShort('CPPT verified successfully!')
                 } catch (err) {
                     console.error('Error verifying CPPT:', err)
@@ -1956,7 +2039,7 @@ export class MyPatientsRenderer {
             const confirmMessage = `Are you sure you want to verify CPPT for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
             if (window.confirm(confirmMessage)) {
                 try {
-                    await window.addVerification({ KUNJUNGAN: p.recId })
+                    await this.addVerification(p.recId)
                     alert('CPPT verified successfully!')
                 } catch (err) {
                     console.error('Error verifying CPPT:', err)
