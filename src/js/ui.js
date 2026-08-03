@@ -1421,8 +1421,20 @@ export class MyPatientsRenderer {
         const ui = p.getUIDisplayData() || {}
         const apiSettings = hospitalContext.getHospitalById(p.hid).driver.SETTINGS
         const canOpenDetails = apiSettings.patients.canOpenDetails
+        const canAddServices = apiSettings.patients.canAddServices
+        const canVerify = apiSettings.patients.canVerify && this.isPIC(p.docId)
 
         const createBaseButtons = () => {
+            // 1. Top Button: Services (Subtle blue -> Solid blue on hover)
+            const btnServices = c('button', {
+                classes: 'patient-services-btn px-2 py-0.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white text-[9px] font-bold rounded-lg transition-all shadow-xs'
+            }, [
+                c('span', { text: 'Services' })
+            ])
+            btnServices.addEventListener('click', () => this.openServicesModal(p))
+            if (!canAddServices) btnServices.classList.add('hidden')
+
+            // 2. Middle-Left: Open Details
             const btnOpenDetails = c('button', { classes: 'patient-open-details-btn p-2 bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white rounded-lg transition-all' }, [
                 c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                     c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' } }),
@@ -1431,6 +1443,7 @@ export class MyPatientsRenderer {
             btnOpenDetails.addEventListener('click', () => this.openPatientWorkspaceTab(p))
             if (!canOpenDetails) btnOpenDetails.classList.add('hidden')
 
+            // 3. Middle-Right: Delete
             const btnDelete = c('button', { classes: 'patient-delete-btn p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all' }, [
                 c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                     c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' } }),
@@ -1438,7 +1451,16 @@ export class MyPatientsRenderer {
             ])
             btnDelete.addEventListener('click', () => this.promptDeletePatient(p.id, roomName))
 
-            return { btnOpenDetails, btnDelete }
+            // 4. Bottom Button: Verify (Subtle emerald -> Solid emerald on hover)
+            const btnVerify = c('button', {
+                classes: 'patient-verify-btn px-2 py-0.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white text-[9px] font-bold rounded-lg transition-all shadow-xs'
+            }, [
+                c('span', { text: 'Verify' })
+            ])
+            btnVerify.addEventListener('click', () => this.verifyPatient(p))
+            if (!canVerify) btnVerify.classList.add('hidden')
+
+            return { btnServices, btnOpenDetails, btnDelete, btnVerify }
         }
 
         let genderColorClass = 'text-slate-400'
@@ -1487,7 +1509,7 @@ export class MyPatientsRenderer {
         // ==========================================
         // BRANCH B: FULL VIEW
         // ==========================================
-        const { btnOpenDetails, btnDelete } = createBaseButtons()
+        const { btnServices, btnOpenDetails, btnDelete, btnVerify } = createBaseButtons()
         const btnNotes = c('button', { classes: 'patient-notes-btn p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all' }, [
             c('svg', { attrs: { class: 'w-3.5 h-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' } }, [
                 c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2.5', d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' } }),
@@ -1529,10 +1551,18 @@ export class MyPatientsRenderer {
             ]),
         ])
 
+        const mainButtonsCol = c('div', { classes: 'flex flex-col items-stretch gap-1' }, [
+            btnServices,
+            c('div', { classes: 'flex items-center gap-1 justify-center' }, [
+                btnOpenDetails,
+                btnNotes,
+                btnDelete,
+            ]),
+            btnVerify,
+        ])
+
         const actionBlock = c('div', { classes: 'flex items-center gap-1' }, [
-            btnOpenDetails,
-            btnNotes,
-            btnDelete,
+            mainButtonsCol,
             c('div', { classes: 'flex flex-col gap-0.5 ml-1' }, [
                 btnPatientUp,
                 btnPatientDown,
@@ -1818,6 +1848,121 @@ export class MyPatientsRenderer {
 
         if (this.patientList.patients.length === 0) {
             this.buildListContainerDOM()
+        }
+    }
+    async openServicesModal(patientInstance) {
+        const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
+        const ui = p.getUIDisplayData() || {}
+
+        // Check setting permission
+        const apiSettings = hospitalContext.getHospitalById(p.hid)?.driver?.SETTINGS
+        if (!apiSettings?.patients?.canAddServices) {
+            if (this.G?.ui?.swalErrorShort) {
+                this.G.ui.swalErrorShort('Permission denied: Cannot add services.')
+            } else {
+                alert('Permission denied: Cannot add services.')
+            }
+            return
+        }
+
+        if (this.G) {
+            const confirmService = await this.G.swal.fire({
+                icon: 'info',
+                title: 'Add Visite Service?',
+                html: `Are you sure you want to add medical service for <strong>"<span class="text-blue-600">${ui.name} (${ui.mrn})</span>"</strong>?`,
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Add Service',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#2563eb' // Tailwind blue-600
+            })
+
+            if (confirmService.isConfirmed) {
+                try {
+                    await window.addVisite({ KUNJUNGAN: p.recId })
+                    this.G.ui.swalSuccessShort('Service added successfully!')
+                } catch (err) {
+                    console.error('Error adding service:', err)
+                    this.G.ui.swalErrorShort('Failed to add service.')
+                }
+            }
+        } else {
+            const confirmMessage = `Are you sure you want to add medical service for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
+            if (window.confirm(confirmMessage)) {
+                try {
+                    await window.addVisite({ KUNJUNGAN: p.recId })
+                    alert('Service added successfully!')
+                } catch (err) {
+                    console.error('Error adding service:', err)
+                    alert('Failed to add service.')
+                }
+            }
+        }
+    }
+    getUserId() {
+        return hospitalContext?.session?.data?.userData?.staffId
+    }
+    isPIC(docId) {
+        const currentUserId = this.getUserId()
+        if (!docId || !currentUserId) return false
+        return String(docId).trim() === String(currentUserId).trim()
+    }
+    async verifyPatient(patientInstance) {
+        const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
+        const ui = p.getUIDisplayData() || {}
+
+        // 1. Check setting permission
+        const apiSettings = hospitalContext.getHospitalById(p.hid)?.driver?.SETTINGS
+        if (!apiSettings?.patients?.canVerify) {
+            if (this.G?.ui?.swalErrorShort) {
+                this.G.ui.swalErrorShort('Permission denied: Cannot verify.')
+            } else {
+                alert('Permission denied: Cannot verify.')
+            }
+            return
+        }
+
+        // 2. Check PIC permission
+        const canActuallyVerify = this.isPIC(p.docId)
+        if (!canActuallyVerify) {
+            if (this.G?.ui?.swalErrorShort) {
+                this.G.ui.swalErrorShort('Verification allowed only for Person In Charge (PIC).')
+            } else {
+                alert('Verification allowed only for Person In Charge (PIC).')
+            }
+            return
+        }
+
+        if (this.G) {
+            const confirmVerify = await this.G.swal.fire({
+                icon: 'question',
+                title: 'Verify CPPT?',
+                html: `Confirm verification for patient <strong>"<span class="text-emerald-600">${ui.name} (${ui.mrn})</span>"</strong>?`,
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Verify',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#059669' // Tailwind emerald-600
+            })
+
+            if (confirmVerify.isConfirmed) {
+                try {
+                    await window.addVerification({ KUNJUNGAN: p.recId })
+                    this.G.ui.swalSuccessShort('CPPT verified successfully!')
+                } catch (err) {
+                    console.error('Error verifying CPPT:', err)
+                    this.G.ui.swalErrorShort('Failed to verify CPPT.')
+                }
+            }
+        } else {
+            const confirmMessage = `Are you sure you want to verify CPPT for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
+            if (window.confirm(confirmMessage)) {
+                try {
+                    await window.addVerification({ KUNJUNGAN: p.recId })
+                    alert('CPPT verified successfully!')
+                } catch (err) {
+                    console.error('Error verifying CPPT:', err)
+                    alert('Failed to verify CPPT.')
+                }
+            }
         }
     }
     handleRoomMove(roomId, direction) {
