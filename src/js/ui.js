@@ -1429,7 +1429,7 @@ export class MyPatientsRenderer {
             const btnServices = c('button', {
                 classes: 'patient-services-btn px-2 py-0.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white text-[9px] font-bold rounded-lg transition-all shadow-xs'
             }, [
-                c('span', { text: 'Services' })
+                c('span', { text: 'Visite' })
             ])
             btnServices.addEventListener('click', () => this.openServicesModal(p))
             if (!canAddServices) btnServices.classList.add('hidden')
@@ -1871,6 +1871,9 @@ export class MyPatientsRenderer {
 
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
     }
+    irandom(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min
+    }
     async addVisite(kunjunganId) {
         if (!kunjunganId) {
             console.error('addVisite requires a valid KUNJUNGAN ID.')
@@ -1878,7 +1881,7 @@ export class MyPatientsRenderer {
         }
 
         const payload = {
-            ID: "data.model.TindakanMedis-2",
+            ID: `data.model.TindakanMedis-${this.irandom(1, 100)}`,
             KUNJUNGAN: kunjunganId,
             TINDAKAN: 8393,
             TANGGAL: this.getCurrentDateTime(),
@@ -1917,7 +1920,7 @@ export class MyPatientsRenderer {
             KUNJUNGAN: kunjunganId,
             STATUS: 1,
             BATAS_TANGGAL: this.getCurrentDateTime(),
-            ID: "rekammedis.cppt.verifikasi.Model-4",
+            ID: `rekammedis.cppt.verifikasi.Model-${irandom(1, 100)}`,
             OLEH: 0
         }
 
@@ -1960,7 +1963,7 @@ export class MyPatientsRenderer {
             const confirmService = await this.G.swal.fire({
                 icon: 'info',
                 title: 'Add Visite Service?',
-                html: `Are you sure you want to add medical service for <strong>"<span class="text-blue-600">${ui.name} (${ui.mrn})</span>"</strong>?`,
+                html: `Are you sure you want to add visite service for <strong>"<span class="text-blue-600">${ui.name} (${ui.mrn})</span>"</strong>?`,
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Add Service',
                 cancelButtonText: 'Cancel',
@@ -1968,16 +1971,32 @@ export class MyPatientsRenderer {
             })
 
             if (confirmService.isConfirmed) {
+                // Display non-dismissible loading indicator
+                this.G.swal.fire({
+                    title: 'Adding Service...',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        this.G.swal.showLoading()
+                    }
+                })
+
                 try {
                     await this.addVisite(p.recId)
                     this.G.ui.swalSuccessShort('Service added successfully!')
                 } catch (err) {
                     console.error('Error adding service:', err)
-                    this.G.ui.swalErrorShort('Failed to add service.')
+                    await this.G.ui.swalFatalError(
+                        err,
+                        'Add Service Failed',
+                        'The application encountered a fatal transaction error:',
+                    )
                 }
             }
         } else {
-            const confirmMessage = `Are you sure you want to add medical service for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
+            const confirmMessage = `Are you sure you want to add visite service for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
             if (window.confirm(confirmMessage)) {
                 try {
                     await this.addVisite(p.recId)
@@ -2027,12 +2046,28 @@ export class MyPatientsRenderer {
             })
 
             if (confirmVerify.isConfirmed) {
+                // Display non-dismissible loading indicator
+                this.G.swal.fire({
+                    title: 'Verifying CPPT...',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showCloseButton: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        this.G.swal.showLoading()
+                    }
+                })
+
                 try {
                     await this.addVerification(p.recId)
                     this.G.ui.swalSuccessShort('CPPT verified successfully!')
                 } catch (err) {
                     console.error('Error verifying CPPT:', err)
-                    this.G.ui.swalErrorShort('Failed to verify CPPT.')
+                    await this.G.ui.swalFatalError(
+                        err,
+                        'Verification Failed',
+                        'The application encountered a fatal transaction error:',
+                    )
                 }
             }
         } else {
@@ -2219,7 +2254,7 @@ export class MyPatientsRenderer {
 
         if (statusLabel) statusLabel.textContent = ui.status
 
-        if (p.status === Patient.STATUS.ACTIVE) {
+        if (ui.status === Patient.STATUS.ACTIVE) {
             if (statusPill) statusPill.className = 'flex items-center border px-2 py-0.5 rounded-full js-status-pill bg-emerald-50 border-emerald-100'
             if (statusDot) statusDot.className = 'w-1.5 h-1.5 rounded-full mr-1.5 js-status-dot bg-emerald-500 animate-pulse'
             if (statusLabel) statusLabel.className = 'text-[8px] font-black tracking-tight js-status-label text-emerald-600'

@@ -206,11 +206,13 @@ class ApiSoediranClass extends ApiBase {
                     const queueNum = (rawQueueNum !== null && !isNaN(rawQueueNum) && rawQueueNum !== '')
                         ? Utils.formatLeadingZeros(rawQueueNum)
                         : rawQueueNum
+                    const rawDx = a?.PENDAFTARAN?.REFERENSI?.DIAGNOSAUTAMA?.DIAGNOSA ? Utils.getValidValue(a?.PENDAFTARAN?.REFERENSI?.DIAGNOSAUTAMA?.DIAGNOSA) : null
+                    const icdDx = myVisit.DIAGNOSAMASUK?.REFERENSI?.DIAGNOSA
+                        ? `${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.CODE, '??')} - ${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.STR, '??')}`
+                        : null
                     return {
                         // Extracting critical shifting parameters matching createPatientFromApiItem structure
-                        dx: myVisit.DIAGNOSAMASUK?.REFERENSI?.DIAGNOSA
-                            ? `${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.CODE, '??')} - ${Utils.getValidValue(myVisit.DIAGNOSAMASUK.REFERENSI.DIAGNOSA.STR, '??')}`
-                            : null,
+                        dx: rawDx ? rawDx : (icdDx ? icdDx : null),
                         bedName: Utils.getValidValue(a?.RUANG_KAMAR_TIDUR?.TEMPAT_TIDUR, null) || queueNum,
                         docId: Utils.getValidValue(a?.DPJP?.ID, null),
                         admDate: Utils.getValidValue(myVisit.MASUK, null),
