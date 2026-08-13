@@ -1920,7 +1920,7 @@ export class MyPatientsRenderer {
             KUNJUNGAN: kunjunganId,
             STATUS: 1,
             BATAS_TANGGAL: this.getCurrentDateTime(),
-            ID: `rekammedis.cppt.verifikasi.Model-${irandom(1, 100)}`,
+            ID: `rekammedis.cppt.verifikasi.Model-${this.irandom(1, 100)}`,
             OLEH: 0
         }
 
@@ -1937,7 +1937,7 @@ export class MyPatientsRenderer {
             const result = await hospitalContext.activeDriver.apiRequest(url, hospitalContext.session.data, requestOptions)
             return result?.data || result
         } catch (err) {
-            console.error('Failed to post CPPT verification:', err)
+            console.error('Failed to post notes verification:', err)
             throw err
         }
     }
@@ -2037,7 +2037,7 @@ export class MyPatientsRenderer {
         if (this.G) {
             const confirmVerify = await this.G.swal.fire({
                 icon: 'question',
-                title: 'Verify CPPT?',
+                title: 'Verify notes?',
                 html: `Confirm verification for patient <strong>"<span class="text-emerald-600">${ui.name} (${ui.mrn})</span>"</strong>?`,
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Verify',
@@ -2048,7 +2048,7 @@ export class MyPatientsRenderer {
             if (confirmVerify.isConfirmed) {
                 // Display non-dismissible loading indicator
                 this.G.swal.fire({
-                    title: 'Verifying CPPT...',
+                    title: 'Verifying notes...',
                     allowOutsideClick: false,
                     allowEscapeKey: false,
                     showCloseButton: false,
@@ -2060,9 +2060,9 @@ export class MyPatientsRenderer {
 
                 try {
                     await this.addVerification(p.recId)
-                    this.G.ui.swalSuccessShort('CPPT verified successfully!')
+                    this.G.ui.swalSuccessShort('Notes verified successfully!')
                 } catch (err) {
-                    console.error('Error verifying CPPT:', err)
+                    console.error('Error verifying notes:', err)
                     await this.G.ui.swalFatalError(
                         err,
                         'Verification Failed',
@@ -2071,14 +2071,14 @@ export class MyPatientsRenderer {
                 }
             }
         } else {
-            const confirmMessage = `Are you sure you want to verify CPPT for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
+            const confirmMessage = `Are you sure you want to verify notes for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
             if (window.confirm(confirmMessage)) {
                 try {
                     await this.addVerification(p.recId)
-                    alert('CPPT verified successfully!')
+                    alert('Notes verified successfully!')
                 } catch (err) {
-                    console.error('Error verifying CPPT:', err)
-                    alert('Failed to verify CPPT.')
+                    console.error('Error verifying notes:', err)
+                    alert('Failed to verify notes.')
                 }
             }
         }
@@ -2648,6 +2648,12 @@ export class MyPatientsRenderer {
             notesBody.classList.add('flex', 'flex-col', 'justify-center')
             notesBody.appendChild(errorDiv)
 
+            if (err?.message === 'CPPT tidak ditemukan') {
+                createBtn.classList.add('hover:bg-emerald-600', 'hover:text-white')
+                createBtn.classList.remove('opacity-50')
+                createBtn.disabled = false
+            }
+
             btnNotes.classList.add('hover:bg-blue-600', 'hover:text-white')
             btnNotes.classList.remove('opacity-50')
             btnNotes.disabled = false
@@ -2674,7 +2680,7 @@ export class MyPatientsRenderer {
      * @param {ClinicalNote['id'] | undefined} [options.targetNoteId]
      */
     async openNoteCreationModal(p, options = {}) {
-        const modalTitle = options.title || 'Create Note'
+        const modalTitle = (options.title || 'Create Note') + (p.name ? ` (${p.name})` : '')
         const modalConfirmButtonText = options.buttonText || 'Create Note'
         const modalLoadingText = options.loadingText || 'Creating note...'
         const modalSuccessText = options.successText || 'Note created successfully!'
@@ -2746,6 +2752,7 @@ export class MyPatientsRenderer {
             <button type="button" id="swal-note-btn-quick-0800" class="${cls.quickBtn}">08:00</button>
             <button type="button" id="swal-note-btn-quick-add-hour" class="${cls.quickBtn}">+1 Hour</button>
             <button type="button" id="swal-note-btn-quick-add-rand-min" class="${cls.quickBtn}">+15-30 Min</button>
+            <button type="button" id="swal-note-btn-quick-macro-today" class="${cls.quickBtn}">Today 🗲</button>
             <button type="button" id="swal-note-btn-quick-macro-tomorrow" class="${cls.quickBtn}">Tomorrow 🗲</button>
         </div>
     </div>
@@ -2830,13 +2837,22 @@ export class MyPatientsRenderer {
                     adjustTimeWithoutChangingDate(randomMinutes, randomSeconds)
                 }
 
+                document.getElementById('swal-note-btn-quick-macro-today').onclick = () => {
+                    if (!dateInput || !timeInput) return
+                    dateInput.value = formatISOWithoutZ(new Date())
+                    timeInput.value = '08:00:00'
+                    const randomMinutes = Math.floor(Math.random() * (30 - 15 + 1)) + 15
+                    const randomSeconds = Math.floor(Math.random() * 60)
+                    adjustTimeWithoutChangingDate(randomMinutes, randomSeconds)
+                }
+
                 document.getElementById('swal-note-btn-quick-macro-tomorrow').onclick = () => {
                     if (!dateInput || !timeInput) return
                     const targetDate = new Date()
                     targetDate.setDate(targetDate.getDate() + 1)
                     dateInput.value = formatISOWithoutZ(targetDate)
                     timeInput.value = '08:00:00'
-                    const randomMinutes = Math.floor(Math.random() * (90 - 1 + 1)) + 1
+                    const randomMinutes = Math.floor(Math.random() * (30 - 15 + 1)) + 15
                     const randomSeconds = Math.floor(Math.random() * 60)
                     adjustTimeWithoutChangingDate(randomMinutes, randomSeconds)
                 }
