@@ -923,6 +923,16 @@ export class MyPatientsRenderer {
             ]),
         ])
 
+        const btnBatchVisite = c('button', { classes: btnBatchClasses }, [
+            c('span', { classes: 'flex flex-col items-start leading-tight' }, [
+                c('span', { text: 'Batch Visite' }),
+                c('span', { classes: 'text-[8px] font-medium text-slate-400', text: 'Add visite to all records' }),
+            ]),
+            c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-4 h-4' }, [
+                c('path', { attrs: { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 4v16m8-8H4' } }),
+            ]),
+        ])
+
         const btnBatchOpen = c('button', { classes: btnBatchClasses }, [
             c('span', { classes: 'flex flex-col items-start leading-tight' }, [
                 c('span', { text: 'Batch Open Tabs' }),
@@ -946,6 +956,7 @@ export class MyPatientsRenderer {
         const batchButtonsGrid = c('div', { classes: 'grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4' }, [
             btnBatchRefresh,
             btnBatchNotes,
+            btnBatchVisite,
             // WIP HIDDEN
             // btnBatchOpen,
             // btnBatchPreRound,
@@ -996,6 +1007,8 @@ export class MyPatientsRenderer {
         // ==========================================
         btnBatchRefresh.onclick = () => this.handleBatchRefresh()
         btnBatchNotes.onclick = () => this.handleBatchOpenNotes()
+
+        btnBatchVisite.onclick = () => this.handleBatchVisite()
 
         btnBatchOpen.onclick = () => {
         }
@@ -1431,6 +1444,7 @@ export class MyPatientsRenderer {
             }, [
                 c('span', { text: 'Visite' })
             ])
+            btnServices.__patientInstance = p
             btnServices.addEventListener('click', () => this.openServicesModal(p))
             if (!canAddServices) btnServices.classList.add('hidden')
 
@@ -1920,7 +1934,7 @@ export class MyPatientsRenderer {
             KUNJUNGAN: kunjunganId,
             STATUS: 1,
             BATAS_TANGGAL: this.getCurrentDateTime(),
-            ID: `rekammedis.cppt.verifikasi.Model-${this.irandom(1, 100)}`,
+            ID: `rekammedis.cppt.verifikasi.Model-${this.irandom(1, 9)}`,
             OLEH: 0
         }
 
@@ -1944,21 +1958,45 @@ export class MyPatientsRenderer {
     // ==========================================
     // MODAL & HANDLER METHODS
     // ==========================================
-    async openServicesModal(patientInstance) {
+    async openServicesModal(patientInstance, skipConfirm = false) {
         const p = patientInstance instanceof Patient ? patientInstance : new Patient(patientInstance)
         const ui = p.getUIDisplayData() || {}
+        const toast = Utils.UI.toast
+        const nameText = `${ui.name || 'Unknown'} / ${ui.mrn || '-'}`
 
         // Check setting permission
         const apiSettings = hospitalContext.getHospitalById(p.hid)?.driver?.SETTINGS
         if (!apiSettings?.patients?.canAddServices) {
-            if (this.G?.ui?.swalErrorShort) {
+            if (skipConfirm) {
+                toast.pop(`Permission denied (${nameText})`, toast.type.error)
+            } else if (this.G?.ui?.swalErrorShort) {
                 this.G.ui.swalErrorShort('Permission denied: Cannot add services.')
             } else {
                 alert('Permission denied: Cannot add services.')
             }
-            return
+            return false
         }
 
+        // ==========================================
+        // BATCH / SKIP CONFIRM FLOW (Toast mode)
+        // ==========================================
+        if (skipConfirm) {
+            toast.pop(`Adding visite... (${nameText})`, toast.type.default)
+
+            try {
+                await this.addVisite(p.recId)
+                toast.pop(`Visite added! (${nameText})`, toast.type.success)
+                return true // Flag Success
+            } catch (err) {
+                console.error('Error adding service:', err)
+                toast.pop(`Failed to add visite (${nameText})`, toast.type.error)
+                return false // Flag Failure
+            }
+        }
+
+        // ==========================================
+        // SINGLE CLICK FLOW (SweetAlert mode)
+        // ==========================================
         if (this.G) {
             const confirmService = await this.G.swal.fire({
                 icon: 'info',
@@ -1971,7 +2009,6 @@ export class MyPatientsRenderer {
             })
 
             if (confirmService.isConfirmed) {
-                // Display non-dismissible loading indicator
                 this.G.swal.fire({
                     title: 'Adding Service...',
                     allowOutsideClick: false,
@@ -1986,6 +2023,7 @@ export class MyPatientsRenderer {
                 try {
                     await this.addVisite(p.recId)
                     this.G.ui.swalSuccessShort('Service added successfully!')
+                    return true
                 } catch (err) {
                     console.error('Error adding service:', err)
                     await this.G.ui.swalFatalError(
@@ -1993,19 +2031,24 @@ export class MyPatientsRenderer {
                         'Add Service Failed',
                         'The application encountered a fatal transaction error:',
                     )
+                    return false
                 }
             }
+            return false
         } else {
             const confirmMessage = `Are you sure you want to add visite service for "${ui.name || 'Unknown'}" (${ui.mrn || '-'})?`
             if (window.confirm(confirmMessage)) {
                 try {
                     await this.addVisite(p.recId)
                     alert('Service added successfully!')
+                    return true
                 } catch (err) {
                     console.error('Error adding service:', err)
                     alert('Failed to add service.')
+                    return false
                 }
             }
+            return false
         }
     }
     async verifyPatient(patientInstance) {
@@ -3453,6 +3496,130 @@ export class MyPatientsRenderer {
                     <span class="bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-100">Failed: <b>${failCount}</b></span>
                 </div>
             </div>`
+        })
+    }
+    async handleBatchVisite() {
+        const currentViewMode = this.#viewMode
+        if (currentViewMode !== MyPatientsRenderer.VIEWS.FULL) {
+            this.G.swal.fire({
+                icon: 'info',
+                title: 'Switch View to Add Visite',
+                html: `<div class="text-slate-600 space-y-2 text-center"><p>Batch visite requires extended information that is only loaded in the full layout view.</p></div>`,
+            })
+            return
+        }
+
+        // Query for all Visite buttons currently rendered
+        const visiteButtons = Array.from(document.querySelectorAll('.patient-services-btn'))
+        const totalCount = visiteButtons.length
+
+        if (totalCount === 0) {
+            this.G.swal.fire({
+                icon: 'info',
+                title: 'No records found',
+                text: 'There are no records available to add visite.',
+            })
+            return
+        }
+
+        const ss = totalCount === 1 ? '' : 's'
+        const estimatedMinutes = Math.ceil(((totalCount * 1.5) / 60) * 100) / 100
+
+        const confirmResult = await this.G.swal.fire({
+            title: 'Confirm Batch Visite?',
+            html: `
+        <div class="text-slate-600 space-y-2 text-center">
+            <p>You are about to <strong>add Visite service</strong> for <strong>${totalCount}</strong> record${ss} sequentially.</p>
+            <p class="bg-amber-50 text-amber-800 border border-amber-200 p-2 rounded font-medium">
+                Estimated sequence time: ~<strong>${estimatedMinutes} mins</strong>.
+            </p>
+        </div>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, start batch visite',
+            cancelButtonText: 'Cancel',
+        })
+
+        if (!confirmResult.isConfirmed) return
+
+        let successCount = 0
+        let failCount = 0
+
+        this.G.swal.fire({
+            title: 'Processing Batch Visite...',
+            position: 'top',
+            backdrop: 'rgba(0, 0, 0, 0.25)',
+            html: `
+        <div class="text-sm text-slate-600">
+            <div id="batch-visite-progress-text">
+                Preparing to process <strong>${totalCount}</strong> records...
+            </div>
+            <div id="batch-visite-counter-text" class="text-xs text-slate-400 mt-1">
+                Success: 0 | Failed: 0
+            </div>
+            <div class="text-xs text-slate-400 mt-1">To abort, refresh the page.</div>
+        </div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showCloseButton: false,
+            showConfirmButton: false,
+            didOpen: () => {
+                this.G.swal.showLoading()
+            }
+        })
+
+        const progressTextEl = document.getElementById('batch-visite-progress-text')
+        const counterTextEl = document.getElementById('batch-visite-counter-text')
+
+        for (let i = 0; i < totalCount; i++) {
+            const btn = visiteButtons[i]
+            const patientWrapper = btn.closest('.js-patient-item')
+
+            if (patientWrapper) {
+                patientWrapper.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                })
+            }
+
+            if (progressTextEl) {
+                progressTextEl.innerHTML = `Processing <strong>${i + 1}</strong> of <strong>${totalCount}</strong> record${ss}...`
+            }
+
+            if (i < totalCount - 1) {
+                await Utils.sleep(200)
+            }
+
+            try {
+                // Pass the patient instance and set skipConfirm = true
+                const isSuccess = await this.openServicesModal(btn.__patientInstance, true)
+
+                if (isSuccess) {
+                    successCount++
+                } else {
+                    failCount++
+                }
+            } catch (singleError) {
+                console.error(`Batch visite item index ${i} failed:`, singleError)
+                failCount++
+            }
+
+            if (counterTextEl) {
+                counterTextEl.innerHTML = `Success: <span class="text-emerald-600 font-bold">${successCount}</span> | Failed: <span class="text-rose-500 font-bold">${failCount}</span>`
+            }
+        }
+
+        this.G.swal.fire({
+            icon: failCount > 0 ? 'info' : 'success',
+            title: 'Batch Visite Completed!',
+            html: `
+        <div class="text-sm text-slate-600 space-y-1">
+            <p>Processed total <b>${totalCount}</b> entries.</p>
+            <div class="flex justify-center gap-4 text-xs pt-2">
+                <span class="bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100">Success: <b>${successCount}</b></span>
+                <span class="bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-100">Failed: <b>${failCount}</b></span>
+            </div>
+        </div>`
         })
     }
     openPDFConfigDrawer() {
