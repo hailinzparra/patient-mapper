@@ -648,7 +648,7 @@ const G = {
 
                 this.updateSyncUI(true, true, userData)
             } catch (error) {
-                console.warn('Pipeline sync failure:', error)
+                console.log('Pipeline sync failure:', error)
                 if (error.message.includes('tab not found')) {
                     this.updateSyncUI(false, false)
                 } else {

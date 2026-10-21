@@ -142,6 +142,16 @@ export const Utils = {
         const localTime = new Date(date.getTime() - offsetMs)
         return localTime.toISOString().slice(0, -1)
     },
+    getFormattedIndonesianDate(date = new Date()) {
+        const isoString = this.toLocalISOString(date).split('T')[0]
+        const [year, month, day] = isoString.split('-')
+
+        // Use integer constructor (new Date(Y, M-1, D)) to avoid UTC offset shifts
+        const localDate = new Date(Number(year), Number(month) - 1, Number(day))
+        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+        return `${dayNames[localDate.getDay()]}, ${day}-${month}-${year}`
+    },
     getValidValue(val, fallback) {
         if (val === null || val === undefined) return fallback
         const cleanStr = String(val).trim()

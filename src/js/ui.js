@@ -3858,7 +3858,8 @@ export class MyPatientsRenderer {
                 .map(r => r.name)
                 .filter(rName => !assignedNamesSet.has(rName))
 
-            const todayDateStr = "Rabu, 21–10-2026"
+            const todayDateStr = Utils.getFormattedIndonesianDate()
+
             let out = `Assalamualaikum wr. wb., mohon maaf dokter, izin melaporkan follow up pasien hari \n${todayDateStr} :\n===================\n\n`
 
             assignedRooms.forEach(({ room, list }) => {
