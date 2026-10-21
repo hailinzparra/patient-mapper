@@ -1,6 +1,6 @@
 import { Utils, VaultDriver, Tab, TabManager } from './utils.js'
 import { Patient, PatientList, ClinicalNote } from './clinical.js'
-import { ApiSoediranDriver } from './api-soediran.js'
+import { ApiSoediranDriver, SOEDIRAN_DATABASE } from './api-soediran.js'
 import { ApiSoehadiDriver } from './api-soehadi.js'
 import { hospitalContext } from './context.js'
 
@@ -724,7 +724,7 @@ export class MyPatientsRenderer {
         header: null,
         headerTitle: null,
         headerCounter: null,
-        btnPreviewOptions: null,
+        btnShareAndExport: null,
 
         settings: null,
 
@@ -835,7 +835,7 @@ export class MyPatientsRenderer {
             classes: 'my-patients-counter text-blue-700 font-black px-2 py-0.5 text-[13px] uppercase tracking-tight whitespace-nowrap flex-shrink-0',
             text: recordCounterText,
         })
-        this.#nodes.btnPreviewOptions = c('button', {
+        this.#nodes.btnShareAndExport = c('button', {
             classes: 'p-1.5 text-slate-600 bg-slate-50 hover:text-slate-800 hover:bg-slate-100 rounded-lg active:scale-95 transition-all flex items-center justify-center flex-shrink-0 border border-slate-200 ml-1',
         }, [
             c('svg', { attrs: { fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, classes: 'w-5 h-5' }, [
@@ -847,12 +847,12 @@ export class MyPatientsRenderer {
         }, [
             this.#nodes.headerTitle,
             this.#nodes.headerCounter,
-            // this.#nodes.btnPreviewOptions,
+            this.#nodes.btnShareAndExport,
         ])
 
-        this.#nodes.btnPreviewOptions.addEventListener('click', () => {
+        this.#nodes.btnShareAndExport.addEventListener('click', () => {
             if (!this.G || !this.G.swal) return
-            this.openPDFConfigDrawer()
+            this.shareAndExportDrawer()
         })
     }
     buildSettingsDOM() {
@@ -2723,7 +2723,7 @@ export class MyPatientsRenderer {
      * @param {ClinicalNote['id'] | undefined} [options.targetNoteId]
      */
     async openNoteCreationModal(p, options = {}) {
-        const modalTitle = (options.title || 'Create Note') + (p.name ? ` (${p.name})` : '')
+        const modalTitle = (options.title || 'Create Note') + (p.name ? ` (${p.bedName ? `${p.bedName}/` : ''}${p.name})` : '')
         const modalConfirmButtonText = options.buttonText || 'Create Note'
         const modalLoadingText = options.loadingText || 'Creating note...'
         const modalSuccessText = options.successText || 'Note created successfully!'
@@ -3622,61 +3622,492 @@ export class MyPatientsRenderer {
         </div>`
         })
     }
-    openPDFConfigDrawer() {
-        const activeListName = this.patientList?.name
+    shareAndExportDrawer() {
+        const activeListName = this.patientList?.name || 'Active List'
         const c = Utils.DOM.createElement
+        let activeMode = 'HANDOVER'
 
-        const historySelect = c('select', {
-            classes: 'p-2 border border-slate-200 rounded-lg text-xs bg-white w-full',
+        // --- CONFIGURATION CONSTANTS ---
+        const ENT_DOCTOR_IDS = ['16', '17'] // dr. Tavip (16), dr. Yoice (17)
+        const OMIT_ISLAMIC_SALUTATION_IDS = ['16'] // dr. Tavip (16)
+
+        const DOCTOR_DEPARTMENT_MAP = {
+            'dr. Yoice': 'THT',
+            'dr. Tavip': 'THT',
+            'dr. Endra': 'Dalam',
+            'dr. Diksi': 'Dalam',
+            'dr. Sudaryono': 'Dalam',
+            'dr. Afandi': 'Jantung',
+        }
+
+        const ALL_WARD_ROOM_OBJECTS = SOEDIRAN_DATABASE.roomDatabase
+            .filter(r => r.id.startsWith('1010301'))
+
+        // --- LOOKUP & FORMATTING HELPERS ---
+        const getDoctorById = (id) => {
+            return SOEDIRAN_DATABASE.doctorDatabase.find(doc => String(doc.id) === String(id)) || null
+        }
+
+        const getRoomById = (id) => {
+            return SOEDIRAN_DATABASE.roomDatabase.find(r => String(r.id) === String(id)) || null
+        }
+
+        const cleanDoctorName = (rawName) => {
+            if (!rawName) return ''
+            return rawName.split(',')[0].trim()
+        }
+
+        const formatBedName = (bedName) => {
+            if (!bedName) return '-'
+            return bedName.replace(/^K[1-3]-/i, '')
+        }
+
+        const cleanContentText = (rawStr) => {
+            if (!rawStr) return ''
+            let clean = Utils.decodeHtmlEntities(rawStr)
+            return clean.replace(/<br\s*\/?>/gi, '\n').trim()
+        }
+
+        const formatIndonesianAge = (rawAge) => {
+            if (!rawAge || rawAge === '??' || rawAge === '??y') return '?? thn'
+            const yearsOnly = rawAge.split(',')[0].trim()
+            return yearsOnly.replace(/y/gi, ' thn')
+        }
+
+        const formatIndonesianGender = (rawGender) => {
+            if (rawGender === 0 || rawGender === 'F' || rawGender === 'Female' || rawGender === 'P') return 'P'
+            if (rawGender === 1 || rawGender === 'M' || rawGender === 'Male' || rawGender === 'L') return 'L'
+            return '?'
+        }
+
+        const getDepartmentName = (doctorObj) => {
+            if (!doctorObj) return 'Umum'
+            const docName = doctorObj.name || ''
+
+            for (const [key, dept] of Object.entries(DOCTOR_DEPARTMENT_MAP)) {
+                if (docName.includes(key)) return dept
+            }
+
+            if (docName.includes('Sp.THT')) return 'THT'
+            if (docName.includes('Sp.PD')) return 'Dalam'
+            if (docName.includes('Sp.An')) return 'Anestesi'
+            if (docName.includes('Sp.BA')) return 'Bedah Anak'
+            if (docName.includes('Sp.BS')) return 'Bedah Saraf'
+            if (docName.includes('Sp.JP')) return 'Jantung'
+            if (docName.includes('Sp.B')) return 'Bedah'
+            if (docName.includes('Sp.OT')) return 'Orthopedi'
+            if (docName.includes('Sp.OG')) return 'Kebidanan'
+            if (docName.includes('Sp.P')) return 'Paru'
+            if (docName.includes('Sp.A')) return 'Anak'
+            if (docName.includes('Sp.S') || docName.includes('Sp.N')) return 'Saraf'
+            if (docName.includes('Sp.KJ')) return 'Jiwa'
+            if (docName.includes('Sp.M')) return 'Mata'
+
+            return docName.startsWith('dr.') ? cleanDoctorName(docName) : `dr. ${cleanDoctorName(docName)}`
+        }
+
+        // --- REAL PATIENTS & ACTIVE NOTES EXTRACTION ---
+        const rawPatients = this.patientList?.patients || []
+        const patientMap = new Map()
+
+        rawPatients.forEach(p => {
+            const roomObj = getRoomById(p.roomId)
+            const roomName = roomObj ? roomObj.name : '???' // Unknown room
+            const uiData = p.getUIDisplayData ? p.getUIDisplayData() : {}
+
+            const renderer = this.G?.store?.temp?.activeNotesSlideOutRenderers?.get(p.id)
+
+            let activeFilteredNotes = []
+            if (renderer) {
+                const notesForDate = renderer.notesByDate?.[renderer.activeDate] || []
+                activeFilteredNotes = renderer.getRoleFilteredNotes ? renderer.getRoleFilteredNotes(notesForDate) : notesForDate
+            }
+
+            const participatingDoctorsMap = new Map()
+
+            const primaryDpjpObj = getDoctorById(p.docId) || { id: String(p.docId), name: `dr. ID ${p.docId}` }
+            participatingDoctorsMap.set(String(p.docId), {
+                id: String(p.docId),
+                name: primaryDpjpObj.name,
+                isDpjp: true
+            })
+
+            activeFilteredNotes.forEach(note => {
+                const cId = String(note.creator?.id || '')
+                if (cId && !participatingDoctorsMap.has(cId)) {
+                    const dbDoc = getDoctorById(cId)
+                    participatingDoctorsMap.set(cId, {
+                        id: cId,
+                        name: dbDoc ? dbDoc.name : (note.creator?.name || 'Doctor'),
+                        isDpjp: cId === String(p.docId)
+                    })
+                }
+            })
+
+            const doctorsList = Array.from(participatingDoctorsMap.values())
+
+            const entNote = activeFilteredNotes.find(n =>
+                ENT_DOCTOR_IDS.includes(String(n.creator?.id)) ||
+                (n.creator?.name && (n.creator.name.includes('Yoice') || n.creator.name.includes('Tavip')))
+            )
+            const entAssessment = entNote?.content?.assessment ? cleanContentText(entNote.content.assessment) : ''
+
+            const resolvedDiagnosis = entAssessment || p.dx || '???'
+
+            patientMap.set(p.id, {
+                id: p.id,
+                room: roomName,
+                roomId: p.roomId,
+                bed: formatBedName(uiData.bedName || p.bedName),
+                name: uiData.name || p.name || '-',
+                gender: formatIndonesianGender(uiData.gender ?? p.gender),
+                age: formatIndonesianAge(uiData.age),
+                mrn: uiData.mrn || p.mrn,
+                dx: resolvedDiagnosis,
+                dpjpId: String(p.docId),
+                doctors: doctorsList,
+                activeFilteredNotes: activeFilteredNotes
+            })
+        })
+
+        // --- SORT PATIENTS ACCORDING TO `patientList.roomOrder` AND `patientList.patientOrderMap` ---
+        const orderedPatients = []
+        const processedIds = new Set()
+
+        const roomOrder = this.patientList?.roomOrder || []
+        const patientOrderMap = this.patientList?.patientOrderMap || {}
+
+        roomOrder.forEach(rId => {
+            const pIds = patientOrderMap[rId] || []
+            pIds.forEach(pId => {
+                if (patientMap.has(pId) && !processedIds.has(pId)) {
+                    orderedPatients.push(patientMap.get(pId))
+                    processedIds.add(pId)
+                }
+            })
+        })
+
+        patientMap.forEach((p, pId) => {
+            if (!processedIds.has(pId)) {
+                orderedPatients.push(p)
+                processedIds.add(pId)
+            }
+        })
+
+        const formatPhysicianString = (doctorsArray) => {
+            const isSingleDoctor = doctorsArray.length === 1
+
+            const sortedDocs = [...doctorsArray].sort((a, b) => {
+                const aIsEnt = ENT_DOCTOR_IDS.includes(String(a.id)) || a.name.includes('dr. Yoice') || a.name.includes('dr. Tavip')
+                const bIsEnt = ENT_DOCTOR_IDS.includes(String(b.id)) || b.name.includes('dr. Yoice') || b.name.includes('dr. Tavip')
+                if (aIsEnt && !bIsEnt) return -1
+                if (!aIsEnt && bIsEnt) return 1
+                return 0
+            })
+
+            return sortedDocs.map(d => {
+                const dbDoc = getDoctorById(d.id)
+                const rawFullName = dbDoc ? dbDoc.name : d.name
+                const cleanName = cleanDoctorName(rawFullName)
+
+                if (isSingleDoctor) {
+                    return cleanName
+                }
+
+                const isEnt = ENT_DOCTOR_IDS.includes(String(d.id)) || rawFullName.includes('dr. Yoice') || rawFullName.includes('dr. Tavip')
+                const nameStr = isEnt ? `*${cleanName}*` : cleanName
+                return d.isDpjp ? `${nameStr} (DPJP)` : nameStr
+            }).join(', ')
+        }
+
+        const formatSinglePatientLine = (p) => {
+            const docString = formatPhysicianString(p.doctors)
+            return `${p.room}/${p.bed}/${p.name}/${p.gender}/${p.age}/${p.mrn}/${p.dx}/${docString}`
+        }
+
+        // --- SUMMARY MAPPER ENGINE (BUBBLE 1) ---
+        const generateSummaryBubbleText = (patients) => {
+            const roomMap = {}
+            patients.forEach(p => {
+                if (!roomMap[p.room]) roomMap[p.room] = []
+                roomMap[p.room].push(p)
+            })
+
+            const assignedRooms = []
+            const assignedNamesSet = new Set()
+
+            roomOrder.forEach(rId => {
+                const roomObj = getRoomById(rId)
+                if (roomObj) {
+                    const titleCaseName = roomObj.name
+                    if (roomMap[titleCaseName]) {
+                        assignedRooms.push({ room: titleCaseName, list: roomMap[titleCaseName] })
+                        assignedNamesSet.add(titleCaseName)
+                    }
+                }
+            })
+
+            Object.keys(roomMap).forEach(roomName => {
+                if (!assignedNamesSet.has(roomName)) {
+                    assignedRooms.push({ room: roomName, list: roomMap[roomName] })
+                    assignedNamesSet.add(roomName)
+                }
+            })
+
+            const unassignedRooms = ALL_WARD_ROOM_OBJECTS
+                .map(r => r.name)
+                .filter(rName => !assignedNamesSet.has(rName))
+
+            const todayDateStr = "Rabu, 21–10-2026"
+            let out = `Assalamualaikum wr. wb., mohon maaf dokter, izin melaporkan follow up pasien hari \n${todayDateStr} :\n===================\n\n`
+
+            assignedRooms.forEach(({ room, list }) => {
+                out += `*${room.toUpperCase()} : ${list.length}*\n`
+                list.forEach(p => {
+                    out += `- ${formatSinglePatientLine(p)}\n`
+                })
+                out += `\n`
+            })
+
+            unassignedRooms.forEach(roomName => {
+                out += `${roomName.toUpperCase()} : 0\n`
+            })
+
+            return out.trim()
+        }
+
+        // --- PATIENT SOAPI ENGINE (BUBBLES 2 to N) ---
+        const generatePatientSoapiBubbleText = (p) => {
+            const entDoc = p.doctors.find(d => ENT_DOCTOR_IDS.includes(String(d.id))) || p.doctors[0]
+            const fullSalutationDocName = entDoc?.name || 'dr. Yoice, Sp.THT-KL'
+
+            const isEntDpjp = ENT_DOCTOR_IDS.includes(String(p.dpjpId))
+            const konsulanText = isEntDpjp ? '' : 'konsulan '
+
+            const isNonMuslim = OMIT_ISLAMIC_SALUTATION_IDS.includes(String(entDoc?.id)) || fullSalutationDocName.includes('dr. Tavip')
+            const salamPrefix = isNonMuslim ? '' : "Assalamu'alaikum wr wb, "
+
+            const preText = `${salamPrefix}Selamat pagi ${fullSalutationDocName} Izin melaporkan pasien ${konsulanText}dengan ${p.dx}`
+
+            let sText = '-'
+            let oText = '-'
+            let aText = '-'
+            let pText = '-'
+            let iText = '-'
+
+            if (p.activeFilteredNotes && p.activeFilteredNotes.length > 0) {
+                const entNote = p.activeFilteredNotes.find(n =>
+                    ENT_DOCTOR_IDS.includes(String(n.creator?.id)) ||
+                    (n.creator?.name && (n.creator.name.includes('Yoice') || n.creator.name.includes('Tavip')))
+                ) || p.activeFilteredNotes[0]
+
+                if (entNote?.content) {
+                    sText = cleanContentText(entNote.content.subjective) || '-'
+                    oText = cleanContentText(entNote.content.objective) || '-'
+                }
+
+                const sortedNotes = [...p.activeFilteredNotes].sort((a, b) => {
+                    const aId = String(a.creator?.id || '')
+                    const bId = String(b.creator?.id || '')
+                    const aIsEnt = ENT_DOCTOR_IDS.includes(aId) || (a.creator?.name && (a.creator.name.includes('Yoice') || a.creator.name.includes('Tavip')))
+                    const bIsEnt = ENT_DOCTOR_IDS.includes(bId) || (b.creator?.name && (b.creator.name.includes('Yoice') || b.creator.name.includes('Tavip')))
+
+                    if (aIsEnt && !bIsEnt) return -1
+                    if (!aIsEnt && bIsEnt) return 1
+                    return 0
+                })
+
+                const isCollaborated = sortedNotes.some(n => {
+                    const cId = String(n.creator?.id || '')
+                    const isEnt = ENT_DOCTOR_IDS.includes(cId) || (n.creator?.name && (n.creator.name.includes('Yoice') || n.creator.name.includes('Tavip')))
+                    return !isEnt
+                })
+
+                if (!isCollaborated) {
+                    const primaryNote = sortedNotes[0]
+                    aText = cleanContentText(primaryNote.content?.assessment) || '-'
+                    pText = cleanContentText(primaryNote.content?.planning) || '-'
+                    iText = cleanContentText(primaryNote.content?.instruction) || '-'
+                } else {
+                    let aBlocks = []
+                    let pBlocks = []
+                    let iBlocks = []
+
+                    sortedNotes.forEach(note => {
+                        const cId = String(note.creator?.id || '')
+                        const dbDoc = getDoctorById(cId)
+                        const docObj = dbDoc || { name: note.creator?.name || 'Doctor' }
+                        const deptLabel = getDepartmentName(docObj)
+
+                        const aVal = cleanContentText(note.content?.assessment)
+                        const pVal = cleanContentText(note.content?.planning)
+                        const iVal = cleanContentText(note.content?.instruction)
+
+                        if (aVal) aBlocks.push(`Dx ${deptLabel}\n${aVal}`)
+                        if (pVal) pBlocks.push(`Tx ${deptLabel}\n${pVal}`)
+                        if (iVal) iBlocks.push(`Ix ${deptLabel}\n${iVal}`)
+                    })
+
+                    aText = aBlocks.length > 0 ? aBlocks.join('\n\n') : '-'
+                    pText = pBlocks.length > 0 ? pBlocks.join('\n\n') : '-'
+                    iText = iBlocks.length > 0 ? iBlocks.join('\n\n') : '-'
+                }
+            }
+
+            const patientLine = formatSinglePatientLine(p)
+
+            return `${preText}\n\n${patientLine}\n\nS:\n${sText}\n\nO:\n${oText}\n\nA:\n${aText}\n\nP:\n${pText}\n\nI:\n${iText}`.trim()
+        }
+
+        // --- CHAT BUBBLE DOM CREATOR ---
+        const createBubbleCard = (titleLabel, initialContent) => {
+            const previewBubble = c('div', {
+                classes: 'p-3.5 bg-[#128C7E] text-white border border-emerald-700/50 rounded-2xl rounded-tr-none text-xs font-mono whitespace-pre-wrap leading-relaxed shadow-sm min-h-[100px] max-h-[320px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-emerald-400/50 ml-auto w-full',
+                attrs: { contenteditable: 'true' },
+                text: initialContent
+            })
+
+            const copyBtn = c('button', {
+                classes: 'w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5',
+                html: `
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                <span>Copy ${titleLabel}</span>
+            `
+            })
+
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(previewBubble.innerText)
+                const labelSpan = copyBtn.querySelector('span')
+                const origText = labelSpan.innerText
+                labelSpan.innerText = 'Copied to Clipboard!'
+                copyBtn.classList.replace('bg-emerald-700', 'bg-slate-800')
+                setTimeout(() => {
+                    labelSpan.innerText = origText
+                    copyBtn.classList.replace('bg-slate-800', 'bg-emerald-700')
+                }, 2000)
+            })
+
+            return c('div', { classes: 'space-y-2 pt-2 border-t border-slate-100' }, [
+                c('div', { classes: 'flex items-center justify-between' }, [
+                    c('span', { classes: 'text-[10px] font-bold text-slate-400 uppercase tracking-wider', text: titleLabel }),
+                    c('span', { classes: 'text-[10px] text-slate-400 italic', text: 'Editable' })
+                ]),
+                previewBubble,
+                copyBtn
+            ])
+        }
+
+        // --- SEGMENTED TOGGLE (HANDOVER | MAPPING) ---
+        const getTabClass = (isActive) => isActive
+            ? 'flex-1 px-2 py-1 text-[10px] font-bold rounded bg-white text-blue-600 shadow-sm transition-all text-center cursor-pointer'
+            : 'flex-1 px-2 py-1 text-[10px] font-bold rounded text-slate-500 hover:text-slate-700 text-center cursor-pointer'
+
+        const btnHandover = c('button', { classes: getTabClass(activeMode === 'HANDOVER'), text: 'HANDOVER' })
+        const btnMapping = c('button', { classes: getTabClass(activeMode === 'MAPPING'), text: 'MAPPING (PDF)' })
+
+        const modeToggleContainer = c('div', {
+            classes: 'flex bg-slate-100 p-1 rounded-lg gap-1 border border-slate-200/50'
+        }, [btnHandover, /* btnMapping */])
+        // TODO: mapping settings/export
+
+        // --- HANDOVER CONTROLS ---
+        const templateSelect = c('select', {
+            classes: 'p-2 border border-slate-200 rounded-lg text-xs bg-white w-full font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500',
             html: `
-            <option value="yes">Yes, include full records</option>
-            <option value="no">No, overview only</option>
+            <option value="">Select templates...</option>
+            <option value="THT">THT</option>
         `
         })
 
-        const layoutSelect = c('select', {
-            classes: 'p-2 border border-slate-200 rounded-lg text-xs bg-white w-full',
-            html: `
-            <option value="compact">Compact Grid</option>
-            <option value="detailed">Expanded Rows</option>
-        `
+        const previewContainer = c('div', { classes: 'space-y-4' }, [
+            c('p', { classes: 'text-xs text-slate-400 italic', text: 'Select template to preview...' })
+        ])
+
+        templateSelect.addEventListener('change', (e) => {
+            previewContainer.innerHTML = ''
+
+            if (e.target.value === 'THT') {
+                // 1. Summary Bubble
+                const summaryText = generateSummaryBubbleText(orderedPatients)
+                const summaryCard = createBubbleCard('Summary', summaryText)
+                previewContainer.appendChild(summaryCard)
+
+                // 2. Individual Patient SOAPI Bubbles
+                orderedPatients.forEach((patient, idx) => {
+                    const patientText = generatePatientSoapiBubbleText(patient)
+                    const patientCard = createBubbleCard(`P${idx + 1}: ${patient.bed}/${patient.name} (${patient.room})`, patientText)
+                    previewContainer.appendChild(patientCard)
+                })
+            } else {
+                previewContainer.appendChild(c('p', { classes: 'text-xs text-slate-400 italic', text: 'Select template to preview...' }))
+            }
         })
 
-        const drawerContainer = c('div', { classes: 'text-left space-y-6' }, [
+        // --- LAYOUT SECTIONS ---
+        const handoverSection = c('div', { classes: 'space-y-4' }, [
+            c('div', { classes: 'space-y-1.5' }, [
+                c('label', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider', text: 'Select Template' }),
+                templateSelect
+            ]),
+            c('div', { classes: 'space-y-1.5' }, [
+                c('label', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider', text: 'Preview & Copy Bubbles' }),
+                previewContainer
+            ])
+        ])
 
-            // --- SECTION 1: SOURCE PANEL ---
+        const mappingSection = c('div', { classes: 'space-y-3 hidden' }, [
+            c('label', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider', text: 'Output Settings' }),
+            c('p', { classes: 'text-xs text-slate-500 italic', text: 'Nothing to seee here 👀.' })
+        ])
+
+        const switchMode = (newMode) => {
+            activeMode = newMode
+            btnHandover.className = getTabClass(activeMode === 'HANDOVER')
+            btnMapping.className = getTabClass(activeMode === 'MAPPING')
+
+            if (activeMode === 'HANDOVER') {
+                handoverSection.classList.remove('hidden')
+                mappingSection.classList.add('hidden')
+            } else {
+                handoverSection.classList.add('hidden')
+                mappingSection.classList.remove('hidden')
+            }
+
+            const confirmBtn = Swal.getConfirmButton()
+            if (confirmBtn) {
+                confirmBtn.innerText = activeMode === 'HANDOVER' ? 'Done' : 'Generate PDF'
+            }
+        }
+
+        btnHandover.addEventListener('click', () => switchMode('HANDOVER'))
+        btnMapping.addEventListener('click', () => switchMode('MAPPING'))
+
+        // MAIN DRAWER CONTAINER
+        const drawerContainer = c('div', { classes: 'text-left space-y-5' }, [
             c('div', { classes: 'bg-slate-50 border border-slate-200/60 rounded-xl p-3.5' }, [
                 c('span', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1', text: 'Source' }),
-                c('h4', {
-                    classes: 'text-xs font-semibold text-slate-700 leading-relaxed line-clamp-2',
-                    text: activeListName,
-                })
+                c('h4', { classes: 'text-xs font-semibold text-slate-700 leading-relaxed line-clamp-2', text: activeListName })
             ]),
-
-            // --- SECTION 2: SETTINGS MATRIX ---
-            // c('div', { classes: 'space-y-4' }, [
-            //     c('span', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1', text: 'Settings' }),
-            //     c('div', { classes: 'flex flex-col gap-1' }, [
-            //         c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Include Patient History' }),
-            //         historySelect
-            //     ]),
-            //     c('div', { classes: 'flex flex-col gap-1' }, [
-            //         c('label', { classes: 'text-[10px] font-bold text-slate-500 uppercase', text: 'Layout Style' }),
-            //         layoutSelect
-            //     ])
-            // ])
+            c('div', { classes: 'space-y-1.5' }, [
+                c('label', { classes: 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider', text: 'Output Format' }),
+                modeToggleContainer
+            ]),
+            c('div', { classes: 'pt-2 border-t border-slate-100' }, [
+                handoverSection,
+                mappingSection
+            ])
         ])
 
         try {
             this.G.swal.fire({
-                title: 'Export (WIP)',
+                title: 'Share & Export',
                 html: drawerContainer,
                 position: 'top-end',
                 grow: 'column',
-                showConfirmButton: true,
+                showConfirmButton: false, // todo: set to true when Generate PDF feature available
                 showCancelButton: true,
-                confirmButtonText: 'Generate PDF',
-                cancelButtonText: 'Cancel',
+                confirmButtonText: 'Done',
+                cancelButtonText: 'Close',
                 customClass: {
                     ...this.G.baseSwalClasses,
                     container: 'swal-drawer-scope',
@@ -3686,16 +4117,11 @@ export class MyPatientsRenderer {
                 showClass: { popup: 'swal-drawer-show' },
                 hideClass: { popup: 'swal-drawer-hide' },
                 preConfirm: () => {
-                    const configValues = {
-                        includeHistory: historySelect.value,
-                        layoutStyle: layoutSelect.value
-                    }
-                    // this.executePDFGeneration(configValues)
-                    return false // Keep drawer open
+                    return true
                 }
             })
         } catch (err) {
-            console.error('Failed opening configuration drawer:', err)
+            console.error('Failed opening share and export drawer:', err)
         }
     }
     executePDFGeneration(configs) {
